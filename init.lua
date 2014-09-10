@@ -29,7 +29,7 @@ function cudnn.toDescriptor(t)
    errcheck('cudnnCreateTensor4dDescriptor', descriptor)
    -- set gc hook
    local function destroy(d) 
-      errcheck('cudnnDestroyTensor4dDescriptor', descriptor[0]); 
+      errcheck('cudnnDestroyTensor4dDescriptor', d[0]); 
    end
    ffi.gc(descriptor, destroy)
    -- set descriptor

@@ -22,7 +22,7 @@ function SpatialConvolution:resetWeightDescriptors()
    errcheck('cudnnSetFilterDescriptor', self.weightDesc[0], 'CUDNN_DATA_FLOAT',
             self.nOutputPlane, self.nInputPlane, self.kH, self.kW);
    local function destroyWDesc(d) 
-      errcheck('cudnnDestroyFilterDescriptor', self.weightDesc[0]);
+      errcheck('cudnnDestroyFilterDescriptor', d[0]);
    end
    ffi.gc(self.weightDesc, destroyWDesc)
 
@@ -31,8 +31,9 @@ function SpatialConvolution:resetWeightDescriptors()
 end
 
 function SpatialConvolution:createIODescriptors(input)   
-   if input:size(1) ~= self.iSize:size(1) or input:size(2) ~= self.iSize:size(2) 
-      or input:size(3) ~= self.iSize:size(3)  or input:size(4) ~= self.iSize:size(4) then
+   if input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
+   or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
+         self.iSize = input:size()
          -- resize gradInput
          self.gradInput:resizeAs(input)
          -- create input descriptor
@@ -44,7 +45,7 @@ function SpatialConvolution:createIODescriptors(input)
                   self.weightDesc[0], self.padH, self.padW, 
                   self.dH, self.dW, 1, 1, 'CUDNN_CROSS_CORRELATION');
          local function destroyConvDesc(d) 
-            errcheck('cudnnDestroyConvolutionDescriptor', self.convDesc[0]);
+            errcheck('cudnnDestroyConvolutionDescriptor', d[0]);
          end
          ffi.gc(self.convDesc, destroyConvDesc)
          
