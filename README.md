@@ -7,7 +7,7 @@ Modules are API compatible their nn equivalents. Fully unit-tested against nn im
 
 * Install CuDNN
 * Have at least Cuda 6.5
-* Have libcudnn.so in your library path
+* Have libcudnn.so in your library path (Install it from https://developer.nvidia.com/cuDNN )
 
 ####Modules
 ```
@@ -18,4 +18,4 @@ cudnn.Tanh
 cudnn.Sigmoid
 ```
 
-I have to time to support these, so please dont expect a quick response to filed github issues.
+I have no time to support these, so please dont expect a quick response to filed github issues.

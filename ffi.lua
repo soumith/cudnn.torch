@@ -208,4 +208,11 @@ cudnnStatus_t  cudnnActivationBackward( cudnnHandle_t handle,
 
 ]]
 
-cudnn.C = ffi.load('libcudnn')
+local ok
+ok = pcall(function() cudnn.C = ffi.load('libcudnn') end)
+if not ok then
+   error([['libcudnn.so not found in library path. 
+Please install CuDNN from https://developer.nvidia.com/cuDNN
+Then make sure all the files named as libcudnn.so* are placed in your library load path (for example /usr/local/lib , or manually add a path to LD_LIBRARY_PATH)
+]])
+end
