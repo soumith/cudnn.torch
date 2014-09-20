@@ -13,11 +13,23 @@ local errcheck = function(f, ...)
 end
 cudnn.errcheck = errcheck
 
-cudnn.handle = ffi.new('struct cudnnContext*[1]')
+local numDevices = cutorch.getDeviceCount()
+local currentDevice = cutorch.getDevice()
+cudnn.handle = ffi.new('struct cudnnContext*[?]', numDevices)
 -- create handle
-errcheck('cudnnCreate', cudnn.handle)
-local function destroy(handle) 
-   errcheck('cudnnDestroy', handle[0]); 
+for i=1,numDevices do
+   cutorch.setDevice(i)
+   errcheck('cudnnCreate', cudnn.handle+i-1)
+end
+cutorch.setDevice(currentDevice)
+
+local function destroy(handle)
+   local currentDevice = cutorch.getDevice()
+   for i=1,numDevices do
+      cutorch.setDevice(i)
+      errcheck('cudnnDestroy', handle[i-1]); 
+   end
+   cutorch.setDevice(currentDevice)
 end
 ffi.gc(cudnn.handle, destroy)
 

@@ -195,4 +195,9 @@ torch.setdefaulttensortype('torch.FloatTensor')
 math.randomseed(os.time())
 mytester = torch.Tester()
 mytester:add(cudnntest)
-mytester:run(tests)
+
+for i=1,cutorch.getDeviceCount() do
+   print('Running test on device: ' .. i)
+   cutorch.setDevice(i)
+   mytester:run(tests)
+end

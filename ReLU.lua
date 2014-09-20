@@ -22,7 +22,7 @@ end
 function ReLU:updateOutput(input)
    assert(input:dim() == 4 and input:isContiguous());
    self:createIODescriptors(input)
-   errcheck('cudnnActivationForward', cudnn.handle[0], 'CUDNN_ACTIVATION_RELU',
+   errcheck('cudnnActivationForward', cudnn.handle[cutorch.getDevice()-1], 'CUDNN_ACTIVATION_RELU',
             self.iDesc[0], input:data(), 
             self.oDesc[0], self.output:data());
    return self.output
@@ -31,7 +31,7 @@ end
 function ReLU:updateGradInput(input, gradOutput)
    assert(input:dim() == 4 and input:isContiguous());
    assert(gradOutput:dim() == 4 and gradOutput:isContiguous());
-   errcheck('cudnnActivationBackward', cudnn.handle[0], 'CUDNN_ACTIVATION_RELU',
+   errcheck('cudnnActivationBackward', cudnn.handle[cutorch.getDevice()-1], 'CUDNN_ACTIVATION_RELU',
             self.oDesc[0], self.output:data(),
             self.oDesc[0], gradOutput:data(),
             self.iDesc[0], input:data(), 

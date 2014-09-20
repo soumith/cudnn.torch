@@ -62,13 +62,13 @@ end
 function SpatialConvolution:updateOutput(input)
    assert(input:dim() == 4 and input:isContiguous());
    self:createIODescriptors(input)
-   errcheck('cudnnConvolutionForward', cudnn.handle[0], 
+   errcheck('cudnnConvolutionForward', cudnn.handle[cutorch.getDevice()-1], 
             self.iDesc[0], input:data(), 
             self.weightDesc[0], self.weight:data(), 
             self.convDesc[0], self.oDesc[0], self.output:data(), 
             'CUDNN_RESULT_NO_ACCUMULATE');
    local alpha = torch.FloatTensor({1});
-   errcheck('cudnnAddTensor4d', cudnn.handle[0], 'CUDNN_ADD_SAME_C',
+   errcheck('cudnnAddTensor4d', cudnn.handle[cutorch.getDevice()-1], 'CUDNN_ADD_SAME_C',
             alpha:data(), self.biasDesc[0], self.bias:data(), 
             self.oDesc[0], self.output:data());
    return self.output
@@ -77,7 +77,7 @@ end
 function SpatialConvolution:updateGradInput(input, gradOutput)
    assert(input:dim() == 4 and input:isContiguous()); 
    assert(gradOutput:dim() == 4 and gradOutput:isContiguous());
-   errcheck('cudnnConvolutionBackwardData', cudnn.handle[0], 
+   errcheck('cudnnConvolutionBackwardData', cudnn.handle[cutorch.getDevice()-1], 
             self.weightDesc[0], self.weight:data(), 
             self.oDesc[0], gradOutput:data(), 
             self.convDesc[0], 
@@ -91,12 +91,12 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
    assert(input:dim() == 4 and input:isContiguous()); 
    assert(gradOutput:dim() == 4 and gradOutput:isContiguous());
    -- gradBias
-   errcheck('cudnnConvolutionBackwardBias', cudnn.handle[0], 
+   errcheck('cudnnConvolutionBackwardBias', cudnn.handle[cutorch.getDevice()-1], 
             self.oDesc[0], gradOutput:data(), 
             self.biasDesc[0], self.gradBias:data(), 
             'CUDNN_RESULT_ACCUMULATE');
    -- gradWeight
-   errcheck('cudnnConvolutionBackwardFilter', cudnn.handle[0], 
+   errcheck('cudnnConvolutionBackwardFilter', cudnn.handle[cutorch.getDevice()-1], 
             self.iDesc[0], input:data(), 
             self.oDesc[0], gradOutput:data(), 
             self.convDesc[0], 
