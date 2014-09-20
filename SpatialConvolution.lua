@@ -11,7 +11,6 @@ function SpatialConvolution:__init(nInputPlane, nOutputPlane, kW, kH, dW, dH, pa
    self:cuda()
    self.iSize = torch.LongStorage(4):fill(0)
    self:resetWeightDescriptors()
-   self.alpha = torch.FloatTensor({1});
 end
 
 -- if you change the configuration of the module manually, call this
