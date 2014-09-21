@@ -29,7 +29,7 @@ function SpatialConvolution:resetWeightDescriptors()
    self.biasDesc = cudnn.toDescriptor(self.bias:view(1, self.nOutputPlane, 1, 1))
 end
 
-function SpatialConvolution:createIODescriptors(input)   
+function SpatialConvolution:createIODescriptors(input)
    if input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
    or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
          self.iSize = input:size()
@@ -61,6 +61,7 @@ end
 
 function SpatialConvolution:updateOutput(input)
    assert(input:dim() == 4 and input:isContiguous());
+   if not self.weightDesc then self:resetWeightDescriptors() end
    self:createIODescriptors(input)
    errcheck('cudnnConvolutionForward', cudnn.handle[cutorch.getDevice()-1], 
             self.iDesc[0], input:data(), 

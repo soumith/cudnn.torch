@@ -11,6 +11,10 @@ function SpatialMaxPooling:__init(kW, kH, dW, dH)
    self.dH = dH or kW
    self:cuda()
    self.iSize = torch.LongStorage(4):fill(0)
+   self:resetPoolDescriptors()
+end
+
+function SpatialMaxPooling:resetPoolDescriptors()
    -- create pooling descriptor
    self.poolDesc = ffi.new('struct cudnnPoolingStruct*[1]')
    errcheck('cudnnCreatePoolingDescriptor', self.poolDesc)
@@ -20,7 +24,6 @@ function SpatialMaxPooling:__init(kW, kH, dW, dH)
       errcheck('cudnnDestroyPoolingDescriptor', d[0]);
    end
    ffi.gc(self.poolDesc, destroyPoolDesc)
-
 end
 
 function SpatialMaxPooling:createIODescriptors(input)
@@ -42,6 +45,7 @@ end
 
 function SpatialMaxPooling:updateOutput(input)
    assert(input:dim() == 4 and input:isContiguous());
+   if not self.poolDesc then self:resetPoolDescriptors() end
    self:createIODescriptors(input)
    errcheck('cudnnPoolingForward', cudnn.handle[cutorch.getDevice()-1], self.poolDesc[0],
             self.iDesc[0], input:data(), 
