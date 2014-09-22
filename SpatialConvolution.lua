@@ -8,13 +8,13 @@ function SpatialConvolution:__init(nInputPlane, nOutputPlane, kW, kH, dW, dH, pa
    self.padW = padW or 0
    self.padH = padH or 0   
    self:reset()
-   self:cuda()
    self.iSize = torch.LongStorage(4):fill(0)
-   self:resetWeightDescriptors()
 end
 
 -- if you change the configuration of the module manually, call this
 function SpatialConvolution:resetWeightDescriptors()
+   assert(torch.typename(self.weight) == 'torch.CudaTensor', 'Only Cuda supported duh!')
+   assert(torch.typename(self.bias) == 'torch.CudaTensor', 'Only Cuda supported duh!')
    -- create filterDescriptor for weight
    self.weightDesc = ffi.new('struct cudnnFilterStruct*[1]')
    errcheck('cudnnCreateFilterDescriptor', self.weightDesc)

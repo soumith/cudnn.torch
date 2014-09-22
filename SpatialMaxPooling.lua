@@ -9,9 +9,7 @@ function SpatialMaxPooling:__init(kW, kH, dW, dH)
    self.kH = kH
    self.dW = dW or kW
    self.dH = dH or kW
-   self:cuda()
    self.iSize = torch.LongStorage(4):fill(0)
-   self:resetPoolDescriptors()
 end
 
 function SpatialMaxPooling:resetPoolDescriptors()
