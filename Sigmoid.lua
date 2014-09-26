@@ -9,7 +9,8 @@ function Sigmoid:__init()
 end
 
 function Sigmoid:createIODescriptors(input)
-   if input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
+   if not self.iDesc or not self.oDesc or 
+      input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
    or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
       self.iSize = input:size()
       self.gradInput:resizeAs(input)
@@ -31,6 +32,7 @@ end
 function Sigmoid:updateGradInput(input, gradOutput)
    assert(input:dim() == 4 and input:isContiguous());
    assert(gradOutput:dim() == 4 and gradOutput:isContiguous());
+   self:createIODescriptors(input)
    errcheck('cudnnActivationBackward', cudnn.handle[cutorch.getDevice()-1], 'CUDNN_ACTIVATION_SIGMOID',
             self.oDesc[0], self.output:data(),
             self.oDesc[0], gradOutput:data(),

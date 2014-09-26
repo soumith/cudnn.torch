@@ -30,7 +30,8 @@ function SpatialConvolution:resetWeightDescriptors()
 end
 
 function SpatialConvolution:createIODescriptors(input)
-   if input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
+   if not self.iDesc or not self.oDesc or 
+      input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
    or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
          self.iSize = input:size()
          -- resize gradInput
@@ -78,6 +79,8 @@ end
 function SpatialConvolution:updateGradInput(input, gradOutput)
    assert(input:dim() == 4 and input:isContiguous()); 
    assert(gradOutput:dim() == 4 and gradOutput:isContiguous());
+   if not self.weightDesc then self:resetWeightDescriptors() end
+   self:createIODescriptors(input)
    errcheck('cudnnConvolutionBackwardData', cudnn.handle[cutorch.getDevice()-1], 
             self.weightDesc[0], self.weight:data(), 
             self.oDesc[0], gradOutput:data(), 
@@ -91,6 +94,8 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
    assert(scale == nil or scale == 1)
    assert(input:dim() == 4 and input:isContiguous()); 
    assert(gradOutput:dim() == 4 and gradOutput:isContiguous());
+   self:createIODescriptors(input)
+   if not self.weightDesc then self:resetWeightDescriptors() end
    -- gradBias
    errcheck('cudnnConvolutionBackwardBias', cudnn.handle[cutorch.getDevice()-1], 
             self.oDesc[0], gradOutput:data(), 

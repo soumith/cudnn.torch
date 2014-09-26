@@ -63,6 +63,12 @@ function cudnntest.SpatialConvolution_backward()
    gconv.weight:copy(sconv.weight)
    gconv.bias:copy(sconv.bias)
    gconv:forward(input)
+
+   -- serialize and deserialize
+   torch.save('modelTemp.t7', gconv)
+   gconv = torch.load('modelTemp.t7')
+
+   gconv:forward(input)
    gconv:zeroGradParameters()
    local rescuda = gconv:backward(input, gradOutput)
    cutorch.synchronize()
@@ -98,6 +104,10 @@ function cudnntest.SpatialMaxPooling()
    cutorch.synchronize()
    local gconv = cudnn.SpatialMaxPooling(ki,kj,si,sj):cuda()
    local rescuda = gconv:forward(input)
+   -- serialize and deserialize
+   torch.save('modelTemp.t7', gconv)
+   gconv = torch.load('modelTemp.t7')
+   local rescuda = gconv:forward(input)
    local resgrad = gconv:backward(input, gradOutput)
    cutorch.synchronize()
    local error = rescuda:float() - groundtruth:float()
@@ -125,6 +135,12 @@ function cudnntest.ReLU()
    local groundgrad = sconv:backward(input, gradOutput)
    cutorch.synchronize()
    local gconv = cudnn.ReLU(ki,kj,si,sj):cuda()
+   local rescuda = gconv:forward(input)
+
+   -- serialize and deserialize
+   torch.save('modelTemp.t7', gconv)
+   gconv = torch.load('modelTemp.t7')
+
    local rescuda = gconv:forward(input)
    local resgrad = gconv:backward(input, gradOutput)
    cutorch.synchronize()
@@ -154,6 +170,12 @@ function cudnntest.Tanh()
    cutorch.synchronize()
    local gconv = cudnn.Tanh(ki,kj,si,sj):cuda()
    local rescuda = gconv:forward(input)
+
+   -- serialize and deserialize
+   torch.save('modelTemp.t7', gconv)
+   gconv = torch.load('modelTemp.t7')
+
+   local rescuda = gconv:forward(input)
    local resgrad = gconv:backward(input, gradOutput)
    cutorch.synchronize()
    local error = rescuda:float() - groundtruth:float()
@@ -181,6 +203,12 @@ function cudnntest.Sigmoid()
    local groundgrad = sconv:backward(input, gradOutput)
    cutorch.synchronize()
    local gconv = cudnn.Tanh(ki,kj,si,sj):cuda()
+   local rescuda = gconv:forward(input)
+
+   -- serialize and deserialize
+   torch.save('modelTemp.t7', gconv)
+   gconv = torch.load('modelTemp.t7')
+
    local rescuda = gconv:forward(input)
    local resgrad = gconv:backward(input, gradOutput)
    cutorch.synchronize()
