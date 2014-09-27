@@ -11,11 +11,12 @@ Modules are API compatible their nn equivalents. Fully unit-tested against nn im
 
 ####Modules
 ```
-cudnn.SpatialConvolution
-cudnn.SpatialMaxPooling
-cudnn.ReLU
-cudnn.Tanh
-cudnn.Sigmoid
+cudnn.SpatialConvolution(nInputPlane, nOutputPlane, kW, kH, dW, dH, padW, padH)
+cudnn.SpatialMaxPooling(kW, kH, dW, dH)
+cudnn.SpatialAveragePooling(kW, kH, dW, dH)
+cudnn.ReLU()
+cudnn.Tanh()
+cudnn.Sigmoid()
 ```
 
 I have no time to support these, so please dont expect a quick response to filed github issues.
