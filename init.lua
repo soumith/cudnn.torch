@@ -53,6 +53,7 @@ end
 
 include 'SpatialConvolution.lua'
 include 'SpatialMaxPooling.lua'
+include 'SpatialAveragePooling.lua'
 include 'ReLU.lua'
 include 'Tanh.lua'
 include 'Sigmoid.lua'
