@@ -10,13 +10,14 @@ function SpatialMaxPooling:__init(kW, kH, dW, dH)
    self.dW = dW or kW
    self.dH = dH or kW
    self.iSize = torch.LongStorage(4):fill(0)
+   self.mode = 'CUDNN_POOLING_MAX'
 end
 
 function SpatialMaxPooling:resetPoolDescriptors()
    -- create pooling descriptor
    self.poolDesc = ffi.new('struct cudnnPoolingStruct*[1]')
    errcheck('cudnnCreatePoolingDescriptor', self.poolDesc)
-   errcheck('cudnnSetPoolingDescriptor', self.poolDesc[0], 'CUDNN_POOLING_MAX',
+   errcheck('cudnnSetPoolingDescriptor', self.poolDesc[0], self.mode,
             self.kH, self.kW, self.dH, self.dW);
    local function destroyPoolDesc(d) 
       errcheck('cudnnDestroyPoolingDescriptor', d[0]);
