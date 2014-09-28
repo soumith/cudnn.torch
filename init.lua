@@ -57,6 +57,5 @@ include 'SpatialAveragePooling.lua'
 include 'ReLU.lua'
 include 'Tanh.lua'
 include 'Sigmoid.lua'
---[[ 
-include 'Softmax.lua'
-]]--
+include 'SpatialSoftMax.lua'
+include 'SoftMax.lua'

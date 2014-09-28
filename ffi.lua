@@ -206,6 +206,39 @@ cudnnStatus_t  cudnnActivationBackward( cudnnHandle_t handle,
                                                    void                      *destDiffData
                                                  );
 
+
+typedef enum
+{
+    CUDNN_SOFTMAX_FAST     = 0, CUDNN_SOFTMAX_ACCURATE = 1
+} cudnnSoftmaxAlgorithm_t;
+
+typedef enum
+{
+    CUDNN_SOFTMAX_MODE_INSTANCE = 0, CUDNN_SOFTMAX_MODE_CHANNEL = 1
+} cudnnSoftmaxMode_t;
+
+
+cudnnStatus_t cudnnSoftmaxForward(  cudnnHandle_t handle,
+                                    cudnnSoftmaxAlgorithm_t    algorithm,
+                                    cudnnSoftmaxMode_t         mode,
+                                    cudnnTensor4dDescriptor_t  srcDesc,
+                                    const void                *srcData,
+                                    cudnnTensor4dDescriptor_t  destDesc,
+                                    void                      *destData
+                                             );
+
+cudnnStatus_t cudnnSoftmaxBackward( cudnnHandle_t handle,
+                                    cudnnSoftmaxAlgorithm_t    algorithm,
+                                    cudnnSoftmaxMode_t         mode,
+                                    cudnnTensor4dDescriptor_t  srcDesc,
+                                    const void                *srcData,
+                                    cudnnTensor4dDescriptor_t  srcDiffDesc,
+                                    const void                *srcDiffData,
+                                    cudnnTensor4dDescriptor_t  destDiffDesc,
+                                    void                      *destDiffData
+                                    );
+
+
 ]]
 
 local ok
