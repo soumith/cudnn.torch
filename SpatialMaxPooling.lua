@@ -55,7 +55,12 @@ end
 
 function SpatialMaxPooling:updateGradInput(input, gradOutput)
    assert(input:dim() == 4 and input:isContiguous());
-   assert(gradOutput:dim() == 4 and gradOutput:isContiguous());
+   assert(gradOutput:dim() == 4);
+   if not gradOutput:isContiguous() then
+      self._gradOutput = self._gradOutput or gradOutput.new()
+      self._gradOutput:resizeAs(gradOutput):copy(gradOutput)
+      gradOutput = self._gradOutput
+   end
    if not self.poolDesc then self:resetPoolDescriptors() end
    self:createIODescriptors(input)
    errcheck('cudnnPoolingBackward', cudnn.handle[cutorch.getDevice()-1], self.poolDesc[0],
