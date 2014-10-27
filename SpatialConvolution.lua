@@ -35,7 +35,7 @@ function SpatialConvolution:createIODescriptors(input)
    or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
          self.iSize = input:size()
          -- resize gradInput
-         self.gradInput:resizeAs(input)
+         if self.gradInput then self.gradInput:resizeAs(input); end
          -- create input descriptor
          self.iDesc = cudnn.toDescriptor(input)
          -- create conv descriptor
@@ -77,6 +77,7 @@ function SpatialConvolution:updateOutput(input)
 end
 
 function SpatialConvolution:updateGradInput(input, gradOutput)
+   if not self.gradInput then return end
    assert(input:dim() == 4 and input:isContiguous());
    assert(gradOutput:dim() == 4 and gradOutput:isContiguous());
    if not self.weightDesc then self:resetWeightDescriptors() end
