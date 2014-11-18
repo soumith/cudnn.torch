@@ -30,6 +30,12 @@ function SpatialConvolution:resetWeightDescriptors()
 end
 
 function SpatialConvolution:createIODescriptors(input)
+   local batch = true
+   if input:dim() == 3 then
+      input = input:view(1, input:size(1), input:size(2), input:size(3))
+      batch = false
+   end
+   assert(input:dim() == 4 and input:isContiguous());
    if not self.iDesc or not self.oDesc or
       input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
    or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
@@ -57,11 +63,14 @@ function SpatialConvolution:createIODescriptors(input)
          self.output:resize(oSize:long():storage())
          -- create descriptor for output
          self.oDesc = cudnn.toDescriptor(self.output)
+         if not batch then
+            self.gradInput = self.gradInput:view(self.gradInput:size(2), self.gradInput:size(3), self.gradInput:size(4))
+            self.output = self.output:view(self.output:size(2), self.output:size(3), self.output:size(4))
+         end
    end
 end
 
 function SpatialConvolution:updateOutput(input)
-   assert(input:dim() == 4 and input:isContiguous());
    if not self.weightDesc then self:resetWeightDescriptors() end
    self:createIODescriptors(input)
    errcheck('cudnnConvolutionForward', cudnn.handle[cutorch.getDevice()-1],
@@ -78,8 +87,7 @@ end
 
 function SpatialConvolution:updateGradInput(input, gradOutput)
    if not self.gradInput then return end
-   assert(input:dim() == 4 and input:isContiguous());
-   assert(gradOutput:dim() == 4 and gradOutput:isContiguous());
+   assert((gradOutput:dim() == 3 or gradOutput:dim() == 4) and gradOutput:isContiguous());
    if not self.weightDesc then self:resetWeightDescriptors() end
    self:createIODescriptors(input)
    errcheck('cudnnConvolutionBackwardData', cudnn.handle[cutorch.getDevice()-1],
@@ -93,8 +101,7 @@ end
 
 function SpatialConvolution:accGradParameters(input, gradOutput, scale)
    assert(scale == nil or scale == 1)
-   assert(input:dim() == 4 and input:isContiguous());
-   assert(gradOutput:dim() == 4 and gradOutput:isContiguous());
+   assert((gradOutput:dim() == 3 or gradOutput:dim() == 4) and gradOutput:isContiguous());
    self:createIODescriptors(input)
    if not self.weightDesc then self:resetWeightDescriptors() end
    -- gradBias

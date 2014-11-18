@@ -27,25 +27,26 @@ local function destroy(handle)
    local currentDevice = cutorch.getDevice()
    for i=1,numDevices do
       cutorch.setDevice(i)
-      errcheck('cudnnDestroy', handle[i-1]); 
+      errcheck('cudnnDestroy', handle[i-1]);
    end
    cutorch.setDevice(currentDevice)
 end
 ffi.gc(cudnn.handle, destroy)
 
 function cudnn.toDescriptor(t)
+   if t:dim() == 3 then t = t:view(1, t:size(1), t:size(2), t:size(3)) end
    assert(t:dim() == 4);
    assert(torch.typename(t) == 'torch.CudaTensor')
    local descriptor = ffi.new('struct cudnnTensor4dStruct*[1]')
    -- create descriptor
    errcheck('cudnnCreateTensor4dDescriptor', descriptor)
    -- set gc hook
-   local function destroy(d) 
-      errcheck('cudnnDestroyTensor4dDescriptor', d[0]); 
+   local function destroy(d)
+      errcheck('cudnnDestroyTensor4dDescriptor', d[0]);
    end
    ffi.gc(descriptor, destroy)
    -- set descriptor
-   errcheck('cudnnSetTensor4dDescriptorEx', descriptor[0], 'CUDNN_DATA_FLOAT', 
+   errcheck('cudnnSetTensor4dDescriptorEx', descriptor[0], 'CUDNN_DATA_FLOAT',
             t:size(1), t:size(2), t:size(3), t:size(4),
             t:stride(1), t:stride(2), t:stride(3), t:stride(4))
    return descriptor
