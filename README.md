@@ -14,7 +14,7 @@ Modules are API compatible their [`nn`](https://github.com/torch/nn) equivalents
 #### Modules
 
 ```
--- All inputs have to be 4D, even for ReLU, SoftMax etc.
+-- All inputs have to be 3D or 4D, even for ReLU, SoftMax etc.
 cudnn.SpatialConvolution(nInputPlane, nOutputPlane, kW, kH, dW, dH, padW, padH)
 cudnn.SpatialMaxPooling(kW, kH, dW, dH)
 cudnn.SpatialAveragePooling(kW, kH, dW, dH)
