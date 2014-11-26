@@ -23,8 +23,12 @@ function Pointwise:createIODescriptors(input)
       self.iDesc = cudnn.toDescriptor(input)
       self.oDesc = cudnn.toDescriptor(self.output)
       if not batch then
-         self.gradInput = self.gradInput:view(self.gradInput:size(2), self.gradInput:size(3), self.gradInput:size(4))
-         self.output = self.output:view(self.output:size(2), self.output:size(3), self.output:size(4))
+         self.gradInput = self.gradInput:view(self.gradInput:size(2),
+                                              self.gradInput:size(3),
+                                              self.gradInput:size(4))
+         self.output = self.output:view(self.output:size(2),
+                                        self.output:size(3),
+                                        self.output:size(4))
       end
    end
 end
@@ -39,7 +43,8 @@ function Pointwise:updateOutput(input)
 end
 
 function Pointwise:updateGradInput(input, gradOutput)
-   assert((gradOutput:dim() == 4 or gradOutput:dim() == 3) and gradOutput:isContiguous());
+   assert((gradOutput:dim() == 4 or gradOutput:dim() == 3)
+         and gradOutput:isContiguous());
    self:createIODescriptors(input)
    errcheck('cudnnActivationBackward',
             cudnn.handle[cutorch.getDevice()-1], self.mode,

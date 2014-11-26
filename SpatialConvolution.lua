@@ -1,6 +1,5 @@
 local SpatialConvolution, parent = torch.class('cudnn.SpatialConvolution', 'nn.SpatialConvolution')
 local ffi = require 'ffi'
-local C = cudnn.C
 local errcheck = cudnn.errcheck
 
 function SpatialConvolution:__init(nInputPlane, nOutputPlane, kW, kH, dW, dH, padW, padH)
@@ -64,8 +63,12 @@ function SpatialConvolution:createIODescriptors(input)
          -- create descriptor for output
          self.oDesc = cudnn.toDescriptor(self.output)
          if not batch then
-            self.gradInput = self.gradInput:view(self.gradInput:size(2), self.gradInput:size(3), self.gradInput:size(4))
-            self.output = self.output:view(self.output:size(2), self.output:size(3), self.output:size(4))
+            self.gradInput = self.gradInput:view(self.gradInput:size(2),
+                                                 self.gradInput:size(3),
+                                                 self.gradInput:size(4))
+            self.output = self.output:view(self.output:size(2),
+                                           self.output:size(3),
+                                           self.output:size(4))
          end
    end
 end
@@ -87,7 +90,8 @@ end
 
 function SpatialConvolution:updateGradInput(input, gradOutput)
    if not self.gradInput then return end
-   assert((gradOutput:dim() == 3 or gradOutput:dim() == 4) and gradOutput:isContiguous());
+   assert((gradOutput:dim() == 3 or gradOutput:dim() == 4)
+         and gradOutput:isContiguous());
    if not self.weightDesc then self:resetWeightDescriptors() end
    self:createIODescriptors(input)
    errcheck('cudnnConvolutionBackwardData', cudnn.handle[cutorch.getDevice()-1],
@@ -101,7 +105,8 @@ end
 
 function SpatialConvolution:accGradParameters(input, gradOutput, scale)
    assert(scale == nil or scale == 1)
-   assert((gradOutput:dim() == 3 or gradOutput:dim() == 4) and gradOutput:isContiguous());
+   assert((gradOutput:dim() == 3 or gradOutput:dim() == 4)
+         and gradOutput:isContiguous());
    self:createIODescriptors(input)
    if not self.weightDesc then self:resetWeightDescriptors() end
    -- gradBias

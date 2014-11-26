@@ -7,6 +7,7 @@ local precision_backward = 1e-2
 local precision_jac = 1e-3
 local nloop = 1
 local times = {}
+local mytester
 
 
 function cudnntest.SpatialConvolution_forward_batch()
@@ -107,7 +108,8 @@ function cudnntest.SpatialConvolution_forward_single()
    cutorch.synchronize()
    mytester:asserteq(rescuda:dim(), 3, 'error in dimension')
    local error = rescuda:float() - groundtruth:float()
-   mytester:assertlt(error:abs():max(), precision_forward, 'error on state (forward) ')
+   mytester:assertlt(error:abs():max(), precision_forward,
+                     'error on state (forward) ')
 end
 
 
@@ -154,9 +156,12 @@ function cudnntest.SpatialConvolution_backward_single()
    local werror = weightcuda:float() - groundweight:float()
    local berror = biascuda:float() - groundbias:float()
 
-   mytester:assertlt(error:abs():max(), precision_backward, 'error on state (backward) ')
-   mytester:assertlt(werror:abs():max(), precision_backward, 'error on weight (backward) ')
-   mytester:assertlt(berror:abs():max(), precision_backward, 'error on bias (backward) ')
+   mytester:assertlt(error:abs():max(), precision_backward,
+                     'error on state (backward) ')
+   mytester:assertlt(werror:abs():max(), precision_backward,
+                     'error on weight (backward) ')
+   mytester:assertlt(berror:abs():max(), precision_backward,
+                     'error on bias (backward) ')
 end
 
 
@@ -212,7 +217,7 @@ function cudnntest.SpatialMaxPooling_single()
    local groundgrad = sconv:backward(input, gradOutput)
    cutorch.synchronize()
    local gconv = cudnn.SpatialMaxPooling(ki,kj,si,sj):cuda()
-   local rescuda = gconv:forward(input)
+   local _ = gconv:forward(input)
    -- serialize and deserialize
    torch.save('modelTemp.t7', gconv)
    gconv = torch.load('modelTemp.t7')
@@ -222,17 +227,15 @@ function cudnntest.SpatialMaxPooling_single()
    mytester:asserteq(rescuda:dim(), 3, 'error in dimension')
    mytester:asserteq(resgrad:dim(), 3, 'error in dimension')
    local error = rescuda:float() - groundtruth:float()
-   mytester:assertlt(error:abs():max(), precision_forward, 'error on state (forward) ')
+   mytester:assertlt(error:abs():max(), precision_forward,
+                     'error on state (forward) ')
    error = resgrad:float() - groundgrad:float()
-   mytester:assertlt(error:abs():max(), precision_backward, 'error on state (backward) ')
+   mytester:assertlt(error:abs():max(), precision_backward,
+                     'error on state (backward) ')
 end
 
 function cudnntest.ReLU_single()
    local from = math.random(1,32)
-   local ki = math.random(2,4)
-   local kj = math.random(2,4)
-   local si = ki
-   local sj = kj
    local outi = math.random(1,64)
    local outj = math.random(1,64)
    local ini = outi
@@ -245,7 +248,7 @@ function cudnntest.ReLU_single()
    local groundgrad = sconv:backward(input, gradOutput)
    cutorch.synchronize()
    local gconv = cudnn.ReLU():cuda()
-   local rescuda = gconv:forward(input)
+   local _ = gconv:forward(input)
 
    -- serialize and deserialize
    torch.save('modelTemp.t7', gconv)
@@ -257,18 +260,16 @@ function cudnntest.ReLU_single()
    mytester:asserteq(rescuda:dim(), 3, 'error in dimension')
    mytester:asserteq(resgrad:dim(), 3, 'error in dimension')
    local error = rescuda:float() - groundtruth:float()
-   mytester:assertlt(error:abs():max(), precision_forward, 'error on state (forward) ')
+   mytester:assertlt(error:abs():max(), precision_forward,
+                     'error on state (forward) ')
    error = resgrad:float() - groundgrad:float()
-   mytester:assertlt(error:abs():max(), precision_backward, 'error on state (backward) ')
+   mytester:assertlt(error:abs():max(), precision_backward,
+                     'error on state (backward) ')
 end
 
 function cudnntest.ReLU_batch()
    local bs = math.random(1,32)
    local from = math.random(1,32)
-   local ki = math.random(2,4)
-   local kj = math.random(2,4)
-   local si = ki
-   local sj = kj
    local outi = math.random(1,64)
    local outj = math.random(1,64)
    local ini = outi
@@ -293,17 +294,15 @@ function cudnntest.ReLU_batch()
    mytester:asserteq(rescuda:dim(), 4, 'error in dimension')
    mytester:asserteq(resgrad:dim(), 4, 'error in dimension')
    local error = rescuda:float() - groundtruth:float()
-   mytester:assertlt(error:abs():max(), precision_forward, 'error on state (forward) ')
+   mytester:assertlt(error:abs():max(), precision_forward,
+                     'error on state (forward) ')
    error = resgrad:float() - groundgrad:float()
-   mytester:assertlt(error:abs():max(), precision_backward, 'error on state (backward) ')
+   mytester:assertlt(error:abs():max(), precision_backward,
+                     'error on state (backward) ')
 end
 
 function cudnntest.Tanh_single()
    local from = math.random(1,32)
-   local ki = math.random(2,4)
-   local kj = math.random(2,4)
-   local si = ki
-   local sj = kj
    local outi = math.random(1,64)
    local outj = math.random(1,64)
    local ini = outi
@@ -316,7 +315,7 @@ function cudnntest.Tanh_single()
    local groundgrad = sconv:backward(input, gradOutput)
    cutorch.synchronize()
    local gconv = cudnn.Tanh():cuda()
-   local rescuda = gconv:forward(input)
+   local _ = gconv:forward(input)
 
    -- serialize and deserialize
    torch.save('modelTemp.t7', gconv)
@@ -328,18 +327,16 @@ function cudnntest.Tanh_single()
    mytester:asserteq(rescuda:dim(), 3, 'error in dimension')
    mytester:asserteq(resgrad:dim(), 3, 'error in dimension')
    local error = rescuda:float() - groundtruth:float()
-   mytester:assertlt(error:abs():max(), precision_forward, 'error on state (forward) ')
+   mytester:assertlt(error:abs():max(), precision_forward,
+                     'error on state (forward) ')
    error = resgrad:float() - groundgrad:float()
-   mytester:assertlt(error:abs():max(), precision_backward, 'error on state (backward) ')
+   mytester:assertlt(error:abs():max(), precision_backward,
+                     'error on state (backward) ')
 end
 
 function cudnntest.Tanh_batch()
    local bs = math.random(1,32)
    local from = math.random(1,32)
-   local ki = math.random(2,4)
-   local kj = math.random(2,4)
-   local si = ki
-   local sj = kj
    local outi = math.random(1,64)
    local outj = math.random(1,64)
    local ini = outi
@@ -364,17 +361,15 @@ function cudnntest.Tanh_batch()
    mytester:asserteq(rescuda:dim(), 4, 'error in dimension')
    mytester:asserteq(resgrad:dim(), 4, 'error in dimension')
    local error = rescuda:float() - groundtruth:float()
-   mytester:assertlt(error:abs():max(), precision_forward, 'error on state (forward) ')
+   mytester:assertlt(error:abs():max(), precision_forward,
+                     'error on state (forward) ')
    error = resgrad:float() - groundgrad:float()
-   mytester:assertlt(error:abs():max(), precision_backward, 'error on state (backward) ')
+   mytester:assertlt(error:abs():max(), precision_backward,
+                     'error on state (backward) ')
 end
 
 function cudnntest.Sigmoid_single()
    local from = math.random(1,32)
-   local ki = math.random(2,4)
-   local kj = math.random(2,4)
-   local si = ki
-   local sj = kj
    local outi = math.random(1,64)
    local outj = math.random(1,64)
    local ini = outi
@@ -387,7 +382,7 @@ function cudnntest.Sigmoid_single()
    local groundgrad = sconv:backward(input, gradOutput)
    cutorch.synchronize()
    local gconv = cudnn.Sigmoid():cuda()
-   local rescuda = gconv:forward(input)
+   local _ = gconv:forward(input)
 
    -- serialize and deserialize
    torch.save('modelTemp.t7', gconv)
@@ -399,18 +394,16 @@ function cudnntest.Sigmoid_single()
    mytester:asserteq(rescuda:dim(), 3, 'error in dimension')
    mytester:asserteq(resgrad:dim(), 3, 'error in dimension')
    local error = rescuda:float() - groundtruth:float()
-   mytester:assertlt(error:abs():max(), precision_forward, 'error on state (forward) ')
+   mytester:assertlt(error:abs():max(), precision_forward,
+                     'error on state (forward) ')
    error = resgrad:float() - groundgrad:float()
-   mytester:assertlt(error:abs():max(), precision_backward, 'error on state (backward) ')
+   mytester:assertlt(error:abs():max(), precision_backward,
+                     'error on state (backward) ')
 end
 
 function cudnntest.Sigmoid_batch()
    local bs = math.random(1,32)
    local from = math.random(1,32)
-   local ki = math.random(2,4)
-   local kj = math.random(2,4)
-   local si = ki
-   local sj = kj
    local outi = math.random(1,64)
    local outj = math.random(1,64)
    local ini = outi
@@ -435,17 +428,15 @@ function cudnntest.Sigmoid_batch()
    mytester:asserteq(rescuda:dim(), 4, 'error in dimension')
    mytester:asserteq(resgrad:dim(), 4, 'error in dimension')
    local error = rescuda:float() - groundtruth:float()
-   mytester:assertlt(error:abs():max(), precision_forward, 'error on state (forward) ')
+   mytester:assertlt(error:abs():max(), precision_forward,
+                     'error on state (forward) ')
    error = resgrad:float() - groundgrad:float()
-   mytester:assertlt(error:abs():max(), precision_backward, 'error on state (backward) ')
+   mytester:assertlt(error:abs():max(), precision_backward,
+                     'error on state (backward) ')
 end
 
 function cudnntest.SoftMax_single()
    local from = math.random(1,32)
-   local ki = math.random(2,4)
-   local kj = math.random(2,4)
-   local si = ki
-   local sj = kj
    local outi = math.random(1,64)
    local outj = math.random(1,64)
    local ini = outi
@@ -458,7 +449,7 @@ function cudnntest.SoftMax_single()
    local groundgrad = sconv:backward(input, gradOutput)
    cutorch.synchronize()
    local gconv = cudnn.SoftMax():cuda()
-   local rescuda = gconv:forward(input)
+   local _ = gconv:forward(input)
 
    -- serialize and deserialize
    torch.save('modelTemp.t7', gconv)
@@ -481,10 +472,6 @@ end
 function cudnntest.SoftMax_batch()
    local bs = math.random(1,32)
    local from = math.random(1,32)
-   local ki = math.random(2,4)
-   local kj = math.random(2,4)
-   local si = ki
-   local sj = kj
    local outi = math.random(1,64)
    local outj = math.random(1,64)
    local ini = outi
@@ -527,5 +514,7 @@ mytester:add(cudnntest)
 for i=1,cutorch.getDeviceCount() do
    print('Running test on device: ' .. i)
    cutorch.setDevice(i)
-   mytester:run()
+   mytester:run(tests)
 end
+
+os.execute('rm -f modelTemp.t7')
