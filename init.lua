@@ -53,8 +53,10 @@ function cudnn.toDescriptor(t)
 end
 
 include 'SpatialConvolution.lua'
+include 'Pooling.lua'
 include 'SpatialMaxPooling.lua'
 include 'SpatialAveragePooling.lua'
+include 'Pointwise.lua'
 include 'ReLU.lua'
 include 'Tanh.lua'
 include 'Sigmoid.lua'
