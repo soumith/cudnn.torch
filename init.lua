@@ -8,7 +8,7 @@ local ffi = require 'ffi'
 local errcheck = function(f, ...)
    local status = C[f](...)
    if status ~= 'CUDNN_STATUS_SUCCESS' then
-      print("Error in CuDNN. Status Code: ", tonumber(status))
+      error("Error in CuDNN. Status Code: " ..  tonumber(status))
    end
 end
 cudnn.errcheck = errcheck
@@ -35,7 +35,7 @@ ffi.gc(cudnn.handle, destroy)
 
 function cudnn.toDescriptor(t)
    if t:dim() == 3 then t = t:view(1, t:size(1), t:size(2), t:size(3)) end
-   assert(t:dim() == 4);
+   assert(t:dim() == 4, 'Expecting 4D input, but got: ' .. t:dim());
    assert(torch.typename(t) == 'torch.CudaTensor')
    local descriptor = ffi.new('struct cudnnTensor4dStruct*[1]')
    -- create descriptor
