@@ -8,7 +8,8 @@ local ffi = require 'ffi'
 local errcheck = function(f, ...)
    local status = C[f](...)
    if status ~= 'CUDNN_STATUS_SUCCESS' then
-      error("Error in CuDNN. Status Code: " ..  tonumber(status))
+      local str = ffi.string(C.cudnnGetErrorString(status))
+      error('Error in CuDNN: ' .. str)
    end
 end
 cudnn.errcheck = errcheck
@@ -34,21 +35,20 @@ end
 ffi.gc(cudnn.handle, destroy)
 
 function cudnn.toDescriptor(t)
-   if t:dim() == 3 then t = t:view(1, t:size(1), t:size(2), t:size(3)) end
-   assert(t:dim() == 4, 'Expecting 4D input, but got: ' .. t:dim());
    assert(torch.typename(t) == 'torch.CudaTensor')
-   local descriptor = ffi.new('struct cudnnTensor4dStruct*[1]')
+   local descriptor = ffi.new('struct cudnnTensorStruct*[1]')
    -- create descriptor
-   errcheck('cudnnCreateTensor4dDescriptor', descriptor)
+   errcheck('cudnnCreateTensorDescriptor', descriptor)
    -- set gc hook
    local function destroy(d)
-      errcheck('cudnnDestroyTensor4dDescriptor', d[0]);
+      errcheck('cudnnDestroyTensorDescriptor', d[0]);
    end
    ffi.gc(descriptor, destroy)
    -- set descriptor
-   errcheck('cudnnSetTensor4dDescriptorEx', descriptor[0], 'CUDNN_DATA_FLOAT',
-            t:size(1), t:size(2), t:size(3), t:size(4),
-            t:stride(1), t:stride(2), t:stride(3), t:stride(4))
+   local size = torch.LongTensor(t:size()):int()
+   local stride = torch.LongTensor(t:stride()):int()
+   errcheck('cudnnSetTensorNdDescriptor', descriptor[0], 'CUDNN_DATA_FLOAT',
+            t:dim(), size:data(), stride:data())
    return descriptor
 end
 
