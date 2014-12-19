@@ -61,13 +61,13 @@ function SpatialConvolution:createIODescriptors(input)
          -- create output descriptor and resize output
          local oSize = torch.IntTensor(4)
          local oSizeD = oSize:data()
-         errcheck('cudnnGetConvolutionNdForwardOutputDim', self.convDesc[0], self.iDesc[0], 
+         errcheck('cudnnGetConvolutionNdForwardOutputDim', self.convDesc[0], self.iDesc[0],
                   self.weightDesc[0], 4, oSizeD)
          self.output:resize(oSize:long():storage())
          -- create descriptor for output
          self.oDesc = cudnn.toDescriptor(self.output)
-         
-         -- create forwardAlgorithm descriptors for 
+
+         -- create forwardAlgorithm descriptors for
          local algType = ffi.new("cudnnConvolutionFwdAlgo_t[?]", 1)
          errcheck('cudnnGetConvolutionForwardAlgorithm',
                   cudnn.handle[cutorch.getDevice()-1],
@@ -75,7 +75,7 @@ function SpatialConvolution:createIODescriptors(input)
                   'CUDNN_CONVOLUTION_FWD_PREFER_FASTEST', -1, algType)
          self.algType = algType
          local bufSize = torch.LongTensor(1)
-         errcheck('cudnnGetConvolutionForwardWorkspaceSize', 
+         errcheck('cudnnGetConvolutionForwardWorkspaceSize',
                   cudnn.handle[cutorch.getDevice()-1],
                   self.iDesc[0], self.weightDesc[0], self.convDesc[0], self.oDesc[0],
                   algType[0], bufSize:data())
@@ -103,7 +103,7 @@ function SpatialConvolution:updateOutput(input)
             one:data(),
             self.iDesc[0], input:data(),
             self.weightDesc[0], self.weight:data(),
-            self.convDesc[0], self.algType[0], 
+            self.convDesc[0], self.algType[0],
             self.extraBuffer:data(), self.extraBuffer:nElement(),
             zero:data(),
             self.oDesc[0], self.output:data());
@@ -129,23 +129,24 @@ function SpatialConvolution:updateGradInput(input, gradOutput)
    return self.gradInput
 end
 
-local scaleT = torch.FloatTensor(1):fill(1.0)
 function SpatialConvolution:accGradParameters(input, gradOutput, scale)
+   self.scaleT = self.scaleT or torch.FloatTensor(1):fill(1.0)
+   self.scaleT = self.scaleT:float() -- this line forces this member to always be on CPU (needed for cudnn)
    scale = scale or 1.0
-   scaleT[1] = scale
+   self.scaleT[1] = scale
    assert((gradOutput:dim() == 3 or gradOutput:dim() == 4)
          and gradOutput:isContiguous());
    self:createIODescriptors(input)
    if not self.weightDesc then self:resetWeightDescriptors() end
    -- gradBias
    errcheck('cudnnConvolutionBackwardBias', cudnn.handle[cutorch.getDevice()-1],
-            scaleT:data(),
+            self.scaleT:data(),
             self.oDesc[0], gradOutput:data(),
             one:data(),
             self.biasDesc[0], self.gradBias:data());
    -- gradWeight
    errcheck('cudnnConvolutionBackwardFilter', cudnn.handle[cutorch.getDevice()-1],
-            scaleT:data(),
+            self.scaleT:data(),
             self.iDesc[0], input:data(),
             self.oDesc[0], gradOutput:data(),
             self.convDesc[0],
@@ -157,7 +158,7 @@ end
 --[[
 function SpatialConvolution:zeroGradParameters()
    -- gradWeight, gradBias to zero
-   errcheck('cudnnSetTensor', cudnn.handle[cutorch.getDevice()-1], 
+   errcheck('cudnnSetTensor', cudnn.handle[cutorch.getDevice()-1],
             self.weightDesc, self.gradWeight:data(), zero:data());
    errcheck('cudnnSetTensor', cudnn.handle[cutorch.getDevice()-1],
             self.biasDesc, self.gradBias:data(), zero:data());
