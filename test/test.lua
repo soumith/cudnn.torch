@@ -9,7 +9,6 @@ local nloop = 1
 local times = {}
 local mytester
 
-
 function cudnntest.SpatialConvolution_forward_batch()
    local bs = math.random(1,32)
    local from = math.random(1,32)
@@ -22,7 +21,6 @@ function cudnntest.SpatialConvolution_forward_batch()
    local outj = math.random(1,64)
    local ini = (outi-1)*si+ki
    local inj = (outj-1)*sj+kj
-
    local input = torch.randn(bs,from,inj,ini):cuda()
    local sconv = nn.SpatialConvolutionMM(from,to,ki,kj,si,sj):cuda()
    local groundtruth = sconv:forward(input)
@@ -43,19 +41,20 @@ function cudnntest.SpatialConvolution_backward_batch()
    local to = math.random(1,64)
    local ki = math.random(3,15)
    local kj = math.random(3,15)
-   local si = 1 -- not supported by CPU version yet
-   local sj = si
+   local si = math.random(1,ki-1)
+   local sj = math.random(1,kj-1)
    local outi = math.random(1,64)
    local outj = math.random(1,64)
    local ini = (outi-1)*si+ki
    local inj = (outj-1)*sj+kj
+   local scale = math.random()
 
    local input = torch.randn(bs,from,inj,ini):cuda()
    local gradOutput = torch.randn(bs,to,outj,outi):cuda()
    local sconv = nn.SpatialConvolutionMM(from,to,ki,kj,si,sj):cuda()
    sconv:forward(input)
    sconv:zeroGradParameters()
-   local groundgrad = sconv:backward(input, gradOutput)
+   local groundgrad = sconv:backward(input, gradOutput, scale)
    cutorch.synchronize()
    local groundweight = sconv.gradWeight
    local groundbias = sconv.gradBias
@@ -71,7 +70,7 @@ function cudnntest.SpatialConvolution_backward_batch()
 
    gconv:forward(input)
    gconv:zeroGradParameters()
-   local rescuda = gconv:backward(input, gradOutput)
+   local rescuda = gconv:backward(input, gradOutput, scale)
    cutorch.synchronize()
    local weightcuda = gconv.gradWeight
    local biascuda = gconv.gradBias
@@ -514,7 +513,7 @@ mytester:add(cudnntest)
 for i=1,cutorch.getDeviceCount() do
    print('Running test on device: ' .. i)
    cutorch.setDevice(i)
-   mytester:run(tests)
+   mytester:run()
 end
 
 os.execute('rm -f modelTemp.t7')
