@@ -21,13 +21,12 @@ cudnn.SpatialAveragePooling(kW, kH, dW, dH, padW, padH)
 cudnn.ReLU()
 cudnn.Tanh()
 cudnn.Sigmoid()
-
--- Volumetric inputs (4D or 5D batched mode)
-cudnn.VolumetricConvolution(nInputPlane, nOutputPlane, kT, kW, kH, dT, dW, dH, padT, padW, padH)
-
 -- SoftMax can be run in fast mode or accurate mode. Default is accurate mode.
 cudnn.SoftMax(fastMode [= false])          -- SoftMax across each image (just like nn.SoftMax)
 cudnn.SpatialSoftMax(fastMode [= false])   -- SoftMax across feature-maps (per spatial location)
+
+-- Volumetric inputs (4D or 5D batched mode)
+cudnn.VolumetricConvolution(nInputPlane, nOutputPlane, kT, kW, kH, dT, dW, dH, padT, padW, padH)
 ```
 
 I have no time to support these, so please don't expect a quick response to filed github issues.
