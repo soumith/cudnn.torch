@@ -50,7 +50,8 @@ end
 function Pointwise:updateGradInput(input, gradOutput)
    assert((gradOutput:dim() == 4 or gradOutput:dim() == 3));
    if not gradOutput:isContiguous() then
-      self._gradOutput = self._gradOutput or gradOutput.new():resizeAs(gradOutput)
+      self._gradOutput = self._gradOutput
+         or gradOutput.new():resizeAs(gradOutput)
       self._gradOutput:copy(gradOutput)
       gradOutput = self._gradOutput
    end

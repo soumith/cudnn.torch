@@ -179,7 +179,7 @@ function cudnntest.VolumetricConvolution_forward_single()
    local inj = (outj-1)*sj+kj
    local ink = (outk-1)*sk+kk
    local input = torch.randn(from,ink,inj,ini):cuda()
-   local sconv = nn.VolumetricConvolution(from,to,kk,ki,kj,sk,si,sj):float() --:cuda()
+   local sconv = nn.VolumetricConvolution(from,to,kk,ki,kj,sk,si,sj):float()
    local groundtruth = sconv:forward(input:float())
    cutorch.synchronize()
    local gconv = cudnn.VolumetricConvolution(from,to,kk,ki,kj,sk,si,sj):cuda()
@@ -188,7 +188,8 @@ function cudnntest.VolumetricConvolution_forward_single()
    local rescuda = gconv:forward(input)
    cutorch.synchronize()
    local error = rescuda:float() - groundtruth:float()
-   mytester:assertlt(error:abs():max(), precision_forward, 'error on state (forward) ')
+   mytester:assertlt(error:abs():max(), precision_forward,
+                     'error on state (forward) ')
 end
 
 function cudnntest.VolumetricConvolution_backward_single()
@@ -208,8 +209,8 @@ function cudnntest.VolumetricConvolution_backward_single()
    local ink = (outk-1)*sk+kk
    local input = torch.randn(from,ink,inj,ini):cuda()
    local gradOutput = torch.randn(to,outk,outj,outi):cuda()
-   local sconv = nn.VolumetricConvolution(from,to,kk,ki,kj,sk,si,sj):float() --:cuda()
-   local groundtruth = sconv:forward(input:float())
+   local sconv = nn.VolumetricConvolution(from,to,kk,ki,kj,sk,si,sj):float()
+   sconv:forward(input:float())
    sconv:zeroGradParameters()
    local groundgrad = sconv:backward(input:float(), gradOutput:float())
    cutorch.synchronize()
