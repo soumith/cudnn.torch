@@ -163,6 +163,90 @@ function cudnntest.SpatialConvolution_backward_single()
                      'error on bias (backward) ')
 end
 
+function cudnntest.VolumetricConvolution_forward_single()
+   local from = math.random(1,16)
+   local to = math.random(1,16)
+   local ki = math.random(3,5)
+   local kj = math.random(3,5)
+   local kk = math.random(3,5)
+   local si = math.random(1,ki-1)
+   local sj = math.random(1,kj-1)
+   local sk = math.random(1,kk-1)
+   local outi = math.random(1,17)
+   local outj = math.random(1,17)
+   local outk = math.random(1,5)
+   local ini = (outi-1)*si+ki
+   local inj = (outj-1)*sj+kj
+   local ink = (outk-1)*sk+kk
+   local input = torch.randn(from,ink,inj,ini):cuda()
+   local sconv = nn.VolumetricConvolution(from,to,kk,ki,kj,sk,si,sj):float() --:cuda()
+   local groundtruth = sconv:forward(input:float())
+   cutorch.synchronize()
+   local gconv = cudnn.VolumetricConvolution(from,to,kk,ki,kj,sk,si,sj):cuda()
+   gconv.weight:copy(sconv.weight)
+   gconv.bias:copy(sconv.bias)
+   local rescuda = gconv:forward(input)
+   cutorch.synchronize()
+   local error = rescuda:float() - groundtruth:float()
+   mytester:assertlt(error:abs():max(), precision_forward, 'error on state (forward) ')
+end
+
+function cudnntest.VolumetricConvolution_backward_single()
+   local from = math.random(1,16)
+   local to = math.random(1,16)
+   local ki = math.random(3,5)
+   local kj = math.random(3,5)
+   local kk = math.random(3,5)
+   local si = math.random(1,ki-1)
+   local sj = math.random(1,kj-1)
+   local sk = math.random(1,kk-1)
+   local outi = math.random(1,17)
+   local outj = math.random(1,17)
+   local outk = math.random(1,5)
+   local ini = (outi-1)*si+ki
+   local inj = (outj-1)*sj+kj
+   local ink = (outk-1)*sk+kk
+   local input = torch.randn(from,ink,inj,ini):cuda()
+   local gradOutput = torch.randn(to,outk,outj,outi):cuda()
+   local sconv = nn.VolumetricConvolution(from,to,kk,ki,kj,sk,si,sj):float() --:cuda()
+   local groundtruth = sconv:forward(input:float())
+   sconv:zeroGradParameters()
+   local groundgrad = sconv:backward(input:float(), gradOutput:float())
+   cutorch.synchronize()
+   local groundweight = sconv.gradWeight
+   local groundbias = sconv.gradBias
+
+   local gconv = cudnn.VolumetricConvolution(from,to,kk,ki,kj,sk,si,sj):cuda()
+   gconv.weight:copy(sconv.weight)
+   gconv.bias:copy(sconv.bias)
+   gconv:forward(input)
+   cutorch.synchronize()
+
+   -- serialize and deserialize
+   torch.save('modelTemp.t7', gconv)
+   gconv = torch.load('modelTemp.t7')
+
+   gconv:forward(input)
+   gconv:zeroGradParameters()
+   local rescuda = gconv:backward(input, gradOutput)
+   cutorch.synchronize()
+
+   mytester:asserteq(rescuda:dim(), 4, 'error in dimension')
+   local weightcuda = gconv.gradWeight
+   local biascuda = gconv.gradBias
+
+   local error = rescuda:float() - groundgrad:float()
+   local werror = weightcuda:float() - groundweight:float()
+   local berror = biascuda:float() - groundbias:float()
+
+   mytester:assertlt(error:abs():max(), precision_backward,
+                     'error on state (backward) ')
+   mytester:assertlt(werror:abs():max(), precision_backward,
+                     'error on weight (backward) ')
+   mytester:assertlt(berror:abs():max(), precision_backward,
+                     'error on bias (backward) ')
+
+end
 
 function cudnntest.SpatialMaxPooling_batch()
    local bs = math.random(1,32)

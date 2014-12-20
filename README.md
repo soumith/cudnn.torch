@@ -18,9 +18,12 @@ Modules are API compatible their [`nn`](https://github.com/torch/nn) equivalents
 cudnn.SpatialConvolution(nInputPlane, nOutputPlane, kW, kH, dW, dH, padW, padH)
 cudnn.SpatialMaxPooling(kW, kH, dW, dH, padW, padH)
 cudnn.SpatialAveragePooling(kW, kH, dW, dH, padW, padH)
-cudnn.ReLU()            
-cudnn.Tanh()            
-cudnn.Sigmoid()         
+cudnn.ReLU()
+cudnn.Tanh()
+cudnn.Sigmoid()
+
+-- Volumetric inputs (4D or 5D batched mode)
+cudnn.VolumetricConvolution(nInputPlane, nOutputPlane, kT, kW, kH, dT, dW, dH, padT, padW, padH)
 
 -- SoftMax can be run in fast mode or accurate mode. Default is accurate mode.
 cudnn.SoftMax(fastMode [= false])          -- SoftMax across each image (just like nn.SoftMax)
