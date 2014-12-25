@@ -411,10 +411,34 @@ function cudnntest.Tanh_single()
    mytester:asserteq(rescuda:dim(), 3, 'error in dimension')
    mytester:asserteq(resgrad:dim(), 3, 'error in dimension')
    local error = rescuda:float() - groundtruth:float()
-   mytester:assertlt(error:abs():max(), precision_forward,
+   local errmax = error:abs():max()
+   if (errmax ~= errmax) then
+      local state = {}
+      state.input = input
+      state.gradOutput = gradOutput
+      state.rescuda = rescuda
+      state.resgrad = resgrad
+      state.groundtruth = groundtruth
+      state.groundgrad = groundgrad
+      print(#input)
+      torch.save('badTanh.t7', state)
+   end
+   mytester:assertlt(errmax, precision_forward,
                      'error on state (forward) ')
    error = resgrad:float() - groundgrad:float()
-   mytester:assertlt(error:abs():max(), precision_backward,
+   errmax = error:abs():max()
+   if (errmax ~= errmax) then
+      local state = {}
+      state.input = input
+      state.gradOutput = gradOutput
+      state.rescuda = rescuda
+      state.resgrad = resgrad
+      state.groundtruth = groundtruth
+      state.groundgrad = groundgrad
+      print(#input)
+      torch.save('badTanh.t7', state)
+   end
+   mytester:assertlt(errmax, precision_backward,
                      'error on state (backward) ')
 end
 
@@ -478,10 +502,27 @@ function cudnntest.Sigmoid_single()
    mytester:asserteq(rescuda:dim(), 3, 'error in dimension')
    mytester:asserteq(resgrad:dim(), 3, 'error in dimension')
    local error = rescuda:float() - groundtruth:float()
-   mytester:assertlt(error:abs():max(), precision_forward,
+   local errmax = error:abs():max()
+   if (errmax ~= errmax) then
+      print(#input)
+   end
+   mytester:assertlt(errmax, precision_forward,
                      'error on state (forward) ')
    error = resgrad:float() - groundgrad:float()
-   mytester:assertlt(error:abs():max(), precision_backward,
+   errmax = error:abs():max()
+   if (errmax ~= errmax) then
+      local state = {}
+      state.input = input
+      state.gradOutput = gradOutput
+      state.rescuda = rescuda
+      state.resgrad = resgrad
+      state.groundtruth = groundtruth
+      state.groundgrad = groundgrad
+      print(#input)
+      torch.save('badSoftMax.t7', state)
+      print(#input)
+   end
+   mytester:assertlt(errmax, precision_backward,
                      'error on state (backward) ')
 end
 
@@ -544,13 +585,29 @@ function cudnntest.SoftMax_single()
    cutorch.synchronize()
    mytester:asserteq(rescuda:dim(), 3, 'error in dimension')
    mytester:asserteq(resgrad:dim(), 3, 'error in dimension')
-
    local error = rescuda:float() - groundtruth:float()
-   mytester:assertlt(error:abs():max(),
-                     precision_forward, 'error on state (forward) ')
+   local errmax = error:abs():max()
+   if (errmax ~= errmax) then
+      local state = {}
+      state.input = input
+      state.gradOutput = gradOutput
+      state.rescuda = rescuda
+      state.resgrad = resgrad
+      state.groundtruth = groundtruth
+      state.groundgrad = groundgrad
+      print(#input)
+      torch.save('badSoftMax.t7', state)
+      print(#input)
+   end
+   mytester:assertlt(errmax, precision_forward,
+                     'error on state (forward) ')
    error = resgrad:float() - groundgrad:float()
-   mytester:assertlt(error:abs():max(),
-                     precision_backward, 'error on state (backward) ')
+   errmax = error:abs():max()
+   if (errmax ~= errmax) then
+      print(#input)
+   end
+   mytester:assertlt(errmax, precision_backward,
+                     'error on state (backward) ')
 end
 
 function cudnntest.SoftMax_batch()
