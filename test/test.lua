@@ -504,6 +504,15 @@ function cudnntest.Sigmoid_single()
    local error = rescuda:float() - groundtruth:float()
    local errmax = error:abs():max()
    if (errmax ~= errmax) then
+      local state = {}
+      state.input = input
+      state.gradOutput = gradOutput
+      state.rescuda = rescuda
+      state.resgrad = resgrad
+      state.groundtruth = groundtruth
+      state.groundgrad = groundgrad
+      print(#input)
+      torch.save('badSigmoid.t7', state)
       print(#input)
    end
    mytester:assertlt(errmax, precision_forward,
@@ -519,7 +528,7 @@ function cudnntest.Sigmoid_single()
       state.groundtruth = groundtruth
       state.groundgrad = groundgrad
       print(#input)
-      torch.save('badSoftMax.t7', state)
+      torch.save('badSigmoid.t7', state)
       print(#input)
    end
    mytester:assertlt(errmax, precision_backward,
@@ -604,6 +613,15 @@ function cudnntest.SoftMax_single()
    error = resgrad:float() - groundgrad:float()
    errmax = error:abs():max()
    if (errmax ~= errmax) then
+      local state = {}
+      state.input = input
+      state.gradOutput = gradOutput
+      state.rescuda = rescuda
+      state.resgrad = resgrad
+      state.groundtruth = groundtruth
+      state.groundgrad = groundgrad
+      print(#input)
+      torch.save('badSoftMax.t7', state)
       print(#input)
    end
    mytester:assertlt(errmax, precision_backward,
