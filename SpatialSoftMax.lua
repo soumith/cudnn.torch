@@ -57,6 +57,7 @@ function SpatialSoftMax:updateGradInput(input, gradOutput)
    assert((gradOutput:dim() == 4 or gradOutput:dim() == 3)
          and gradOutput:isContiguous());
    self:createIODescriptors(input)
+   self.gradInput:fill(1) -- to get around bug in R2-RC1 https://github.com/soumith/cudnn.torch/issues/9
    errcheck('cudnnSoftmaxBackward',
             cudnn.handle[cutorch.getDevice()-1],
             self.algorithm, self.mode,

@@ -56,6 +56,7 @@ function Pointwise:updateGradInput(input, gradOutput)
       gradOutput = self._gradOutput
    end
    self:createIODescriptors(input)
+   self.gradInput:fill(1) -- to get around bug in R2-RC1 https://github.com/soumith/cudnn.torch/issues/9
    errcheck('cudnnActivationBackward',
             cudnn.handle[cutorch.getDevice()-1], self.mode,
             one:data(),
