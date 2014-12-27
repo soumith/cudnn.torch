@@ -1,7 +1,7 @@
 cudnn.torch
 ===========
 
-Torch7 FFI bindings for NVidia CuDNN kernels!
+Torch7 FFI bindings for NVidia CuDNN (R2) kernels!
 
 Modules are API compatible their [`nn`](https://github.com/torch/nn) equivalents. Fully unit-tested against `nn` implementations.
 
@@ -30,3 +30,5 @@ cudnn.VolumetricConvolution(nInputPlane, nOutputPlane, kT, kW, kH, dT, dW, dH, p
 ```
 
 I have no time to support these, so please don't expect a quick response to filed github issues.
+
+For version CuDNN R1, checkout commit d290c4cb9d632120d3fba97caefb3afb961081bf
