@@ -18,9 +18,10 @@ Modules are API compatible their [`nn`](https://github.com/torch/nn) equivalents
 cudnn.SpatialConvolution(nInputPlane, nOutputPlane, kW, kH, dW, dH, padW, padH)
 cudnn.SpatialMaxPooling(kW, kH, dW, dH)
 cudnn.SpatialAveragePooling(kW, kH, dW, dH)
-cudnn.ReLU()            
-cudnn.Tanh()            
-cudnn.Sigmoid()         
+-- the pointwise functions take an additional optional argument. if inplace=true then they do operations in-place without using any extra memory for themselves
+cudnn.ReLU(inplace[=false])            
+cudnn.Tanh(inplace[=false])            
+cudnn.Sigmoid(inplace[=false])         
 
 -- SoftMax can be run in fast mode or accurate mode. Default is accurate mode.
 cudnn.SoftMax(fastMode [= false])          -- SoftMax across each image (just like nn.SoftMax)
