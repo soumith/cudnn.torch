@@ -50,6 +50,11 @@ function SpatialConvolution:createIODescriptors(input)
          -- resize gradInput
          if self.gradInput then self.gradInput:resizeAs(input); end
          -- create input descriptor
+         assert(self.nInputPlane == input:size(2), 'input has to contain: ' 
+                   .. self.nInputPlane 
+                   .. ' feature maps, but received input of size: ' 
+                   .. input:size(1) .. ' x ' .. input:size(2) .. 
+                   ' x ' .. input:size(3) .. ' x ' .. input:size(4))
          local input_slice = {{},{1,self.nInputPlane/self.groups},{},{}}
          self.iDesc = cudnn.toDescriptor(input[input_slice])
          -- create conv descriptor
