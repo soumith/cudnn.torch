@@ -1,6 +1,7 @@
 local ffi = require 'ffi'
 
 ffi.cdef[[
+size_t cudnnGetVersion();
 struct cudnnContext;
 typedef struct cudnnContext *cudnnHandle_t;
 typedef enum
@@ -379,4 +380,11 @@ if not ok then
 Please install CuDNN from https://developer.nvidia.com/cuDNN
 Then make sure all the files named as libcudnn.so* are placed in your library load path (for example /usr/local/lib , or manually add a path to LD_LIBRARY_PATH)
 ]])
+end
+
+cudnn.version = tonumber(cudnn.C.cudnnGetVersion())
+if cudnn.version < 20 then
+  error('These bindings are for version 20 or above, '
+        .. 'while the loaded CuDNN is version: ' .. cudnn.version
+           .. '  \nAre you using an older version of CuDNN?')
 end
