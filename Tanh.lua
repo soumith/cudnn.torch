@@ -1,6 +1,6 @@
 local Tanh, parent = torch.class('cudnn.Tanh','cudnn._Pointwise')
 
-function Tanh:__init()
-   parent.__init(self)
+function Tanh:__init(inplace)
+   parent.__init(self, inplace)
    self.mode = 'CUDNN_ACTIVATION_TANH'
 end

@@ -318,7 +318,7 @@ function cudnntest.SpatialMaxPooling_single()
                      'error on state (backward) ')
 end
 
-function cudnntest.ReLU_single()
+local function nonlinSingle(nonlin)
    local from = math.random(1,32)
    local outi = math.random(1,64)
    local outj = math.random(1,64)
@@ -327,19 +327,27 @@ function cudnntest.ReLU_single()
    local input = torch.randn(from,inj,ini):cuda()
    local gradOutput = torch.randn(from,outj,outi):cuda()
 
-   local sconv = nn.ReLU():cuda()
+   local sconv = nn[nonlin]():cuda()
    local groundtruth = sconv:forward(input)
    local groundgrad = sconv:backward(input, gradOutput)
    cutorch.synchronize()
-   local gconv = cudnn.ReLU():cuda()
-   local _ = gconv:forward(input)
+   -- 50% prob to choose inplace or out-of-place
+   local inplace = false
+   if math.random(0,1) == 1 then
+      inplace = true
+   end
+   local gconv = cudnn[nonlin](inplace):cuda()
+   local input__ = input:clone()
+   local _ = gconv:forward(input__)
 
    -- serialize and deserialize
    torch.save('modelTemp.t7', gconv)
    gconv = torch.load('modelTemp.t7')
 
-   local rescuda = gconv:forward(input)
-   local resgrad = gconv:backward(input, gradOutput)
+   local input__ = input:clone()
+   local gradOutput__ = gradOutput:clone()
+   local rescuda = gconv:forward(input__)
+   local resgrad = gconv:backward(input__, gradOutput__)
    cutorch.synchronize()
    mytester:asserteq(rescuda:dim(), 3, 'error in dimension')
    mytester:asserteq(resgrad:dim(), 3, 'error in dimension')
@@ -349,224 +357,72 @@ function cudnntest.ReLU_single()
    error = resgrad:float() - groundgrad:float()
    mytester:assertlt(error:abs():max(), precision_backward,
                      'error on state (backward) ')
+end
+
+function nonlinBatch(nonlin)
+   local bs = math.random(1,32)
+   local from = math.random(1,32)
+   local outi = math.random(1,64)
+   local outj = math.random(1,64)
+   local ini = outi
+   local inj = outj
+   local input = torch.randn(bs,from,inj,ini):cuda()
+   local gradOutput = torch.randn(bs,from,outj,outi):cuda()
+
+   local sconv = nn[nonlin]():cuda()
+   local groundtruth = sconv:forward(input)
+   local groundgrad = sconv:backward(input, gradOutput)
+   cutorch.synchronize()
+   -- 50% prob to choose inplace or out-of-place
+   local inplace = false
+   if math.random(0,1) == 1 then
+      inplace = true
+   end
+   local gconv = cudnn[nonlin](inplace):cuda()
+   local input__ = input:clone()
+   local rescuda = gconv:forward(input__)
+
+   -- serialize and deserialize
+   torch.save('modelTemp.t7', gconv)
+   gconv = torch.load('modelTemp.t7')
+
+   local input__ = input:clone()
+   local gradOutput__ = gradOutput:clone()
+   local rescuda = gconv:forward(input__)
+   local resgrad = gconv:backward(input__, gradOutput__)
+   cutorch.synchronize()
+   mytester:asserteq(rescuda:dim(), 4, 'error in dimension')
+   mytester:asserteq(resgrad:dim(), 4, 'error in dimension')
+   local error = rescuda:float() - groundtruth:float()
+   mytester:assertlt(error:abs():max(), precision_forward,
+                     'error on state (forward) ')
+   error = resgrad:float() - groundgrad:float()
+   mytester:assertlt(error:abs():max(), precision_backward,
+                     'error on state (backward) ')
+end
+
+function cudnntest.ReLU_single()
+   nonlinSingle('ReLU')
 end
 
 function cudnntest.ReLU_batch()
-   local bs = math.random(1,32)
-   local from = math.random(1,32)
-   local outi = math.random(1,64)
-   local outj = math.random(1,64)
-   local ini = outi
-   local inj = outj
-   local input = torch.randn(bs,from,inj,ini):cuda()
-   local gradOutput = torch.randn(bs,from,outj,outi):cuda()
-
-   local sconv = nn.ReLU():cuda()
-   local groundtruth = sconv:forward(input)
-   local groundgrad = sconv:backward(input, gradOutput)
-   cutorch.synchronize()
-   local gconv = cudnn.ReLU():cuda()
-   local rescuda = gconv:forward(input)
-
-   -- serialize and deserialize
-   torch.save('modelTemp.t7', gconv)
-   gconv = torch.load('modelTemp.t7')
-
-   local rescuda = gconv:forward(input)
-   local resgrad = gconv:backward(input, gradOutput)
-   cutorch.synchronize()
-   mytester:asserteq(rescuda:dim(), 4, 'error in dimension')
-   mytester:asserteq(resgrad:dim(), 4, 'error in dimension')
-   local error = rescuda:float() - groundtruth:float()
-   mytester:assertlt(error:abs():max(), precision_forward,
-                     'error on state (forward) ')
-   error = resgrad:float() - groundgrad:float()
-   mytester:assertlt(error:abs():max(), precision_backward,
-                     'error on state (backward) ')
+   nonlinBatch('ReLU')
 end
 
 function cudnntest.Tanh_single()
-   local from = math.random(1,32)
-   local outi = math.random(1,64)
-   local outj = math.random(1,64)
-   local ini = outi
-   local inj = outj
-   local input = torch.randn(from,inj,ini):cuda()
-   local gradOutput = torch.randn(from,outj,outi):cuda()
-
-   local sconv = nn.Tanh():cuda()
-   local groundtruth = sconv:forward(input)
-   local groundgrad = sconv:backward(input, gradOutput)
-   cutorch.synchronize()
-   local gconv = cudnn.Tanh():cuda()
-   local _ = gconv:forward(input)
-
-   -- serialize and deserialize
-   torch.save('modelTemp.t7', gconv)
-   gconv = torch.load('modelTemp.t7')
-
-   local rescuda = gconv:forward(input)
-   local resgrad = gconv:backward(input, gradOutput)
-   cutorch.synchronize()
-   mytester:asserteq(rescuda:dim(), 3, 'error in dimension')
-   mytester:asserteq(resgrad:dim(), 3, 'error in dimension')
-   local error = rescuda:float() - groundtruth:float()
-   local errmax = error:abs():max()
-   if (errmax ~= errmax) then
-      local state = {}
-      state.input = input
-      state.gradOutput = gradOutput
-      state.rescuda = rescuda
-      state.resgrad = resgrad
-      state.groundtruth = groundtruth
-      state.groundgrad = groundgrad
-      print(#input)
-      torch.save('badTanh.t7', state)
-   end
-   mytester:assertlt(errmax, precision_forward,
-                     'error on state (forward) ')
-   error = resgrad:float() - groundgrad:float()
-   errmax = error:abs():max()
-   if (errmax ~= errmax) then
-      local state = {}
-      state.input = input
-      state.gradOutput = gradOutput
-      state.rescuda = rescuda
-      state.resgrad = resgrad
-      state.groundtruth = groundtruth
-      state.groundgrad = groundgrad
-      print(#input)
-      torch.save('badTanh.t7', state)
-   end
-   mytester:assertlt(errmax, precision_backward,
-                     'error on state (backward) ')
+   nonlinSingle('Tanh')
 end
 
 function cudnntest.Tanh_batch()
-   local bs = math.random(1,32)
-   local from = math.random(1,32)
-   local outi = math.random(1,64)
-   local outj = math.random(1,64)
-   local ini = outi
-   local inj = outj
-   local input = torch.randn(bs,from,inj,ini):cuda()
-   local gradOutput = torch.randn(bs,from,outj,outi):cuda()
-
-   local sconv = nn.Tanh():cuda()
-   local groundtruth = sconv:forward(input)
-   local groundgrad = sconv:backward(input, gradOutput)
-   cutorch.synchronize()
-   local gconv = cudnn.Tanh():cuda()
-   local rescuda = gconv:forward(input)
-
-   -- serialize and deserialize
-   torch.save('modelTemp.t7', gconv)
-   gconv = torch.load('modelTemp.t7')
-
-   local rescuda = gconv:forward(input)
-   local resgrad = gconv:backward(input, gradOutput)
-   cutorch.synchronize()
-   mytester:asserteq(rescuda:dim(), 4, 'error in dimension')
-   mytester:asserteq(resgrad:dim(), 4, 'error in dimension')
-   local error = rescuda:float() - groundtruth:float()
-   mytester:assertlt(error:abs():max(), precision_forward,
-                     'error on state (forward) ')
-   error = resgrad:float() - groundgrad:float()
-   mytester:assertlt(error:abs():max(), precision_backward,
-                     'error on state (backward) ')
+   nonlinBatch('Tanh')
 end
 
 function cudnntest.Sigmoid_single()
-   local from = math.random(1,32)
-   local outi = math.random(1,64)
-   local outj = math.random(1,64)
-   local ini = outi
-   local inj = outj
-   local input = torch.randn(from,inj,ini):cuda()
-   local gradOutput = torch.randn(from,outj,outi):cuda()
-
-   local sconv = nn.Sigmoid():cuda()
-   local groundtruth = sconv:forward(input)
-   local groundgrad = sconv:backward(input, gradOutput)
-   cutorch.synchronize()
-   local gconv = cudnn.Sigmoid():cuda()
-   local _ = gconv:forward(input)
-
-   -- serialize and deserialize
-   torch.save('modelTemp.t7', gconv)
-   gconv = torch.load('modelTemp.t7')
-
-   local rescuda = gconv:forward(input)
-   local resgrad = gconv:backward(input, gradOutput)
-   cutorch.synchronize()
-   mytester:asserteq(rescuda:dim(), 3, 'error in dimension')
-   mytester:asserteq(resgrad:dim(), 3, 'error in dimension')
-   local error = rescuda:float() - groundtruth:float()
-   local errmax = error:abs():max()
-   if (errmax ~= errmax) then
-      local state = {}
-      state.input = input
-      state.gradOutput = gradOutput
-      state.rescuda = rescuda
-      state.resgrad = resgrad
-      state.groundtruth = groundtruth
-      state.groundgrad = groundgrad
-      print(#input)
-      torch.save('badSigmoid.t7', state)
-      print(#input)
-   end
-   mytester:assertlt(errmax, precision_forward,
-                     'error on state (forward) ')
-   error = resgrad:float() - groundgrad:float()
-   errmax = error:abs():max()
-   if (errmax ~= errmax) then
-      local state = {}
-      state.input = input
-      state.gradOutput = gradOutput
-      state.rescuda = rescuda
-      state.resgrad = resgrad
-      state.groundtruth = groundtruth
-      state.groundgrad = groundgrad
-      print(#input)
-      torch.save('badSigmoid.t7', state)
-      print(#input)
-   end
-   mytester:assertlt(errmax, precision_backward,
-                     'error on state (backward) ')
+   nonlinSingle('Sigmoid')
 end
 
 function cudnntest.Sigmoid_batch()
-   local bs = math.random(1,32)
-   local from = math.random(1,32)
-   local outi = math.random(1,64)
-   local outj = math.random(1,64)
-   local ini = outi
-   local inj = outj
-   local input = torch.randn(bs,from,inj,ini):cuda()
-   local gradOutput = torch.randn(bs,from,outj,outi):cuda()
-
-   local sconv = nn.Sigmoid():cuda()
-   local groundtruth = sconv:forward(input)
-   local groundgrad = sconv:backward(input, gradOutput)
-   cutorch.synchronize()
-   local gconv = cudnn.Sigmoid():cuda()
-   local rescuda = gconv:forward(input)
-
-   -- serialize and deserialize
-   torch.save('modelTemp.t7', gconv)
-   gconv = torch.load('modelTemp.t7')
-
-   local rescuda = gconv:forward(input)
-   local resgrad = gconv:backward(input, gradOutput)
-   cutorch.synchronize()
-   mytester:asserteq(rescuda:dim(), 4, 'error in dimension')
-   mytester:asserteq(resgrad:dim(), 4, 'error in dimension')
-   local error = rescuda:float() - groundtruth:float()
-   mytester:assertlt(error:abs():max(), precision_forward,
-                     'error on state (forward) ')
-   error = resgrad:float() - groundgrad:float()
-   mytester:assertlt(error:abs():max(), precision_backward,
-                     'error on state (backward) ')
+   nonlinBatch('Sigmoid')
 end
 
 function cudnntest.SoftMax_single()

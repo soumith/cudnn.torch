@@ -1,8 +1,9 @@
 local Pointwise, parent = torch.class('cudnn._Pointwise','nn.Module')
 local errcheck = cudnn.errcheck
 
-function Pointwise:__init()
+function Pointwise:__init(inplace)
    parent.__init(self)
+   self.inplace = inplace or false
    self.iSize = torch.LongStorage(4):fill(0)
 end
 
@@ -14,21 +15,22 @@ function Pointwise:createIODescriptors(input)
       batch = false
    end
    assert(input:dim() == 4 and input:isContiguous());
-   if not self.iDesc or not self.oDesc or
+   if not self.iDesc or
       input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
    or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
       self.iSize = input:size()
-      self.gradInput:resizeAs(input)
-      self.output:resizeAs(input)
       self.iDesc = cudnn.toDescriptor(input)
-      self.oDesc = cudnn.toDescriptor(self.output)
-      if not batch then
-         self.gradInput = self.gradInput:view(self.gradInput:size(2),
-                                              self.gradInput:size(3),
-                                              self.gradInput:size(4))
-         self.output = self.output:view(self.output:size(2),
-                                        self.output:size(3),
-                                        self.output:size(4))
+      if not self.inplace then
+         self.gradInput:resizeAs(input)
+         self.output:resizeAs(input)
+         if not batch then
+            self.gradInput = self.gradInput:view(self.gradInput:size(2),
+                                                 self.gradInput:size(3),
+                                                 self.gradInput:size(4))
+            self.output = self.output:view(self.output:size(2),
+                                           self.output:size(3),
+                                           self.output:size(4))
+         end
       end
    end
 end
@@ -38,12 +40,13 @@ local zero = torch.FloatTensor({0});
 
 function Pointwise:updateOutput(input)
    self:createIODescriptors(input)
+   if self.inplace then self.output = input end
    errcheck('cudnnActivationForward',
             cudnn.handle[cutorch.getDevice()-1], self.mode,
             one:data(),
             self.iDesc[0], input:data(),
             zero:data(),
-            self.oDesc[0], self.output:data());
+            self.iDesc[0], self.output:data());
    return self.output
 end
 
@@ -56,12 +59,12 @@ function Pointwise:updateGradInput(input, gradOutput)
       gradOutput = self._gradOutput
    end
    self:createIODescriptors(input)
-   self.gradInput:fill(1) -- to get around bug in R2-RC1 https://github.com/soumith/cudnn.torch/issues/9
+   if self.inplace then self.output = input; self.gradInput = gradOutput end
    errcheck('cudnnActivationBackward',
             cudnn.handle[cutorch.getDevice()-1], self.mode,
             one:data(),
-            self.oDesc[0], self.output:data(),
-            self.oDesc[0], gradOutput:data(),
+            self.iDesc[0], self.output:data(),
+            self.iDesc[0], gradOutput:data(),
             self.iDesc[0], input:data(),
             zero:data(),
             self.iDesc[0], self.gradInput:data());

@@ -1,6 +1,6 @@
 local Sigmoid, parent = torch.class('cudnn.Sigmoid','cudnn._Pointwise')
 
-function Sigmoid:__init()
-   parent.__init(self)
+function Sigmoid:__init(inplace)
+   parent.__init(self, inplace)
    self.mode = 'CUDNN_ACTIVATION_SIGMOID'
 end
