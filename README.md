@@ -14,7 +14,7 @@ Modules are API compatible their [`nn`](https://github.com/torch/nn) equivalents
 #### Modules
 
 ```lua
--- All inputs have to be 3D or 4D(batch-mode), even for ReLU, SoftMax etc.
+-- All inputs have to be 3D or 4D(batch-mode), except ReLU, Tanh and Sigmoid
 cudnn.SpatialConvolution(nInputPlane, nOutputPlane, kW, kH, dW, dH, padW, padH, nGroups)
 cudnn.SpatialMaxPooling(kW, kH, dW, dH)
 cudnn.SpatialAveragePooling(kW, kH, dW, dH)
