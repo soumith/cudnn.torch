@@ -239,8 +239,8 @@ function cudnntest.SpatialAveragePooling_batch()
    local from = math.random(1,32)
    local ki = math.random(2,4)
    local kj = math.random(2,4)
-   local si = ki
-   local sj = kj
+   local si = math.random(2,4)
+   local sj = math.random(2,4)
    local outi = math.random(1,64)
    local outj = math.random(1,64)
    local ini = (outi-1)*si+ki
@@ -249,8 +249,10 @@ function cudnntest.SpatialAveragePooling_batch()
    local gradOutput = torch.randn(bs,from,outj,outi):cuda()
 
    local sconv = nn.SpatialAveragePooling(ki,kj,si,sj):cuda()
-   local groundtruth = sconv:forward(input)
+   local groundtruth = sconv:forward(input):clone()
+   groundtruth:mul(1/(ki*kj)) -- difference between nn and cudnn
    local groundgrad = sconv:backward(input, gradOutput)
+   groundgrad:mul(1/(ki*kj)) -- difference between nn and cudnn
    cutorch.synchronize()
    local gconv = cudnn.SpatialAveragePooling(ki,kj,si,sj):cuda()
    local rescuda = gconv:forward(input)
@@ -272,8 +274,8 @@ function cudnntest.SpatialAveragePooling_single()
    local from = math.random(1,32)
    local ki = math.random(2,4)
    local kj = math.random(2,4)
-   local si = ki
-   local sj = kj
+   local si = math.random(2,4)
+   local sj = math.random(2,4)
    local outi = math.random(1,64)
    local outj = math.random(1,64)
    local ini = (outi-1)*si+ki
@@ -282,8 +284,10 @@ function cudnntest.SpatialAveragePooling_single()
    local gradOutput = torch.randn(from,outj,outi):cuda()
 
    local sconv = nn.SpatialAveragePooling(ki,kj,si,sj):cuda()
-   local groundtruth = sconv:forward(input)
+   local groundtruth = sconv:forward(input):clone()
+   groundtruth:mul(1/(ki*kj)) -- difference between nn and cudnn
    local groundgrad = sconv:backward(input, gradOutput)
+   groundgrad:mul(1/(ki*kj)) -- difference between nn and cudnn
    cutorch.synchronize()
    local gconv = cudnn.SpatialAveragePooling(ki,kj,si,sj):cuda()
    local _ = gconv:forward(input)
