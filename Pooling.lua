@@ -26,6 +26,8 @@ end
 
 function Pooling:resetPoolDescriptors()
    -- create pooling descriptor
+   self.padW = self.padW or 0
+   self.padH = self.padH or 0
    self.poolDesc = ffi.new('struct cudnnPoolingStruct*[1]')
    errcheck('cudnnCreatePoolingDescriptor', self.poolDesc)
    local ker = torch.IntTensor({self.kH, self.kW})
