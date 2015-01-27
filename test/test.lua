@@ -318,6 +318,79 @@ function cudnntest.SpatialMaxPooling_single()
                      'error on state (backward) ')
 end
 
+function cudnntest.SpatialAveragePooling_batch()
+   local bs = math.random(1,32)
+   local from = math.random(1,32)
+   local ki = math.random(2,4)
+   local kj = math.random(2,4)
+   local si = math.random(2,4)
+   local sj = math.random(2,4)
+   local outi = math.random(1,64)
+   local outj = math.random(1,64)
+   local ini = (outi-1)*si+ki
+   local inj = (outj-1)*sj+kj
+   local input = torch.randn(bs,from,inj,ini):cuda()
+   local gradOutput = torch.randn(bs,from,outj,outi):cuda()
+
+   local sconv = nn.SpatialAveragePooling(ki,kj,si,sj):cuda()
+   local groundtruth = sconv:forward(input):clone()
+   groundtruth:mul(1/(ki*kj)) -- difference between nn and cudnn
+   local groundgrad = sconv:backward(input, gradOutput)
+   groundgrad:mul(1/(ki*kj)) -- difference between nn and cudnn
+   cutorch.synchronize()
+   local gconv = cudnn.SpatialAveragePooling(ki,kj,si,sj):cuda()
+   local rescuda = gconv:forward(input)
+   -- serialize and deserialize
+   torch.save('modelTemp.t7', gconv)
+   gconv = torch.load('modelTemp.t7')
+   local rescuda = gconv:forward(input)
+   local resgrad = gconv:backward(input, gradOutput)
+   cutorch.synchronize()
+   mytester:asserteq(rescuda:dim(), 4, 'error in dimension')
+   mytester:asserteq(resgrad:dim(), 4, 'error in dimension')
+   local error = rescuda:float() - groundtruth:float()
+   mytester:assertlt(error:abs():max(), precision_forward, 'error on state (forward) ')
+   error = resgrad:float() - groundgrad:float()
+   mytester:assertlt(error:abs():max(), precision_backward, 'error on state (backward) ')
+end
+
+function cudnntest.SpatialAveragePooling_single()
+   local from = math.random(1,32)
+   local ki = math.random(2,4)
+   local kj = math.random(2,4)
+   local si = math.random(2,4)
+   local sj = math.random(2,4)
+   local outi = math.random(1,64)
+   local outj = math.random(1,64)
+   local ini = (outi-1)*si+ki
+   local inj = (outj-1)*sj+kj
+   local input = torch.randn(from,inj,ini):cuda()
+   local gradOutput = torch.randn(from,outj,outi):cuda()
+
+   local sconv = nn.SpatialAveragePooling(ki,kj,si,sj):cuda()
+   local groundtruth = sconv:forward(input):clone()
+   groundtruth:mul(1/(ki*kj)) -- difference between nn and cudnn
+   local groundgrad = sconv:backward(input, gradOutput)
+   groundgrad:mul(1/(ki*kj)) -- difference between nn and cudnn
+   cutorch.synchronize()
+   local gconv = cudnn.SpatialAveragePooling(ki,kj,si,sj):cuda()
+   local _ = gconv:forward(input)
+   -- serialize and deserialize
+   torch.save('modelTemp.t7', gconv)
+   gconv = torch.load('modelTemp.t7')
+   local rescuda = gconv:forward(input)
+   local resgrad = gconv:backward(input, gradOutput)
+   cutorch.synchronize()
+   mytester:asserteq(rescuda:dim(), 3, 'error in dimension')
+   mytester:asserteq(resgrad:dim(), 3, 'error in dimension')
+   local error = rescuda:float() - groundtruth:float()
+   mytester:assertlt(error:abs():max(), precision_forward,
+                     'error on state (forward) ')
+   error = resgrad:float() - groundgrad:float()
+   mytester:assertlt(error:abs():max(), precision_backward,
+                     'error on state (backward) ')
+end
+
 local function nonlinSingle(nonlin)
    local from = math.random(1,32)
    local outi = math.random(1,64)
