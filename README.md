@@ -34,4 +34,4 @@ cudnn.VolumetricConvolution(nInputPlane, nOutputPlane, kT, kW, kH, dT, dW, dH, p
 
 I have no time to support these, so please don't expect a quick response to filed github issues.
 
-For version CuDNN R1, checkout commit d290c4cb9d632120d3fba97caefb3afb961081bf
+For version CuDNN R1, checkout the branch **R1**
