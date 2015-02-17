@@ -13,10 +13,10 @@ function cudnntest.SpatialConvolution_forward_batch()
    local bs = math.random(1,32)
    local from = math.random(1,32)
    local to = math.random(1,64)
-   local ki = math.random(3,15)
-   local kj = math.random(3,15)
-   local si = 1 -- not supported by CPU version yet
-   local sj = si
+   local ki = math.random(1,15)
+   local kj = math.random(1,15)
+   local si = math.random(1,ki)
+   local sj = math.random(1,kj)
    local outi = math.random(1,64)
    local outj = math.random(1,64)
    local ini = (outi-1)*si+ki
@@ -39,10 +39,10 @@ function cudnntest.SpatialConvolution_backward_batch()
    local bs = math.random(1,32)
    local from = math.random(1,32)
    local to = math.random(1,64)
-   local ki = math.random(3,15)
-   local kj = math.random(3,15)
-   local si = math.random(1,ki-1)
-   local sj = math.random(1,kj-1)
+   local ki = math.random(1,15)
+   local kj = math.random(1,15)
+   local si = math.random(1,ki)
+   local sj = math.random(1,kj)
    local outi = math.random(1,64)
    local outj = math.random(1,64)
    local ini = (outi-1)*si+ki
@@ -87,10 +87,10 @@ end
 function cudnntest.SpatialConvolution_forward_single()
    local from = math.random(1,32)
    local to = math.random(1,64)
-   local ki = math.random(3,15)
-   local kj = math.random(3,15)
-   local si = 1 -- not supported by CPU version yet
-   local sj = si
+   local ki = math.random(1,15)
+   local kj = math.random(1,15)
+   local si = math.random(1,ki)
+   local sj = math.random(1,kj)
    local outi = math.random(1,64)
    local outj = math.random(1,64)
    local ini = (outi-1)*si+ki
@@ -115,10 +115,10 @@ end
 function cudnntest.SpatialConvolution_backward_single()
    local from = math.random(1,32)
    local to = math.random(1,64)
-   local ki = math.random(3,15)
-   local kj = math.random(3,15)
-   local si = 1 -- not supported by CPU version yet
-   local sj = si
+   local ki = math.random(1,15)
+   local kj = math.random(1,15)
+   local si = math.random(1,ki)
+   local sj = math.random(1,kj)
    local outi = math.random(1,64)
    local outj = math.random(1,64)
    local ini = (outi-1)*si+ki
