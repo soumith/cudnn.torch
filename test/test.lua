@@ -499,16 +499,12 @@ function cudnntest.Sigmoid_batch()
 end
 
 function cudnntest.SoftMax_single()
-   local from = math.random(1,32)
-   local outi = math.random(1,64)
-   local outj = math.random(1,64)
-   local ini = outi
-   local inj = outj
-   local input = torch.randn(from,inj,ini):cuda()
-   local gradOutput = torch.randn(from,outj,outi):cuda()
+   local sz = math.random(1,64)
+   local input = torch.randn(sz):cuda()
+   local gradOutput = torch.randn(sz):cuda()
 
    local sconv = nn.SoftMax():cuda()
-   local groundtruth = sconv:forward(input:view(-1))
+   local groundtruth = sconv:forward(input)
    local groundgrad = sconv:backward(input, gradOutput)
    cutorch.synchronize()
    local gconv = cudnn.SoftMax():cuda()
@@ -521,8 +517,6 @@ function cudnntest.SoftMax_single()
    local rescuda = gconv:forward(input)
    local resgrad = gconv:backward(input, gradOutput)
    cutorch.synchronize()
-   mytester:asserteq(rescuda:dim(), 3, 'error in dimension')
-   mytester:asserteq(resgrad:dim(), 3, 'error in dimension')
    local error = rescuda:float() - groundtruth:float()
    local errmax = error:abs():max()
    if (errmax ~= errmax) then
