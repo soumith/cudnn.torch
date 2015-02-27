@@ -7,7 +7,7 @@ Modules are API compatible their [`nn`](https://github.com/torch/nn) equivalents
 
 #### Installation
 
-* Install CuDNN
+* Install CuDNN (version R2)
 * Have at least Cuda 6.5
 * Have `libcudnn.so` in your library path (Install it from https://developer.nvidia.com/cuDNN )
 
