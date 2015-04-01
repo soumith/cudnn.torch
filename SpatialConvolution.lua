@@ -47,7 +47,7 @@ function SpatialConvolution:resetWeightDescriptors()
 end
 
 function SpatialConvolution:fastest(mode)
-   mode = mode or true
+   if mode == nil then mode = true end
    self.fastest_mode = mode
    return self
 end
