@@ -28,7 +28,7 @@ function Pointwise:updateOutput(input)
    self:createIODescriptors(input)
    if self.inplace then self.output = input end
    errcheck('cudnnActivationForward',
-            cudnn.handle[cutorch.getDevice()-1], self.mode,
+            cudnn.getHandle(), self.mode,
             one:data(),
             self.iDesc[0], input:data(),
             zero:data(),
@@ -46,7 +46,7 @@ function Pointwise:updateGradInput(input, gradOutput)
    self:createIODescriptors(input)
    if self.inplace then self.output = input; self.gradInput = gradOutput end
    errcheck('cudnnActivationBackward',
-            cudnn.handle[cutorch.getDevice()-1], self.mode,
+            cudnn.getHandle(), self.mode,
             one:data(),
             self.iDesc[0], self.output:data(),
             self.iDesc[0], gradOutput:data(),

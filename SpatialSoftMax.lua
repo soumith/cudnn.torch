@@ -58,7 +58,7 @@ local zero = torch.FloatTensor({0});
 function SpatialSoftMax:updateOutput(input)
    self:createIODescriptors(input)
    errcheck('cudnnSoftmaxForward',
-            cudnn.handle[cutorch.getDevice()-1],
+            cudnn.getHandle(),
             self.algorithm, self.mode,
             one:data(),
             self.iDesc[0], input:data(),
@@ -71,7 +71,7 @@ function SpatialSoftMax:updateGradInput(input, gradOutput)
    assert(gradOutput:isContiguous());
    self:createIODescriptors(input)
    errcheck('cudnnSoftmaxBackward',
-            cudnn.handle[cutorch.getDevice()-1],
+            cudnn.getHandle(),
             self.algorithm, self.mode,
             one:data(),
             self.oDesc[0], self.output:data(),

@@ -86,7 +86,7 @@ local zero = torch.FloatTensor({0});
 function Pooling:updateOutput(input)
    if not self.poolDesc then self:resetPoolDescriptors() end
    self:createIODescriptors(input)
-   errcheck('cudnnPoolingForward', cudnn.handle[cutorch.getDevice()-1],
+   errcheck('cudnnPoolingForward', cudnn.getHandle(),
             self.poolDesc[0],
             one:data(),
             self.iDesc[0], input:data(),
@@ -105,7 +105,7 @@ function Pooling:updateGradInput(input, gradOutput)
    if not self.poolDesc then self:resetPoolDescriptors() end
    self:createIODescriptors(input)
    errcheck('cudnnPoolingBackward',
-            cudnn.handle[cutorch.getDevice()-1], self.poolDesc[0],
+            cudnn.getHandle(), self.poolDesc[0],
             one:data(),
             self.oDesc[0], self.output:data(),
             self.oDesc[0], gradOutput:data(),

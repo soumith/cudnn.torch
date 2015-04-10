@@ -88,14 +88,14 @@ function VolumetricConvolution:createIODescriptors(input)
          -- create forwardAlgorithm descriptors for
          local algType = ffi.new("cudnnConvolutionFwdAlgo_t[?]", 1)
          errcheck('cudnnGetConvolutionForwardAlgorithm',
-                  cudnn.handle[cutorch.getDevice()-1],
+                  cudnn.getHandle(),
                   self.iDesc[0], self.weightDesc[0], self.convDesc[0],
                   self.oDesc[0], 'CUDNN_CONVOLUTION_FWD_PREFER_FASTEST',
                      -1, algType)
          self.algType = algType
          local bufSize = torch.LongTensor(1)
          errcheck('cudnnGetConvolutionForwardWorkspaceSize',
-                  cudnn.handle[cutorch.getDevice()-1],
+                  cudnn.getHandle(),
                   self.iDesc[0], self.weightDesc[0],
                   self.convDesc[0], self.oDesc[0],
                   algType[0], bufSize:data())
@@ -121,7 +121,7 @@ local zero = torch.FloatTensor({0});
 function VolumetricConvolution:updateOutput(input)
    if not self.weightDesc then self:resetWeightDescriptors() end
    self:createIODescriptors(input)
-   errcheck('cudnnConvolutionForward', cudnn.handle[cutorch.getDevice()-1],
+   errcheck('cudnnConvolutionForward', cudnn.getHandle(),
             one:data(),
             self.iDesc[0], input:data(),
             self.weightDesc[0], self.weight:data(),
@@ -129,7 +129,7 @@ function VolumetricConvolution:updateOutput(input)
             self.extraBuffer:data(), self.extraBuffer:nElement(),
             zero:data(),
             self.oDesc[0], self.output:data());
-   errcheck('cudnnAddTensor', cudnn.handle[cutorch.getDevice()-1],
+   errcheck('cudnnAddTensor', cudnn.getHandle(),
             'CUDNN_ADD_SAME_C', one:data(),
             self.biasDesc[0], self.bias:data(), one:data(),
             self.oDescBias[0], self.output:data());
@@ -142,7 +142,7 @@ function VolumetricConvolution:updateGradInput(input, gradOutput)
          and gradOutput:isContiguous());
    if not self.weightDesc then self:resetWeightDescriptors() end
    self:createIODescriptors(input)
-   errcheck('cudnnConvolutionBackwardData', cudnn.handle[cutorch.getDevice()-1],
+   errcheck('cudnnConvolutionBackwardData', cudnn.getHandle(),
             one:data(),
             self.weightDesc[0], self.weight:data(),
             self.oDesc[0], gradOutput:data(),
@@ -164,14 +164,14 @@ function VolumetricConvolution:accGradParameters(input, gradOutput, scale)
    self:createIODescriptors(input)
    if not self.weightDesc then self:resetWeightDescriptors() end
    -- gradBias
-   errcheck('cudnnConvolutionBackwardBias', cudnn.handle[cutorch.getDevice()-1],
+   errcheck('cudnnConvolutionBackwardBias', cudnn.getHandle(),
             self.scaleT:data(),
             self.oDescBias[0], gradOutput:data(),
             one:data(),
             self.biasDesc[0], self.gradBias:data());
    -- gradWeight
    errcheck('cudnnConvolutionBackwardFilter',
-            cudnn.handle[cutorch.getDevice()-1],
+            cudnn.getHandle(),
             self.scaleT:data(),
             self.iDesc[0], input:data(),
             self.oDesc[0], gradOutput:data(),
