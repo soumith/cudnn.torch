@@ -58,11 +58,11 @@ function Pooling:createIODescriptors(input)
       -- resize output
       local oW, oH
       if self.ceil_mode then
-         oW = math.ceil((input:size(4) - self.kW)/self.dW + 1)
-         oH = math.ceil((input:size(3) - self.kH)/self.dH + 1)
+         oW = math.ceil((input:size(4)+self.padW*2 - self.kW)/self.dW + 1)
+         oH = math.ceil((input:size(3)+self.padH*2 - self.kH)/self.dH + 1)
       else
-         oW = math.floor((input:size(4) - self.kW)/self.dW + 1)
-         oH = math.floor((input:size(3) - self.kH)/self.dH + 1)
+         oW = math.floor((input:size(4)+self.padW*2 - self.kW)/self.dW + 1)
+         oH = math.floor((input:size(3)+self.padH*2 - self.kH)/self.dH + 1)
       end
       self.output:resize(input:size(1), input:size(2), oH, oW)
 
