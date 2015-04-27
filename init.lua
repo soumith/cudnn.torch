@@ -21,7 +21,7 @@ local errcheck = function(f, ...)
                        ffi.C.THCState_getCurrentStream(cutorch.getState()))
    end
    local status = C[f](...)
-   if status ~= 'CUDNN_STATUS_SUCCESS' then
+   if status ~= ffi.C.CUDNN_STATUS_SUCCESS then
       local str = ffi.string(C.cudnnGetErrorString(status))
       error('Error in CuDNN: ' .. str)
    end
