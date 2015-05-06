@@ -6,7 +6,7 @@ local C = cudnn.C
 local ffi = require 'ffi'
 
 local initialized = false
-local maxStreamsPerDevice = 100
+local maxStreamsPerDevice = 1024
 
 function cudnn.getHandle()
    local curStream = cutorch.getStream()

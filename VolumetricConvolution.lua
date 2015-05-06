@@ -180,3 +180,18 @@ function VolumetricConvolution:accGradParameters(input, gradOutput, scale)
             self.weightDesc[0], self.gradWeight:data());
 
 end
+
+function VolumetricConvolution:write(f)
+   self.weightDesc = nil
+   self.biasDesc = nil
+   self.convDesc = nil
+   self.iDesc = nil
+   self.oDesc = nil
+   self.oDescBias = nil
+   self.algType = nil
+   local var = {}
+   for k,v in pairs(self) do
+      var[k] = v
+   end
+   f:writeObject(var)
+end
