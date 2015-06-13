@@ -116,6 +116,7 @@ function SpatialConvolution:createIODescriptors(input)
                   self.iDesc[0], self.weightDesc[0],
                   self.convDesc[0], self.oDesc[0],
                   algType[0], bufSize:data())
+         bufSize:div(4) --number of float elements instead of bytes
          self.extraBuffer = self.extraBuffer or input.new(1)
          if bufSize[1] ~= 0 then self.extraBuffer:resize(bufSize[1]) end
 
@@ -171,7 +172,7 @@ function SpatialConvolution:updateOutput(input)
                self.iDesc[0], input:data() + g*self.input_offset,
                self.weightDesc[0], self.weight:data() + g*self.weight_offset,
                self.convDesc[0], self.algType[0],
-               self.extraBuffer:data(), self.extraBuffer:nElement(),
+               self.extraBuffer:data(), 4*self.extraBuffer:nElement(),
                zero:data(),
                self.oDesc[0], self.output:data() + g*self.output_offset);
       errcheck('cudnnAddTensor', cudnn.getHandle(),
@@ -187,6 +188,7 @@ function SpatialConvolution:updateOutput(input)
 end
 
 function SpatialConvolution:updateGradInput(input, gradOutput)
+   local gradOutput = gradOutput:contiguous()
    if not self.gradInput then return end
    assert((gradOutput:dim() == 3 or gradOutput:dim() == 4)
          and gradOutput:isContiguous());
@@ -210,6 +212,7 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
    self.scaleT = self.scaleT:float()
    scale = scale or 1.0
    self.scaleT[1] = scale
+   local gradOutput = gradOutput:contiguous()
    assert((gradOutput:dim() == 3 or gradOutput:dim() == 4)
          and gradOutput:isContiguous());
    self:createIODescriptors(input)
