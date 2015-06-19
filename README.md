@@ -17,7 +17,7 @@ Modules are API compatible their [`nn`](https://github.com/torch/nn) equivalents
 -- All inputs have to be 3D or 4D(batch-mode), except ReLU, Tanh and Sigmoid
 cudnn.SpatialConvolution(nInputPlane, nOutputPlane, kW, kH, [dW = 1], [dH = 1], [padW = 0], [padH = 0], [groups = 1])
 cudnn.SpatialMaxPooling(kW, kH, dW, dH, padW, padH)
-cudnn.SpatialAveragePooling(kW, kH, dW, dH)
+cudnn.SpatialAveragePooling(kW, kH, dW, dH, padW, padH)
 
 -- the pointwise functions take an additional optional argument. if inplace=true then they do operations in-place without using any extra memory for themselves
 cudnn.ReLU(inplace[=false])

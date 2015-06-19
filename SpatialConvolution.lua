@@ -117,7 +117,10 @@ function SpatialConvolution:createIODescriptors(input)
                   self.convDesc[0], self.oDesc[0],
                   algType[0], bufSize:data())
          self.extraBuffer = self.extraBuffer or input.new(1)
-         if bufSize[1] ~= 0 then self.extraBuffer:resize(bufSize[1]) end
+         if bufSize[1] ~= 0 or bufSize[1] ~= self.extraBufferSizeInBytes then
+           self.extraBuffer:resize(math.ceil(bufSize[1]/4))
+           self.extraBufferSizeInBytes = bufSize[1]
+         end
 
          -- create offsets for groups
          self.input_offset = self.nInputPlane/self.groups*input:size(3)*input:size(4)
@@ -171,7 +174,7 @@ function SpatialConvolution:updateOutput(input)
                self.iDesc[0], input:data() + g*self.input_offset,
                self.weightDesc[0], self.weight:data() + g*self.weight_offset,
                self.convDesc[0], self.algType[0],
-               self.extraBuffer:data(), self.extraBuffer:nElement(),
+               self.extraBuffer:data(), self.extraBufferSizeInBytes,
                zero:data(),
                self.oDesc[0], self.output:data() + g*self.output_offset);
       errcheck('cudnnAddTensor', cudnn.getHandle(),
