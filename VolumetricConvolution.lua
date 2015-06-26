@@ -39,6 +39,32 @@ function VolumetricConvolution:resetWeightDescriptors()
                                                      1, 1))
 end
 
+function VolumetricConvolution:fastest(mode)
+   if mode == nil then mode = true end
+   self.fastest_mode = mode
+   return self
+end
+
+function VolumetricConvolution:setMode(fmode, bdmode, bwmode)
+   if fmode ~= nil then
+      self.fmode = fmode
+   end
+   if bdmode ~= nil then
+      self.bdmode = bdmode
+   end
+   if bwmode ~= nil then
+      self.bwmode = bwmode
+   end
+   return self
+end
+
+function VolumetricConvolution:resetMode()
+   self.fmode = nil
+   self.bdmode = nil
+   self.bwmode = nil
+   return self
+end
+
 function VolumetricConvolution:createIODescriptors(input)
    local batch = true
    if input:dim() == 4 then
@@ -62,9 +88,10 @@ function VolumetricConvolution:createIODescriptors(input)
          local pad = torch.IntTensor({self.padT, self.padH, self.padW})
          local stride = torch.IntTensor({self.dT, self.dH, self.dW})
          local upscale = torch.IntTensor({1,1,1})
-         errcheck('cudnnSetConvolutionNdDescriptor', self.convDesc[0],
+         errcheck('cudnnSetConvolutionNdDescriptor_v3', self.convDesc[0],
                   3, pad:data(),
-                  stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION');
+                  stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
+		  'CUDNN_DATA_FLOAT');
          local function destroyConvDesc(d)
             errcheck('cudnnDestroyConvolutionDescriptor', d[0]);
          end
@@ -84,24 +111,79 @@ function VolumetricConvolution:createIODescriptors(input)
                              self.output:size(2),
                              self.output:size(3)*self.output:size(4),
                              self.output:size(5)))
-
+	 -----------------------------------------------------------------
+	 local maxBufSize = 0
          -- create forwardAlgorithm descriptors for
          local algType = ffi.new("cudnnConvolutionFwdAlgo_t[?]", 1)
+	 local algSearchMode = 'CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT'
+	 local algWorkspaceLimit = self.workspace_limit
+	    or (self.nInputPlane * self.kT * self.kH * self.kW * 4) -- 4 = sizeof int/float.
+	 if self.fastest_mode then algSearchMode = 'CUDNN_CONVOLUTION_FWD_PREFER_FASTEST' end
          errcheck('cudnnGetConvolutionForwardAlgorithm',
                   cudnn.getHandle(),
-                  self.iDesc[0], self.weightDesc[0], self.convDesc[0],
-                  self.oDesc[0], 'CUDNN_CONVOLUTION_FWD_PREFER_FASTEST',
-                     -1, algType)
-         self.algType = algType
+                  self.iDesc[0], self.weightDesc[0],
+                  self.convDesc[0], self.oDesc[0],
+                  algSearchMode, algWorkspaceLimit, algType)
+	 algType[0] = self.fmode or algType[0]
+         self.fwdAlgType = algType
          local bufSize = torch.LongTensor(1)
          errcheck('cudnnGetConvolutionForwardWorkspaceSize',
                   cudnn.getHandle(),
                   self.iDesc[0], self.weightDesc[0],
                   self.convDesc[0], self.oDesc[0],
                   algType[0], bufSize:data())
-         self.extraBuffer = self.extraBuffer or input.new(1)
-         if bufSize[1] ~= 0 then self.extraBuffer:resize(bufSize[1]) end
+	 maxBufSize = math.max(maxBufSize, bufSize[1])
 
+	 -- create backwardFilterAlgorithm descriptors for
+         local algType = ffi.new("cudnnConvolutionBwdFilterAlgo_t[?]", 1)
+	 local algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_NO_WORKSPACE'
+	 local algWorkspaceLimit = self.workspace_limit
+	    or (self.nInputPlane * self.kT * self.kH * self.kW * 4) -- 4 = sizeof int/float.
+	 if self.fastest_mode then algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST' end
+         errcheck('cudnnGetConvolutionBackwardFilterAlgorithm',
+                  cudnn.getHandle(),
+                  self.iDesc[0], self.oDesc[0],
+                  self.convDesc[0], self.weightDesc[0],
+                  algSearchMode, algWorkspaceLimit, algType)
+	 algType[0] = self.bwmode or algType[0]
+         self.bwdFilterAlgType = algType
+         local bufSize = torch.LongTensor(1)
+         errcheck('cudnnGetConvolutionBackwardFilterWorkspaceSize',
+                  cudnn.getHandle(),
+                  self.iDesc[0], self.oDesc[0],
+                  self.convDesc[0], self.weightDesc[0],
+                  algType[0], bufSize:data())
+	 maxBufSize = math.max(maxBufSize, bufSize[1])
+
+	 -- create backwardDataAlgorithm descriptors for
+         local algType = ffi.new("cudnnConvolutionBwdDataAlgo_t[?]", 1)
+	 local algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_NO_WORKSPACE'
+	 local algWorkspaceLimit = self.workspace_limit
+	    or (self.nInputPlane * self.kT * self.kH * self.kW * 4) -- 4 = sizeof int/float.
+	 if self.fastest_mode then algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST' end
+         errcheck('cudnnGetConvolutionBackwardDataAlgorithm',
+                  cudnn.getHandle(),
+                  self.weightDesc[0], self.oDesc[0],
+                  self.convDesc[0], self.iDesc[0],
+                  algSearchMode, algWorkspaceLimit, algType)
+	 algType[0] = self.bdmode or algType[0]
+         self.bwdDataAlgType = algType
+         local bufSize = torch.LongTensor(1)
+         errcheck('cudnnGetConvolutionBackwardDataWorkspaceSize',
+                  cudnn.getHandle(),
+                  self.weightDesc[0], self.oDesc[0],
+                  self.convDesc[0], self.iDesc[0],
+                  algType[0], bufSize:data())
+	 maxBufSize = math.max(maxBufSize, bufSize[1])
+
+	 self.extraBuffer = self.extraBuffer or input.new(1)
+	 self.extraBufferSizeInBytes = self.extraBuffer:nElement() * 4 -- float
+         if maxBufSize > self.extraBufferSizeInBytes then
+           self.extraBuffer:resize(math.ceil(maxBufSize/4))
+           self.extraBufferSizeInBytes = maxBufSize
+         end
+
+	 -----------------------------------------------------------------
          if not batch then
             self.gradInput = self.gradInput:view(self.gradInput:size(2),
                                                  self.gradInput:size(3),
@@ -125,8 +207,8 @@ function VolumetricConvolution:updateOutput(input)
             one:data(),
             self.iDesc[0], input:data(),
             self.weightDesc[0], self.weight:data(),
-            self.convDesc[0], self.algType[0],
-            self.extraBuffer:data(), self.extraBuffer:nElement(),
+            self.convDesc[0], self.fwdAlgType[0],
+            self.extraBuffer:data(), self.extraBufferSizeInBytes,
             zero:data(),
             self.oDesc[0], self.output:data());
    errcheck('cudnnAddTensor', cudnn.getHandle(),
@@ -142,13 +224,15 @@ function VolumetricConvolution:updateGradInput(input, gradOutput)
          and gradOutput:isContiguous());
    if not self.weightDesc then self:resetWeightDescriptors() end
    self:createIODescriptors(input)
-   errcheck('cudnnConvolutionBackwardData', cudnn.getHandle(),
-            one:data(),
-            self.weightDesc[0], self.weight:data(),
-            self.oDesc[0], gradOutput:data(),
-            self.convDesc[0],
-            zero:data(),
-            self.iDesc[0], self.gradInput:data());
+   errcheck('cudnnConvolutionBackwardData_v3', cudnn.getHandle(),
+	    one:data(),
+	    self.weightDesc[0], self.weight:data(),
+	    self.oDesc[0], gradOutput:data(),
+	    self.convDesc[0],
+	    self.bwdDataAlgType[0],
+	    self.extraBuffer:data(), self.extraBufferSizeInBytes,
+	    zero:data(),
+	    self.iDesc[0], self.gradInput:data());
    return self.gradInput
 end
 
@@ -170,15 +254,15 @@ function VolumetricConvolution:accGradParameters(input, gradOutput, scale)
             one:data(),
             self.biasDesc[0], self.gradBias:data());
    -- gradWeight
-   errcheck('cudnnConvolutionBackwardFilter',
-            cudnn.getHandle(),
-            self.scaleT:data(),
-            self.iDesc[0], input:data(),
-            self.oDesc[0], gradOutput:data(),
-            self.convDesc[0],
-            one:data(),
-            self.weightDesc[0], self.gradWeight:data());
-
+   errcheck('cudnnConvolutionBackwardFilter_v3', cudnn.getHandle(),
+	    self.scaleT:data(),
+	    self.iDesc[0], input:data(),
+	    self.oDesc[0], gradOutput:data(),
+	    self.convDesc[0],
+	    self.bwdFilterAlgType[0],
+	    self.extraBuffer:data(), self.extraBufferSizeInBytes,
+	    one:data(),
+	    self.weightDesc[0], self.gradWeight:data());
 end
 
 function VolumetricConvolution:write(f)
@@ -188,7 +272,11 @@ function VolumetricConvolution:write(f)
    self.iDesc = nil
    self.oDesc = nil
    self.oDescBias = nil
-   self.algType = nil
+   self.fwdAlgType = nil
+   self.bwdDataAlgType = nil
+   self.bwdFilterAlgType = nil
+   self.extraBuffer = nil
+   self.extraBufferInBytes = nil
    local var = {}
    for k,v in pairs(self) do
       var[k] = v

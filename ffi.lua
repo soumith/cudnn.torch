@@ -31,11 +31,13 @@ typedef struct cudnnTensorStruct*        cudnnTensorDescriptor_t;
 typedef struct cudnnConvolutionStruct*   cudnnConvolutionDescriptor_t;
 typedef struct cudnnPoolingStruct*       cudnnPoolingDescriptor_t;
 typedef struct cudnnFilterStruct*        cudnnFilterDescriptor_t;
+typedef struct cudnnLRNStruct*           cudnnLRNDescriptor_t;
 
 typedef enum
 {
     CUDNN_DATA_FLOAT  = 0,
-    CUDNN_DATA_DOUBLE = 1
+    CUDNN_DATA_DOUBLE = 1,
+    CUDNN_DATA_HALF   = 2,
 } cudnnDataType_t;
 
 typedef enum
@@ -108,24 +110,14 @@ cudnnStatus_t cudnnDestroyFilterDescriptor( cudnnFilterDescriptor_t filterDesc);
 cudnnStatus_t
    cudnnCreateConvolutionDescriptor(cudnnConvolutionDescriptor_t *convDesc );
 cudnnStatus_t
-   cudnnSetConvolutionNdDescriptor(cudnnConvolutionDescriptor_t convDesc,
-                                   int arrayLength, /* nbDims-2 size */
-                                   const int padA[],
-                                   const int filterStrideA[],
-                                   const int upscaleA[],
-                                   cudnnConvolutionMode_t mode
-                                   );
-
-cudnnStatus_t
-   cudnnGetConvolutionNdDescriptor(const cudnnConvolutionDescriptor_t convDesc,
-                                              int arrayLengthRequested,
-                                              int *arrayLength,
-                                              int padA[],
-                                              int strideA[],
-                                              int upscaleA[],
-                                              cudnnConvolutionMode_t *mode
-                                              );
-
+cudnnSetConvolutionNdDescriptor_v3( cudnnConvolutionDescriptor_t convDesc,
+				    int arrayLength,
+				    const int padA[],
+				    const int filterStrideA[],         
+				    const int upscaleA[],              
+				    cudnnConvolutionMode_t mode,
+				    cudnnDataType_t dataType
+				    );
 
 cudnnStatus_t
    cudnnGetConvolutionNdForwardOutputDim(
@@ -136,7 +128,6 @@ cudnnStatus_t
            int tensorOuputDimA[]
            );
 
-/* Destroy an instance of convolution descriptor */
 cudnnStatus_t cudnnDestroyConvolutionDescriptor(
   cudnnConvolutionDescriptor_t convDesc );
 
@@ -152,8 +143,28 @@ typedef enum
     CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM         = 0,
     CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM = 1,
     CUDNN_CONVOLUTION_FWD_ALGO_GEMM                  = 2,
-    CUDNN_CONVOLUTION_FWD_ALGO_DIRECT                = 3
+    CUDNN_CONVOLUTION_FWD_ALGO_DIRECT                = 3,
+    CUDNN_CONVOLUTION_FWD_ALGO_FFT                   = 4
 } cudnnConvolutionFwdAlgo_t;
+
+typedef struct {
+    cudnnConvolutionFwdAlgo_t algo;
+    cudnnStatus_t status;
+    float time;
+    size_t memory;
+} cudnnConvolutionFwdAlgoPerf_t;
+
+cudnnStatus_t
+cudnnFindConvolutionForwardAlgorithm(cudnnHandle_t                      handle,
+				     const cudnnTensorDescriptor_t      srcDesc,
+				     const cudnnFilterDescriptor_t      filterDesc,
+				     const cudnnConvolutionDescriptor_t convDesc, 
+				     const cudnnTensorDescriptor_t      destDesc,
+				     const int                          requestedCount,
+				     int                                *returnedCount,
+				     cudnnConvolutionFwdAlgoPerf_t      *perfResults
+				     );
+
 
 cudnnStatus_t cudnnGetConvolutionForwardAlgorithm( cudnnHandle_t handle,
                               const cudnnTensorDescriptor_t      srcDesc,
@@ -165,10 +176,6 @@ cudnnStatus_t cudnnGetConvolutionForwardAlgorithm( cudnnHandle_t handle,
                               cudnnConvolutionFwdAlgo_t         *algo
                                          );
 
-/*
- *  convolution algorithm (which requires potentially some workspace)
- */
-
 cudnnStatus_t cudnnGetConvolutionForwardWorkspaceSize( cudnnHandle_t handle,
                                  const cudnnTensorDescriptor_t      srcDesc,
                                  const cudnnFilterDescriptor_t      filterDesc,
@@ -179,7 +186,6 @@ cudnnStatus_t cudnnGetConvolutionForwardWorkspaceSize( cudnnHandle_t handle,
                                  );
 
 
-/* Function to perform the forward multiconvolution */
 cudnnStatus_t cudnnConvolutionForward(cudnnHandle_t                 handle,
                               const void                         *alpha,
                               const cudnnTensorDescriptor_t       srcDesc,
@@ -195,7 +201,6 @@ cudnnStatus_t cudnnConvolutionForward(cudnnHandle_t                 handle,
                               void                               *destData
                                                  );
 
-/* Functions to perform the backward multiconvolution */
 cudnnStatus_t cudnnConvolutionBackwardBias(   cudnnHandle_t           handle,
                                        const void                     *alpha,
                                        const cudnnTensorDescriptor_t   srcDesc,
@@ -205,41 +210,116 @@ cudnnStatus_t cudnnConvolutionBackwardBias(   cudnnHandle_t           handle,
                                        void                           *destData
                                                       );
 
+typedef enum
+{
+    CUDNN_CONVOLUTION_BWD_FILTER_NO_WORKSPACE        = 0,
+    CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST      = 1
+} cudnnConvolutionBwdFilterPreference_t;  
+               
+typedef enum
+{
+    CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0         = 0,  // non-deterministic
+    CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1         = 1,
+    CUDNN_CONVOLUTION_BWD_FILTER_ALGO_FFT       = 2
+} cudnnConvolutionBwdFilterAlgo_t;
+
+cudnnStatus_t
+cudnnGetConvolutionBackwardFilterAlgorithm(
+		cudnnHandle_t handle,
+		const cudnnTensorDescriptor_t          srcDesc,
+		const cudnnTensorDescriptor_t          diffDesc,
+		const cudnnConvolutionDescriptor_t     convDesc, 
+		const cudnnFilterDescriptor_t          gradDesc,
+		cudnnConvolutionBwdFilterPreference_t  preference,
+		size_t                                 memoryLimitInbytes,
+		cudnnConvolutionBwdFilterAlgo_t        *algo
+					   );
+                                                                                                           
+cudnnStatus_t
+cudnnGetConvolutionBackwardFilterWorkspaceSize(
+		  cudnnHandle_t handle, 
+		  const cudnnTensorDescriptor_t       srcDesc,
+		  const cudnnTensorDescriptor_t       diffDesc,
+		  const cudnnConvolutionDescriptor_t  convDesc,  
+		  const cudnnFilterDescriptor_t       gradDesc,
+		  cudnnConvolutionBwdFilterAlgo_t     algo,
+		  size_t                              *sizeInBytes
+					       );
+                                                       
+cudnnStatus_t cudnnConvolutionBackwardFilter_v3(
+		   cudnnHandle_t                       handle,
+		   const void                         *alpha,
+		   const cudnnTensorDescriptor_t       srcDesc,
+		   const void                         *srcData,
+		   const cudnnTensorDescriptor_t       diffDesc,
+		   const void                         *diffData,
+		   const cudnnConvolutionDescriptor_t  convDesc,
+		   cudnnConvolutionBwdFilterAlgo_t     algo,
+		   void                               *workSpace,
+		   size_t                              workSpaceSizeInBytes,
+		   const void                         *beta,
+		   const cudnnFilterDescriptor_t       gradDesc,
+		   void                               *gradData
+						);
+
+typedef enum
+{
+    CUDNN_CONVOLUTION_BWD_DATA_NO_WORKSPACE        = 0,
+    CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST      = 1
+} cudnnConvolutionBwdDataPreference_t;
+                                  
+typedef enum
+{
+    CUDNN_CONVOLUTION_BWD_DATA_ALGO_0         = 0, // non-deterministic
+    CUDNN_CONVOLUTION_BWD_DATA_ALGO_1         = 1,    
+    CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT       = 2,
+} cudnnConvolutionBwdDataAlgo_t;
+
+                                                       
+cudnnStatus_t cudnnGetConvolutionBackwardDataAlgorithm(
+	     cudnnHandle_t                      handle,
+	     const cudnnFilterDescriptor_t      filterDesc,
+	     const cudnnTensorDescriptor_t       diffDesc,
+	     const cudnnConvolutionDescriptor_t convDesc, 
+	     const cudnnTensorDescriptor_t       gradDesc,
+	     cudnnConvolutionBwdDataPreference_t    preference, 
+	     size_t                             memoryLimitInbytes,
+	     cudnnConvolutionBwdDataAlgo_t         *algo
+						       );
+
+cudnnStatus_t cudnnGetConvolutionBackwardDataWorkspaceSize(
+		      cudnnHandle_t                      handle, 
+		      const cudnnFilterDescriptor_t      filterDesc,
+		      const cudnnTensorDescriptor_t       diffDesc,
+		      const cudnnConvolutionDescriptor_t convDesc,  
+		      const cudnnTensorDescriptor_t       gradDesc,
+		      cudnnConvolutionBwdDataAlgo_t          algo,
+		      size_t                            *sizeInBytes
+							   );        
+
+                                         
+cudnnStatus_t cudnnConvolutionBackwardData_v3(
+		     cudnnHandle_t                       handle,
+		     const void                         *alpha,
+		     const cudnnFilterDescriptor_t       filterDesc,
+		     const void                         *filterData,
+		     const cudnnTensorDescriptor_t       diffDesc,
+		     const void                         *diffData,
+		     const cudnnConvolutionDescriptor_t  convDesc,
+		     cudnnConvolutionBwdDataAlgo_t           algo,
+		     void                               *workSpace,
+		     size_t                              workSpaceSizeInBytes,
+		     const void                         *beta,
+		     const cudnnTensorDescriptor_t       gradDesc,
+		     void                               *gradData
+					      );
 
 
-cudnnStatus_t cudnnConvolutionBackwardFilter( cudnnHandle_t            handle,
-                      const void                         *alpha,
-                      const cudnnTensorDescriptor_t       srcDesc,
-                      const void                         *srcData,
-                      const cudnnTensorDescriptor_t       diffDesc,
-                      const void                         *diffData,
-                      const cudnnConvolutionDescriptor_t  convDesc,
-                      const void                         *beta,
-                      const cudnnFilterDescriptor_t       gradDesc,
-                      void                               *gradData
-                                      );
-
-
-cudnnStatus_t cudnnConvolutionBackwardData(  cudnnHandle_t handle,
-        const void                         *alpha,
-        const cudnnFilterDescriptor_t       filterDesc,
-        const void                         *filterData,
-                          const cudnnTensorDescriptor_t       diffDesc,
-                          const void                         *diffData,
-                          const cudnnConvolutionDescriptor_t  convDesc,
-                          const void                         *beta,
-                          const cudnnTensorDescriptor_t       gradDesc,
-                          void                               *gradData
-                        );
-
-
-/*
- *  softmax algorithm
- */
 typedef enum
 {
     CUDNN_SOFTMAX_FAST     = 0,
-    CUDNN_SOFTMAX_ACCURATE = 1
+    CUDNN_SOFTMAX_ACCURATE = 1,
+    CUDNN_SOFTMAX_LOG      = 2
 } cudnnSoftmaxAlgorithm_t;
 
 typedef enum
@@ -250,18 +330,19 @@ typedef enum
 
 /* Function to perform forward softmax */
 cudnnStatus_t cudnnSoftmaxForward(  cudnnHandle_t                    handle,
-                 cudnnSoftmaxAlgorithm_t          algorithm,
-                 cudnnSoftmaxMode_t               mode,
-                 const void                      *alpha,
-                 const cudnnTensorDescriptor_t    srcDesc,
-                 const void                      *srcData,
-                 const void                      *beta,
-                 const cudnnTensorDescriptor_t    destDesc,
-                 void                            *destData
-              );
+				    cudnnSoftmaxAlgorithm_t          algorithm,
+				    cudnnSoftmaxMode_t               mode,
+				    const void                      *alpha,
+				    const cudnnTensorDescriptor_t    srcDesc,
+				    const void                      *srcData,
+				    const void                      *beta,
+				    const cudnnTensorDescriptor_t    destDesc,
+				    void                            *destData
+				    );
 
 /* Function to perform backward softmax */
-cudnnStatus_t cudnnSoftmaxBackward( cudnnHandle_t                    handle,
+cudnnStatus_t cudnnSoftmaxBackward(
+		 cudnnHandle_t                    handle,
                  cudnnSoftmaxAlgorithm_t          algorithm,
                  cudnnSoftmaxMode_t               mode,
                  const void                      *alpha,
@@ -274,25 +355,23 @@ cudnnStatus_t cudnnSoftmaxBackward( cudnnHandle_t                    handle,
                  void                            *destDiffData
                );
 
-
-
 typedef enum
 {
     CUDNN_POOLING_MAX     = 0,
-    CUDNN_POOLING_AVERAGE = 1
+    CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING = 1,
+    CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING = 2
 } cudnnPoolingMode_t;
 
-/* Create an instance of pooling descriptor */
 cudnnStatus_t cudnnCreatePoolingDescriptor(
-   cudnnPoolingDescriptor_t *poolingDesc);
+				      cudnnPoolingDescriptor_t *poolingDesc);
 cudnnStatus_t cudnnSetPoolingNdDescriptor(
-   cudnnPoolingDescriptor_t poolingDesc,
+			 cudnnPoolingDescriptor_t poolingDesc,
                          const cudnnPoolingMode_t mode,
                          int nbDims,
                          const int windowDimA[],
                          const int paddingA[],
                          const int strideA[]
-                                                   );
+					  );
 
 cudnnStatus_t cudnnGetPoolingNdDescriptor(
                          const cudnnPoolingDescriptor_t poolingDesc,
@@ -305,15 +384,14 @@ cudnnStatus_t cudnnGetPoolingNdDescriptor(
                       );
 
 cudnnStatus_t cudnnGetPoolingNdForwardOutputDim(
-   const cudnnPoolingDescriptor_t poolingDesc,
-                              const cudnnTensorDescriptor_t inputTensorDesc,
-                              int nbDims,
-                              int outputTensorDimA[]);
-/* Destroy an instance of pooling descriptor */
-cudnnStatus_t cudnnDestroyPoolingDescriptor(
-   cudnnPoolingDescriptor_t poolingDesc );
+                 const cudnnPoolingDescriptor_t poolingDesc,
+		 const cudnnTensorDescriptor_t inputTensorDesc,
+		 int nbDims,
+		 int outputTensorDimA[]);
 
-/* Function to perform forward pooling */
+cudnnStatus_t cudnnDestroyPoolingDescriptor(
+		      cudnnPoolingDescriptor_t poolingDesc );
+
 cudnnStatus_t cudnnPoolingForward(  cudnnHandle_t handle,
                  const cudnnPoolingDescriptor_t   poolingDesc,
                  const void                      *alpha,
@@ -324,8 +402,7 @@ cudnnStatus_t cudnnPoolingForward(  cudnnHandle_t handle,
                  void                            *destData
               );
 
-/* Function to perform backward pooling */
-cudnnStatus_t cudnnPoolingBackward( cudnnHandle_t                   handle,
+cudnnStatus_t cudnnPoolingBackward( cudnnHandle_t handle,
                  const cudnnPoolingDescriptor_t  poolingDesc,
                  const void                      *alpha,
                  const cudnnTensorDescriptor_t   srcDesc,
@@ -346,8 +423,7 @@ typedef enum
     CUDNN_ACTIVATION_TANH    = 2
 } cudnnActivationMode_t;
 
-/* Function to perform forward activation  */
-cudnnStatus_t cudnnActivationForward( cudnnHandle_t                    handle,
+cudnnStatus_t cudnnActivationForward( cudnnHandle_t handle,
                    cudnnActivationMode_t            mode,
                    const void                      *alpha,
                    const cudnnTensorDescriptor_t    srcDesc,
@@ -357,8 +433,7 @@ cudnnStatus_t cudnnActivationForward( cudnnHandle_t                    handle,
                    void                            *destData
                  );
 
-/* Function to perform backward activation  */
-cudnnStatus_t cudnnActivationBackward( cudnnHandle_t                    handle,
+cudnnStatus_t cudnnActivationBackward( cudnnHandle_t handle,
                     cudnnActivationMode_t            mode,
                     const void                      *alpha,
                     const cudnnTensorDescriptor_t    srcDesc,
@@ -371,6 +446,93 @@ cudnnStatus_t cudnnActivationBackward( cudnnHandle_t                    handle,
                     const cudnnTensorDescriptor_t    destDiffDesc,
                     void                            *destDiffData
                   );
+
+cudnnStatus_t cudnnCreateLRNDescriptor( cudnnLRNDescriptor_t* normDesc );
+
+typedef enum
+  {
+    CUDNN_LRN_CROSS_CHANNEL_DIM1 = 0,
+  } cudnnLRNMode_t;
+
+cudnnStatus_t cudnnSetLRNDescriptor(
+				    cudnnLRNDescriptor_t   normDesc,
+				    unsigned               lrnN,
+				    double                 lrnAlpha,
+				    double                 lrnBeta,
+				    double                 lrnK);
+
+cudnnStatus_t cudnnGetLRNDescriptor(
+				    cudnnLRNDescriptor_t   normDesc,
+				    unsigned*              lrnN,
+				    double*                lrnAlpha,
+				    double*                lrnBeta,
+				    double*                lrnK);
+
+cudnnStatus_t cudnnDestroyLRNDescriptor( cudnnLRNDescriptor_t lrnDesc );
+
+cudnnStatus_t cudnnLRNCrossChannelForward(
+			  cudnnHandle_t                    handle,
+			  cudnnLRNDescriptor_t             normDesc,
+			  cudnnLRNMode_t                   lrnMode,
+			  const void*                      alpha,
+			  const cudnnTensorDescriptor_t    srcDesc,
+			  const void                      *srcData,
+			  const void                      *beta,
+			  const cudnnTensorDescriptor_t    destDesc,
+			  void                            *destData);
+
+cudnnStatus_t cudnnLRNCrossChannelBackward(
+			 cudnnHandle_t                    handle,
+			 cudnnLRNDescriptor_t             normDesc,
+			 cudnnLRNMode_t                   lrnMode,
+			 const void*                      alpha,
+			 const cudnnTensorDescriptor_t    srcDesc,
+			 const void                      *srcData,
+			 const cudnnTensorDescriptor_t    srcDiffDesc,
+			 const void                      *srcDiffData,
+			 const cudnnTensorDescriptor_t    destDesc,
+			 const void                      *destData,
+			 const void                      *beta,
+			 const cudnnTensorDescriptor_t    destDiffDesc,
+			 void                            *destDiffData);
+
+typedef enum
+  {
+    CUDNN_DIVNORM_PRECOMPUTED_MEANS = 0,
+  } cudnnDivNormMode_t;
+
+cudnnStatus_t cudnnDivisiveNormalizationForward(
+			cudnnHandle_t                    handle,
+			cudnnLRNDescriptor_t             normDesc,
+			cudnnDivNormMode_t               mode,
+			const void                      *alpha,
+			const cudnnTensorDescriptor_t    srcDesc,
+			const void                      *srcData,
+			const void                      *srcMeansData,
+			void                            *tempData,
+			void                            *tempData2,
+			const void                      *beta,
+			const cudnnTensorDescriptor_t    destDesc,
+			void                            *destData
+						);
+
+cudnnStatus_t cudnnDivisiveNormalizationBackward(
+			       cudnnHandle_t                    handle,
+			       cudnnLRNDescriptor_t             normDesc,
+			       cudnnDivNormMode_t               mode,
+			       const void                      *alpha,
+			       const cudnnTensorDescriptor_t    srcDesc,
+			       const void                      *srcData,
+			       const void                      *srcMeansData,
+			       const void                      *srcDiffData,
+			       void                            *tempData,
+			       void                            *tempData2,
+			       const void                      *betaData,
+			       const cudnnTensorDescriptor_t    destDataDesc,
+			       void                            *destDataDiff,
+			       void                            *destMeansDiff
+						 );
+
 ]]
 
 local ok,err = pcall(function() cudnn.C = ffi.load('libcudnn') end)
@@ -383,8 +545,8 @@ Then make sure all the files named as libcudnn.so* are placed in your library lo
 end
 
 cudnn.version = tonumber(cudnn.C.cudnnGetVersion())
-if cudnn.version < 20 then
-  error('These bindings are for version 20 or above, '
+if cudnn.version < 3000 then
+  error('These bindings are for version 3000 or above, '
         .. 'while the loaded CuDNN is version: ' .. cudnn.version
            .. '  \nAre you using an older version of CuDNN?')
 end

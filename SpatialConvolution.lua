@@ -51,6 +51,26 @@ function SpatialConvolution:fastest(mode)
    return self
 end
 
+function SpatialConvolution:setMode(fmode, bdmode, bwmode)
+   if fmode ~= nil then
+      self.fmode = fmode
+   end
+   if bdmode ~= nil then
+      self.bdmode = bdmode
+   end
+   if bwmode ~= nil then
+      self.bwmode = bwmode
+   end
+   return self
+end
+
+function SpatialConvolution:resetMode()
+   self.fmode = nil
+   self.bdmode = nil
+   self.bwmode = nil
+   return self
+end
+
 function SpatialConvolution:createIODescriptors(input)
    local batch = true
    if input:dim() == 3 then
@@ -78,9 +98,10 @@ function SpatialConvolution:createIODescriptors(input)
          local pad = torch.IntTensor({self.padH, self.padW})
          local stride = torch.IntTensor({self.dH, self.dW})
          local upscale = torch.IntTensor({1,1})
-         errcheck('cudnnSetConvolutionNdDescriptor', self.convDesc[0],
+         errcheck('cudnnSetConvolutionNdDescriptor_v3', self.convDesc[0],
                   2, pad:data(),
-                  stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION');
+                  stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
+		  'CUDNN_DATA_FLOAT');
          local function destroyConvDesc(d)
             errcheck('cudnnDestroyConvolutionDescriptor', d[0]);
          end
@@ -99,29 +120,79 @@ function SpatialConvolution:createIODescriptors(input)
          self.oDesc = cudnn.toDescriptor(self.output[output_slice])
          self.oDescForBias = cudnn.toDescriptor(self.output)
 
+	 -----------------------------------------------------------------------
+	 local maxBufSize = 0
          -- create forwardAlgorithm descriptors for
          local algType = ffi.new("cudnnConvolutionFwdAlgo_t[?]", 1)
 	 local algSearchMode = 'CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT'
-	 local algWorkspaceLimit = self.nInputPlane * self.kH * self.kW * 4 -- 4 = sizeof int.
+	 local algWorkspaceLimit = self.workspace_limit
+	    or (self.nInputPlane * self.kH * self.kW * 4) -- 4 = sizeof int/float.
 	 if self.fastest_mode then algSearchMode = 'CUDNN_CONVOLUTION_FWD_PREFER_FASTEST' end
          errcheck('cudnnGetConvolutionForwardAlgorithm',
                   cudnn.getHandle(),
                   self.iDesc[0], self.weightDesc[0],
                   self.convDesc[0], self.oDesc[0],
                   algSearchMode, algWorkspaceLimit, algType)
-         self.algType = algType
+	 algType[0] = self.fmode or algType[0]
+         self.fwdAlgType = algType
          local bufSize = torch.LongTensor(1)
          errcheck('cudnnGetConvolutionForwardWorkspaceSize',
                   cudnn.getHandle(),
                   self.iDesc[0], self.weightDesc[0],
                   self.convDesc[0], self.oDesc[0],
                   algType[0], bufSize:data())
-         self.extraBuffer = self.extraBuffer or input.new(1)
-         if bufSize[1] ~= 0 or bufSize[1] ~= self.extraBufferSizeInBytes then
-           self.extraBuffer:resize(math.ceil(bufSize[1]/4))
-           self.extraBufferSizeInBytes = bufSize[1]
+	 maxBufSize = math.max(maxBufSize, bufSize[1])
+
+	 -- create backwardFilterAlgorithm descriptors for
+         local algType = ffi.new("cudnnConvolutionBwdFilterAlgo_t[?]", 1)
+	 local algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_NO_WORKSPACE'
+	 local algWorkspaceLimit = self.workspace_limit
+	    or (self.nInputPlane * self.kH * self.kW * 4) -- 4 = sizeof int/float.
+	 if self.fastest_mode then algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST' end
+         errcheck('cudnnGetConvolutionBackwardFilterAlgorithm',
+                  cudnn.getHandle(),
+                  self.iDesc[0], self.oDesc[0],
+                  self.convDesc[0], self.weightDesc[0],
+                  algSearchMode, algWorkspaceLimit, algType)
+	 algType[0] = self.bwmode or algType[0]
+         self.bwdFilterAlgType = algType
+         local bufSize = torch.LongTensor(1)
+         errcheck('cudnnGetConvolutionBackwardFilterWorkspaceSize',
+                  cudnn.getHandle(),
+                  self.iDesc[0], self.oDesc[0],
+                  self.convDesc[0], self.weightDesc[0],
+                  algType[0], bufSize:data())
+	 maxBufSize = math.max(maxBufSize, bufSize[1])
+
+	 -- create backwardDataAlgorithm descriptors for
+         local algType = ffi.new("cudnnConvolutionBwdDataAlgo_t[?]", 1)
+	 local algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_NO_WORKSPACE'
+	 local algWorkspaceLimit = self.workspace_limit
+	    or (self.nInputPlane * self.kH * self.kW * 4) -- 4 = sizeof int/float.
+	 if self.fastest_mode then algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST' end
+         errcheck('cudnnGetConvolutionBackwardDataAlgorithm',
+                  cudnn.getHandle(),
+                  self.weightDesc[0], self.oDesc[0],
+                  self.convDesc[0], self.iDesc[0],
+                  algSearchMode, algWorkspaceLimit, algType)
+	 algType[0] = self.bdmode or algType[0]
+         self.bwdDataAlgType = algType
+         local bufSize = torch.LongTensor(1)
+         errcheck('cudnnGetConvolutionBackwardDataWorkspaceSize',
+                  cudnn.getHandle(),
+                  self.weightDesc[0], self.oDesc[0],
+                  self.convDesc[0], self.iDesc[0],
+                  algType[0], bufSize:data())
+	 maxBufSize = math.max(maxBufSize, bufSize[1])
+
+	 self.extraBuffer = self.extraBuffer or input.new(1)
+	 self.extraBufferSizeInBytes = self.extraBuffer:nElement() * 4 -- float
+         if maxBufSize > self.extraBufferSizeInBytes then
+           self.extraBuffer:resize(math.ceil(maxBufSize/4))
+           self.extraBufferSizeInBytes = maxBufSize
          end
 
+	 -----------------------------------------------------------------------
          -- create offsets for groups
          self.input_offset = self.nInputPlane/self.groups*input:size(3)*input:size(4)
          self.output_offset = self.nOutputPlane/self.groups*oSize[3]*oSize[4]
@@ -172,7 +243,7 @@ function SpatialConvolution:updateOutput(input)
                one:data(),
                self.iDesc[0], input:data() + g*self.input_offset,
                self.weightDesc[0], self.weight:data() + g*self.weight_offset,
-               self.convDesc[0], self.algType[0],
+               self.convDesc[0], self.fwdAlgType[0],
                self.extraBuffer:data(), self.extraBufferSizeInBytes,
                zero:data(),
                self.oDesc[0], self.output:data() + g*self.output_offset);
@@ -195,11 +266,13 @@ function SpatialConvolution:updateGradInput(input, gradOutput)
    if not self.weightDesc then self:resetWeightDescriptors() end
    self:createIODescriptors(input)
    for g=0,self.groups-1 do
-      errcheck('cudnnConvolutionBackwardData', cudnn.getHandle(),
+      errcheck('cudnnConvolutionBackwardData_v3', cudnn.getHandle(),
                one:data(),
                self.weightDesc[0], self.weight:data() + g*self.weight_offset,
                self.oDesc[0], gradOutput:data() + g*self.output_offset,
                self.convDesc[0],
+	       self.bwdDataAlgType[0],
+	       self.extraBuffer:data(), self.extraBufferSizeInBytes,
                zero:data(),
                self.iDesc[0], self.gradInput:data() + g*self.input_offset);
    end
@@ -224,11 +297,13 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
              self.biasDesc[0], self.gradBias:data())
    for g=0,self.groups-1 do
       -- gradWeight
-      errcheck('cudnnConvolutionBackwardFilter', cudnn.getHandle(),
+      errcheck('cudnnConvolutionBackwardFilter_v3', cudnn.getHandle(),
                self.scaleT:data(),
                self.iDesc[0], input:data() + g*self.input_offset,
                self.oDesc[0], gradOutput:data() + g*self.output_offset,
                self.convDesc[0],
+	       self.bwdFilterAlgType[0],
+	       self.extraBuffer:data(), self.extraBufferSizeInBytes,
                one:data(),
                self.weightDesc[0], self.gradWeight:data() + g*self.weight_offset);
    end
@@ -242,6 +317,11 @@ function SpatialConvolution:write(f)
    self.oDesc = nil
    self.oDescForBias = nil
    self.algType = nil
+   self.fwdAlgType = nil
+   self.bwdDataAlgType = nil
+   self.bwdFilterAlgType = nil
+   self.extraBuffer = nil
+   self.extraBufferSizeInBytes = nil
    local var = {}
    for k,v in pairs(self) do
       var[k] = v

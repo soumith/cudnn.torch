@@ -25,7 +25,7 @@ function cudnntest.SpatialConvolution_forward_batch()
    local sconv = nn.SpatialConvolutionMM(from,to,ki,kj,si,sj):cuda()
    local groundtruth = sconv:forward(input)
    cutorch.synchronize()
-   local gconv = cudnn.SpatialConvolution(from,to,ki,kj,si,sj):cuda()
+   local gconv = cudnn.SpatialConvolution(from,to,ki,kj,si,sj):cuda():fastest()
    gconv.weight:copy(sconv.weight)
    gconv.bias:copy(sconv.bias)
    local rescuda = gconv:forward(input)
@@ -59,7 +59,7 @@ function cudnntest.SpatialConvolution_backward_batch()
    local groundweight = sconv.gradWeight
    local groundbias = sconv.gradBias
 
-   local gconv = cudnn.SpatialConvolution(from,to,ki,kj,si,sj):cuda()
+   local gconv = cudnn.SpatialConvolution(from,to,ki,kj,si,sj):cuda():fastest()
    gconv.weight:copy(sconv.weight)
    gconv.bias:copy(sconv.bias)
    gconv:forward(input)
