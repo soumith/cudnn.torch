@@ -42,8 +42,7 @@ function SpatialConvolution:resetWeightDescriptors()
    ffi.gc(self.weightDesc, destroyWDesc)
 
    -- create descriptor for bias
-   local bias_slice = {{}, {1,self.nOutputPlane/self.groups}, {}, {}}
-   self.biasDesc = cudnn.toDescriptor(self.bias:view(1, self.nOutputPlane,1,1)[bias_slice])
+   self.biasDesc = cudnn.toDescriptor(self.bias:view(1, self.nOutputPlane,1,1))
 end
 
 function SpatialConvolution:fastest(mode)
@@ -98,6 +97,7 @@ function SpatialConvolution:createIODescriptors(input)
          -- create descriptor for output
          local output_slice = {{},{1,self.nOutputPlane/self.groups},{},{}}
          self.oDesc = cudnn.toDescriptor(self.output[output_slice])
+         self.oDescForBias = cudnn.toDescriptor(self.output)
 
          -- create forwardAlgorithm descriptors for
          local algType = ffi.new("cudnnConvolutionFwdAlgo_t[?]", 1)
@@ -127,7 +127,6 @@ function SpatialConvolution:createIODescriptors(input)
          self.output_offset = self.nOutputPlane/self.groups*oSize[3]*oSize[4]
          self.weight_offset =
             self.nInputPlane/self.groups*self.nOutputPlane/self.groups*self.kW*self.kH
-         self.bias_offset = self.nOutputPlane/self.groups
 
          if not batch then
             self.gradInput = self.gradInput:view(self.gradInput:size(2),
@@ -177,11 +176,11 @@ function SpatialConvolution:updateOutput(input)
                self.extraBuffer:data(), self.extraBufferSizeInBytes,
                zero:data(),
                self.oDesc[0], self.output:data() + g*self.output_offset);
-      errcheck('cudnnAddTensor', cudnn.getHandle(),
-               'CUDNN_ADD_SAME_C',
-               one:data(), self.biasDesc[0], self.bias:data() + g*self.bias_offset,
-               one:data(), self.oDesc[0], self.output:data() + g*self.output_offset);
    end
+   errcheck('cudnnAddTensor', cudnn.getHandle(),
+             'CUDNN_ADD_SAME_C',
+             one:data(), self.biasDesc[0], self.bias:data(),
+             one:data(), self.oDescForBias[0], self.output:data())
    if prevStream == 0 then
       cutorch.setStream(prevStream)
       cutorch.streamWaitFor(prevStream, streamQueue)
@@ -217,13 +216,13 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
          and gradOutput:isContiguous());
    self:createIODescriptors(input)
    if not self.weightDesc then self:resetWeightDescriptors() end
+   -- gradBias
+   errcheck('cudnnConvolutionBackwardBias', cudnn.getHandle(),
+             self.scaleT:data(),
+             self.oDescForBias[0], gradOutput:data(),
+             one:data(),
+             self.biasDesc[0], self.gradBias:data())
    for g=0,self.groups-1 do
-      -- gradBias
-      errcheck('cudnnConvolutionBackwardBias', cudnn.getHandle(),
-               self.scaleT:data(),
-               self.oDesc[0], gradOutput:data() + g*self.output_offset,
-               one:data(),
-               self.biasDesc[0], self.gradBias:data() + g*self.bias_offset);
       -- gradWeight
       errcheck('cudnnConvolutionBackwardFilter', cudnn.getHandle(),
                self.scaleT:data(),
@@ -241,6 +240,7 @@ function SpatialConvolution:write(f)
    self.convDesc = nil
    self.iDesc = nil
    self.oDesc = nil
+   self.oDescForBias = nil
    self.algType = nil
    local var = {}
    for k,v in pairs(self) do
