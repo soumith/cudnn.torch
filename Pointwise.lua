@@ -9,16 +9,15 @@ end
 function Pointwise:createIODescriptors(input)
    assert(self.mode, 'mode is not set. (trying to use base class?)');
    assert(input:isContiguous(), 'Non-contiguous inputs not supported yet');
+   if not self.inplace then
+       self.gradInput:resizeAs(input)
+       self.output:resizeAs(input)
+   end
    local nElem = input:nElement()
    self.nElem = self.nElem or nElem -- this goes to the second branch only once
    if self.iDesc and nElem == self.nElem then return end
-
    self.nElem = nElem
    self.iDesc = cudnn.toDescriptor(input:view(1,1,1,nElem))
-   if not self.inplace then
-      self.gradInput:resizeAs(input)
-      self.output:resizeAs(input)
-   end
 end
 
 local one = torch.FloatTensor({1});
