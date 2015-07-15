@@ -37,9 +37,8 @@ end
 
 function Pointwise:updateGradInput(input, gradOutput)
    if not gradOutput:isContiguous() then
-      self._gradOutput = self._gradOutput
-         or gradOutput.new():resizeAs(gradOutput)
-      self._gradOutput:copy(gradOutput)
+      self._gradOutput = self._gradOutput or gradOutput.new()
+      self._gradOutput:resizeAs(gradOutput):copy(gradOutput)
       gradOutput = self._gradOutput
    end
    self:createIODescriptors(input)

@@ -98,8 +98,8 @@ end
 function Pooling:updateGradInput(input, gradOutput)
    assert(gradOutput:dim() == 3 or gradOutput:dim() == 4);
    if not gradOutput:isContiguous() then
-      self._gradOutput = self._gradOutput or gradOutput.new():resizeAs(gradOutput)
-      self._gradOutput:copy(gradOutput)
+      self._gradOutput = self._gradOutput or gradOutput.new()
+      self._gradOutput:resizeAs(gradOutput):copy(gradOutput)
       gradOutput = self._gradOutput
    end
    if not self.poolDesc then self:resetPoolDescriptors() end
