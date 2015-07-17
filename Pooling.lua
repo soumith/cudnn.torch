@@ -7,7 +7,7 @@ function Pooling:__init(kW, kH, dW, dH, padW, padH)
    self.kW = kW
    self.kH = kH
    self.dW = dW or kW
-   self.dH = dH or kW
+   self.dH = dH or kH
    self.padW = padW or 0
    self.padH = padH or 0
    self.iSize = torch.LongStorage(4):fill(0)
