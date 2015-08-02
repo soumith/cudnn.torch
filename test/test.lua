@@ -582,6 +582,39 @@ function cudnntest.SoftMax_batch()
                      precision_backward, 'error on state (backward) ')
 end
 
+function cudnntest.functional_SpatialBias()
+   local bs = math.random(1,32)
+   local from = math.random(1,32)
+   local to = math.random(1,64)
+   local ki = math.random(1,15)
+   local kj = math.random(1,15)
+   local si = math.random(1,ki)
+   local sj = math.random(1,kj)
+   local outi = math.random(1,64)
+   local outj = math.random(1,64)
+   local ini = (outi-1)*si+ki
+   local inj = (outj-1)*sj+kj
+   local scale = torch.uniform()
+   local input = torch.zeros(bs,from,inj,ini):cuda()
+   local mod = cudnn.SpatialConvolution(from,to,ki,kj,si,sj):cuda()
+   mod.weight:zero()
+   local groundtruth = mod:forward(input)
+   local result = groundtruth:clone():zero()
+   cudnn.functional.SpatialBias_updateOutput(mod.bias, result)
+   local error = result:float() - groundtruth:float()
+   mytester:assertlt(error:abs():max(),
+                     precision_forward, 'error on forward ')
+
+   mod:zeroGradParameters()
+   local gradOutput = groundtruth:clone():normal()
+   mod:backward(input, gradOutput, scale)
+   local groundtruth = mod.gradBias
+   local result = groundtruth:clone():zero()
+   cudnn.functional.SpatialBias_accGradParameters(gradOutput, result, scale)
+   error = result:float() - groundtruth:float()
+   mytester:assertlt(error:abs():max(),
+                     precision_backward, 'error on accGradParameters ')
+end
 
 
 torch.setdefaulttensortype('torch.FloatTensor')

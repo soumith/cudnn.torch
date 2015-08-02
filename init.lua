@@ -1,6 +1,6 @@
 require 'cutorch'
 require 'nn'
-cudnn = {}
+cudnn = require 'cudnn.env'
 include 'ffi.lua'
 local C = cudnn.C
 local ffi = require 'ffi'
@@ -86,3 +86,7 @@ include 'Tanh.lua'
 include 'Sigmoid.lua'
 include 'SpatialSoftMax.lua'
 include 'SoftMax.lua'
+
+include 'functional.lua'
+
+return cudnn
