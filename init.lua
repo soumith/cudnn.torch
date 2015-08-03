@@ -85,7 +85,10 @@ include 'ReLU.lua'
 include 'Tanh.lua'
 include 'Sigmoid.lua'
 include 'SpatialSoftMax.lua'
+include 'SpatialLogSoftMax.lua'
 include 'SoftMax.lua'
+include 'LogSoftMax.lua'
+include 'SpatialCrossMapLRN.lua'
 
 include 'functional.lua'
 
