@@ -15,7 +15,7 @@ end
 
 function LRN:resetDescriptors()
    -- create LRN descriptor
-   self.LRNDesc = ffi.new('struct cudnnLRNDescriptor_t*[1]')
+   self.LRNDesc = ffi.new('struct cudnnLRNStruct*[1]')
    errcheck('cudnnCreateLRNDescriptor', self.LRNDesc)
    errcheck('cudnnSetLRNDescriptor', self.LRNDesc[0], self.size,
             self.alpha, self.beta, self.K);
@@ -56,7 +56,7 @@ local one = torch.FloatTensor({1});
 local zero = torch.FloatTensor({0});
 
 function LRN:updateOutput(input)
-   if not self.LRNDesc then self:resetPoolDescriptors() end
+   if not self.LRNDesc then self:resetDescriptors() end
    self:createIODescriptors(input)
    errcheck('cudnnLRNCrossChannelForward', cudnn.getHandle(),
             self.LRNDesc[0],
@@ -75,7 +75,7 @@ function LRN:updateGradInput(input, gradOutput)
       self._gradOutput:resizeAs(gradOutput):copy(gradOutput)
       gradOutput = self._gradOutput
    end
-   if not self.LRNDesc then self:resetPoolDescriptors() end
+   if not self.LRNDesc then self:resetDescriptors() end
    self:createIODescriptors(input)
    errcheck('cudnnLRNCrossChannelBackward',
             cudnn.getHandle(), self.LRNDesc[0],
