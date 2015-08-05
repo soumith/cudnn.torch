@@ -249,6 +249,83 @@ function cudnntest.VolumetricConvolution_backward_single()
 
 end
 
+function cudnntest.VolumetricMaxPooling_batch()
+   local bs = math.random(1,32)
+   local from = math.random(1,32)
+   local ki = math.random(2,4)
+   local kj = math.random(2,4)
+   local kk = math.random(2,4)
+   local si = ki
+   local sj = kj
+   local sk = kk
+   local outi = math.random(1,64)
+   local outj = math.random(1,64)
+   local outk = math.random(1,64)
+   local ini = (outi-1)*si+ki
+   local inj = (outj-1)*sj+kj
+   local ink = (outk-1)*sk+kk
+   local input = torch.randn(bs,from,ink,inj,ini):cuda()
+   local gradOutput = torch.randn(bs,from,outk,outj,outi):cuda()
+
+   local sconv = nn.VolumetricMaxPooling(kk,ki,kj,sk,si,sj):float()
+   local groundtruth = sconv:forward(input:float())
+   local groundgrad = sconv:backward(input:float(), gradOutput:float())
+   cutorch.synchronize()
+   local gconv = cudnn.VolumetricMaxPooling(kk,ki,kj,sk,si,sj):cuda()
+   local rescuda = gconv:forward(input)
+   -- serialize and deserialize
+   torch.save('modelTemp.t7', gconv)
+   gconv = torch.load('modelTemp.t7')
+   local rescuda = gconv:forward(input)
+   local resgrad = gconv:backward(input, gradOutput)
+   cutorch.synchronize()
+   mytester:asserteq(rescuda:dim(), 5, 'error in dimension')
+   mytester:asserteq(resgrad:dim(), 5, 'error in dimension')
+   local error = rescuda:float() - groundtruth:float()
+   mytester:assertlt(error:abs():max(), precision_forward, 'error on state (forward) ')
+   error = resgrad:float() - groundgrad:float()
+   mytester:assertlt(error:abs():max(), precision_backward, 'error on state (backward) ')
+end
+
+function cudnntest.VolumetricMaxPooling_single()
+   local from = math.random(1,32)
+   local ki = math.random(2,4)
+   local kj = math.random(2,4)
+   local kk = math.random(2,4)
+   local si = ki
+   local sj = kj
+   local sk = kk
+   local outi = math.random(1,64)
+   local outj = math.random(1,64)
+   local outk = math.random(1,64)
+   local ini = (outi-1)*si+ki
+   local inj = (outj-1)*sj+kj
+   local ink = (outk-1)*sk+kk
+   local input = torch.randn(from,ink,inj,ini):cuda()
+   local gradOutput = torch.randn(from,outk,outj,outi):cuda()
+
+   local sconv = nn.VolumetricMaxPooling(kk,ki,kj,sk,si,sj):float()
+   local groundtruth = sconv:forward(input:float())
+   local groundgrad = sconv:backward(input:float(), gradOutput:float())
+   cutorch.synchronize()
+   local gconv = cudnn.VolumetricMaxPooling(kk,ki,kj,sk,si,sj):cuda()
+   local _ = gconv:forward(input)
+   -- serialize and deserialize
+   torch.save('modelTemp.t7', gconv)
+   gconv = torch.load('modelTemp.t7')
+   local rescuda = gconv:forward(input)
+   local resgrad = gconv:backward(input, gradOutput)
+   cutorch.synchronize()
+   mytester:asserteq(rescuda:dim(), 4, 'error in dimension')
+   mytester:asserteq(resgrad:dim(), 4, 'error in dimension')
+   local error = rescuda:float() - groundtruth:float()
+   mytester:assertlt(error:abs():max(), precision_forward,
+                     'error on state (forward) ')
+   error = resgrad:float() - groundgrad:float()
+   mytester:assertlt(error:abs():max(), precision_backward,
+                     'error on state (backward) ')
+end
+
 function cudnntest.SpatialMaxPooling_batch()
    local bs = math.random(1,32)
    local from = math.random(1,32)

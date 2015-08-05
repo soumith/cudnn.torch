@@ -30,6 +30,8 @@ cudnn.SpatialSoftMax(fastMode [= false])   -- SoftMax across feature-maps (per s
 
 -- Volumetric inputs (4D or 5D batched mode)
 cudnn.VolumetricConvolution(nInputPlane, nOutputPlane, kT, kW, kH, dT, dW, dH, padT, padW, padH)
+cudnn.VolumetricMaxPooling(kT, kW, kH, dT, dW, dH, padT, padW, padH)
+cudnn.VolumetricAveragePooling(kT, kW, kH, dT, dW, dH, padT, padW, padH)
 ```
 
 I have no time to support these, so please don't expect a quick response to filed github issues.
