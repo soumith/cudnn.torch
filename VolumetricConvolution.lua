@@ -11,7 +11,6 @@ function VolumetricConvolution:__init(nInputPlane, nOutputPlane,
    self.padT = padT or 0
    self.padW = padW or 0
    self.padH = padH or 0
-   self:reset()
    self.iSize = torch.LongStorage(5):fill(0)
 end
 
