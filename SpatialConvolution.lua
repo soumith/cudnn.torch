@@ -251,14 +251,15 @@ function SpatialConvolution:updateOutput(input)
                zero:data(),
                self.oDesc[0], self.output:data() + g*self.output_offset);
    end
-   errcheck('cudnnAddTensor', cudnn.getHandle(),
-             'CUDNN_ADD_SAME_C',
-             one:data(), self.biasDesc[0], self.bias:data(),
-             one:data(), self.oDescForBias[0], self.output:data())
    if prevStream == 0 then
       cutorch.setStream(prevStream)
       cutorch.streamWaitFor(prevStream, streamQueue)
    end
+   errcheck('cudnnAddTensor', cudnn.getHandle(),
+            'CUDNN_ADD_SAME_C',
+            one:data(), self.biasDesc[0], self.bias:data(),
+            one:data(), self.oDescForBias[0], self.output:data())
+
    return self.output
 end
 
