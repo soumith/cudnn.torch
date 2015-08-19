@@ -175,7 +175,7 @@ function VolumetricConvolution:createIODescriptors(input)
                   algType[0], bufSize:data())
 	 maxBufSize = math.max(maxBufSize, bufSize[1])
 
-	 self.extraBuffer = self.extraBuffer or input.new(1)
+	 self.extraBuffer = self.extraBuffer or cudnn.getSharedWorkspace()
 	 self.extraBufferSizeInBytes = self.extraBuffer:nElement() * 4 -- float
          if maxBufSize > self.extraBufferSizeInBytes then
            self.extraBuffer:resize(math.ceil(maxBufSize/4))

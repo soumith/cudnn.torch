@@ -75,6 +75,21 @@ function cudnn.toDescriptor(t)
    return descriptor
 end
 
+
+local sharedBuffer = {}
+for i=1,numDevices do
+    sharedBuffer[i] = {}
+end
+
+function cudnn.getSharedWorkspace()
+    local device = cutorch.getDevice()
+    local stream = cutorch.getStream() -- starts from 0
+    if not sharedBuffer[device][stream] then
+        sharedBuffer[device][stream] = torch.CudaTensor(1)
+    end
+    return sharedBuffer[device][stream]
+end
+
 include 'SpatialConvolution.lua'
 include 'VolumetricConvolution.lua'
 include 'Pooling.lua'
