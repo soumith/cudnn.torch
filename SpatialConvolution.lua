@@ -20,6 +20,7 @@ function SpatialConvolution:__init(nInputPlane, nOutputPlane,
    self.gradWeight = torch.Tensor(nOutputPlane, nInputPlane/self.groups, kW, kH)
    self:reset()
    self.iSize = torch.LongStorage(4):fill(0)
+   self.fastest_mode = true
 end
 
 -- if you change the configuration of the module manually, call this
