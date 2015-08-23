@@ -28,6 +28,9 @@ iH = (outH-1)*sH+kH
 
 print('CUDNN Version: ', tonumber(cudnn.C.cudnnGetVersion()))
 
+-- just auto-tuned by cudnn with CUDNN_CONVOLUTION_FWD_PREFER_FASTEST mode
+bench('Forward AutoTuned            ', from, to, kH, kW, sH, sW, iH, iW, batchSize)
+
 bench('Forward implicit gemm        ', from, to, kH, kW, sH, sW, iH, iW, batchSize,
       'CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM',
       'CUDNN_CONVOLUTION_BWD_DATA_ALGO_0',
@@ -43,8 +46,6 @@ bench('Forward gemm                 ', from, to, kH, kW, sH, sW, iH, iW, batchSi
       'CUDNN_CONVOLUTION_BWD_DATA_ALGO_0',
       'CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0')
 
--- just auto-tuned by cudnn with CUDNN_CONVOLUTION_FWD_PREFER_FASTEST mode
-bench('Forward AutoTuned            ', from, to, kH, kW, sH, sW, iH, iW, batchSize)
 
 bench('Forward FFT                  ', from, to, kH, kW, sH, sW, iH, iW, batchSize,
       'CUDNN_CONVOLUTION_FWD_ALGO_FFT',
