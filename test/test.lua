@@ -764,6 +764,11 @@ math.randomseed(os.time())
 mytester = torch.Tester()
 mytester:add(cudnntest)
 
+if torch.random(1,2) == 1 then
+   cudnn.benchmark = true -- run manual auto-tuner
+end
+
+
 for i=1,cutorch.getDeviceCount() do
    print('Running test on device: ' .. i)
    cutorch.setDevice(i)
