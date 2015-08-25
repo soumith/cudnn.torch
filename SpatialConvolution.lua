@@ -336,8 +336,8 @@ function SpatialConvolution:updateGradInput(input, gradOutput)
 
    assert(gradOutput:dim() == 3 or gradOutput:dim() == 4, 'gradOutput has to be 3D or 4D');
    assert(gradOutput:isContiguous(), 'gradOutput has to be contiguous')
-   self:createIODescriptors(input)
    if not self.weightDesc then self:resetWeightDescriptors() end
+   self:createIODescriptors(input)
 
    for g = 0,self.groups - 1 do
       errcheck('cudnnConvolutionBackwardData_v3', cudnn.getHandle(),
@@ -362,8 +362,8 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
 
    assert(gradOutput:dim() == 3 or gradOutput:dim() == 4, 'gradOutput has to be 3D or 4D');
    assert(gradOutput:isContiguous(), 'gradOutput has to be contiguous')
-   self:createIODescriptors(input)
    if not self.weightDesc then self:resetWeightDescriptors() end
+   self:createIODescriptors(input)
 
    -- gradBias
    errcheck('cudnnConvolutionBackwardBias', cudnn.getHandle(),
