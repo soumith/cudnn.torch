@@ -428,7 +428,7 @@ local function nonlinSingle(nonlin)
                      'error on state (backward) ')
 end
 
-function nonlinBatch(nonlin)
+local function nonlinBatch(nonlin)
    local bs = math.random(1,32)
    local from = math.random(1,32)
    local outi = math.random(1,64)
@@ -582,7 +582,7 @@ function cudnntest.SoftMax_batch()
                      precision_backward, 'error on state (backward) ')
 end
 
-function cudnntest.functional_SpatialBias()
+function cudnntest.functional_bias2D()
    local bs = math.random(1,32)
    local from = math.random(1,32)
    local to = math.random(1,64)
@@ -600,7 +600,7 @@ function cudnntest.functional_SpatialBias()
    mod.weight:zero()
    local groundtruth = mod:forward(input)
    local result = groundtruth:clone():zero()
-   cudnn.functional.SpatialBias_updateOutput(mod.bias, result)
+   cudnn.functional.bias2D_updateOutput(cudnn.getHandle(), mod.bias, result)
    local error = result:float() - groundtruth:float()
    mytester:assertlt(error:abs():max(),
                      precision_forward, 'error on forward ')
@@ -610,10 +610,61 @@ function cudnntest.functional_SpatialBias()
    mod:backward(input, gradOutput, scale)
    local groundtruth = mod.gradBias
    local result = groundtruth:clone():zero()
-   cudnn.functional.SpatialBias_accGradParameters(gradOutput, result, scale)
+   cudnn.functional.bias2D_accGradParameters(cudnn.getHandle(), gradOutput, result, scale)
    error = result:float() - groundtruth:float()
    mytester:assertlt(error:abs():max(),
                      precision_backward, 'error on accGradParameters ')
+end
+
+function cudnntest.functional_convolution2d()
+    local a=cudnn.SpatialConvolution(3,16,5,5):cuda()
+    a.bias:zero();
+    local input = torch.randn(10,3,10,10):cuda()
+    a:zeroGradParameters()
+    a:forward(input);
+    local output = a.output:clone():normal()
+    local gradOutput = a.output:clone():normal()
+    local gradInput = a:backward(input, gradOutput):clone():normal()
+    local gradWeight = a.gradWeight:clone():zero()
+    cudnn.functional.Convolution2D_updateOutput(cudnn.getHandle(), input,
+                                                a.weight, output, a.dH,
+                                                a.dW, a.padH, a.padW)
+    mytester:assertlt((output - a.output):abs():max(),
+                     precision_forward, 'error on forward ')
+
+    cudnn.functional.Convolution2D_updateGradInput(cudnn.getHandle(), input,
+                                                   a.weight, output, gradOutput,
+                                                   gradInput,
+                                                   a.dH, a.dW, a.padH, a.padW)
+    mytester:assertlt((gradInput - a.gradInput):abs():max(),
+                     precision_forward, 'error on updateGradInput ')
+
+    cudnn.functional.Convolution2D_accGradParameters(cudnn.getHandle(), input,
+                                                   gradWeight, gradOutput,
+                                                   a.dH, a.dW, a.padH, a.padW)
+    mytester:assertlt((gradWeight - a.gradWeight):abs():max(),
+                     precision_forward, 'error on accGradParameters ')
+end
+
+function cudnntest.functional_maxpooling2d()
+    local a=cudnn.SpatialMaxPooling(2,2,2,2):cuda()
+    local input = torch.randn(10,3,10,10):cuda()
+    a:forward(input);
+    local output = a.output:clone():normal()
+    local gradOutput = a.output:clone():normal()
+    local gradInput = a:backward(input, gradOutput):clone():normal()
+    cudnn.functional.MaxPooling2D_updateOutput(cudnn.getHandle(), input,
+                                               output, a.kH, a.kW,
+                                               a.dH, a.dW, a.padH, a.padW)
+    mytester:assertlt((output - a.output):abs():max(),
+                     precision_forward, 'error on forward ')
+
+    cudnn.functional.MaxPooling2D_updateGradInput(cudnn.getHandle(), input,
+                                                   output, gradOutput, gradInput,
+                                                   a.kH, a.kW, a.dH, a.dW,
+                                                   a.padH, a.padW)
+    mytester:assertlt((gradInput - a.gradInput):abs():max(),
+                     precision_forward, 'error on updateGradInput ')
 end
 
 
