@@ -1,14 +1,14 @@
 cudnn.torch
 ===========
 
-Torch7 FFI bindings for NVidia CuDNN (R2) kernels!
+Torch7 FFI bindings for NVidia CuDNN (R3) kernels!
 
 Modules are API compatible their [`nn`](https://github.com/torch/nn) equivalents. Fully unit-tested against `nn` implementations.
 
 #### Installation
 
-* Install CuDNN (version R2)
-* Have at least Cuda 6.5
+* Install CuDNN (version R3)
+* Have at least Cuda 7.0
 * Have `libcudnn.so` in your library path (Install it from https://developer.nvidia.com/cuDNN )
 
 #### Modules
@@ -37,3 +37,4 @@ cudnn.VolumetricAveragePooling(kT, kW, kH, dT, dW, dH, padT, padW, padH)
 I have no time to support these, so please don't expect a quick response to filed github issues.
 
 For version CuDNN R1, checkout the branch **R1**
+For version CuDNN R2, checkout the branch **R2**
