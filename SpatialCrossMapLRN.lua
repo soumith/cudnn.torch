@@ -7,7 +7,7 @@ function LRN:__init(size, alpha, beta, K)
    self.size = size or 5
    self.alpha = alpha or 1e-4
    self.beta = beta or 0.75
-   self.K = K or 2.0
+   self.K = K or 1.0
    assert(self.size >= 1 and self.size <= 16, "size has to be between 1 and 16")
    assert(self.K >= 1e-5, "K has to be greater than 1e-5")
    assert(self.beta >= 0.01, "Beta has to be > 0.01")
