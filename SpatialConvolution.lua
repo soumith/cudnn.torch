@@ -139,7 +139,9 @@ function SpatialConvolution:createIODescriptors(input)
         local algWorkspaceLimit = self.workspace_limit
             or (self.nInputPlane * self.kH * self.kW * 4) -- 4 = sizeof int/float.
 
-        if self.fastest_mode then algSearchMode = 'CUDNN_CONVOLUTION_FWD_PREFER_FASTEST' end
+        if self.fastest_mode or cudnn.fastest == true then
+            algSearchMode = 'CUDNN_CONVOLUTION_FWD_PREFER_FASTEST'
+        end
         if cudnn.benchmark then -- the manual auto-tuner is run
             local perfResults = ffi.new("cudnnConvolutionFwdAlgoPerf_t[?]", 1)
             local intt = torch.IntTensor(1);
@@ -175,7 +177,7 @@ function SpatialConvolution:createIODescriptors(input)
         local algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_NO_WORKSPACE'
         local algWorkspaceLimit = self.workspace_limit
             or (self.nInputPlane * self.kH * self.kW * 4) -- 4 = sizeof int/float.
-        if self.fastest_mode then
+        if self.fastest_mode  or cudnn.fastest == true then
             algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST'
         end
 
@@ -214,7 +216,7 @@ function SpatialConvolution:createIODescriptors(input)
         local algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_NO_WORKSPACE'
         local algWorkspaceLimit = self.workspace_limit
             or (self.nInputPlane * self.kH * self.kW * 4) -- 4 = sizeof int/float.
-        if self.fastest_mode then
+        if self.fastest_mode or cudnn.fastest == true then
             algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST'
         end
         if cudnn.benchmark then -- the manual auto-tuner is run

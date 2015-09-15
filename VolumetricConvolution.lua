@@ -119,12 +119,14 @@ function VolumetricConvolution:createIODescriptors(input)
      local algSearchMode = 'CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT'
      local algWorkspaceLimit = self.workspace_limit
         or (self.nInputPlane * self.kT * self.kH * self.kW * 4) -- 4 = sizeof int/float.
-     if self.fastest_mode then algSearchMode = 'CUDNN_CONVOLUTION_FWD_PREFER_FASTEST' end
-         errcheck('cudnnGetConvolutionForwardAlgorithm',
-                  cudnn.getHandle(),
-                  self.iDesc[0], self.weightDesc[0],
-                  self.convDesc[0], self.oDesc[0],
-                  algSearchMode, algWorkspaceLimit, algType)
+     if self.fastest_mode  or cudnn.fastest == true then
+         algSearchMode = 'CUDNN_CONVOLUTION_FWD_PREFER_FASTEST'
+     end
+     errcheck('cudnnGetConvolutionForwardAlgorithm',
+              cudnn.getHandle(),
+              self.iDesc[0], self.weightDesc[0],
+              self.convDesc[0], self.oDesc[0],
+              algSearchMode, algWorkspaceLimit, algType)
      algType[0] = self.fmode or algType[0]
          self.fwdAlgType = algType
          local bufSize = torch.LongTensor(1)
@@ -140,7 +142,9 @@ function VolumetricConvolution:createIODescriptors(input)
      local algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_NO_WORKSPACE'
      local algWorkspaceLimit = self.workspace_limit
         or (self.nInputPlane * self.kT * self.kH * self.kW * 4) -- 4 = sizeof int/float.
-     if self.fastest_mode then algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST' end
+     if self.fastest_mode  or cudnn.fastest == true then
+         algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST'
+     end
          errcheck('cudnnGetConvolutionBackwardFilterAlgorithm',
                   cudnn.getHandle(),
                   self.iDesc[0], self.oDesc[0],
@@ -161,7 +165,9 @@ function VolumetricConvolution:createIODescriptors(input)
      local algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_NO_WORKSPACE'
      local algWorkspaceLimit = self.workspace_limit
         or (self.nInputPlane * self.kT * self.kH * self.kW * 4) -- 4 = sizeof int/float.
-     if self.fastest_mode then algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST' end
+     if self.fastest_mode  or cudnn.fastest == true then
+         algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST'
+     end
          errcheck('cudnnGetConvolutionBackwardDataAlgorithm',
                   cudnn.getHandle(),
                   self.weightDesc[0], self.oDesc[0],

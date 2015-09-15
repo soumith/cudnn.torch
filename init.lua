@@ -5,7 +5,8 @@ include 'ffi.lua'
 local C = cudnn.C
 local ffi = require 'ffi'
 
-cudnn.benchmark = true
+cudnn.benchmark = false
+cudnn.fastest = false
 
 local maxStreamsPerDevice = 1024
 local numDevices = cutorch.getDeviceCount()
