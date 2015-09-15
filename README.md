@@ -36,7 +36,28 @@ cudnn.VolumetricMaxPooling(kT, kW, kH, dT, dW, dH, padT, padW, padH)
 cudnn.VolumetricAveragePooling(kT, kW, kH, dT, dW, dH, padT, padW, padH)
 ```
 
-I have no time to support these, so please don't expect a quick response to filed github issues.
+### Modes
+There are two globally availabe modes useful for tuning performance:
+```lua
+require 'cudnn'
+cudnn.benchmark = true -- uses the inbuilt cudnn auto-tuner to find the fastest convolution algorithms.
+                       -- If this is set to false, uses some in-built heuristics that might not always be fastest.
+```
+by default `cudnn.benchmark` is set to `false`.
 
+```lua
+cudnn.fastest = true -- this is like the :fastest() mode for the Convolution modules,
+                     -- simply picks the fastest convolution algorithm, rather than tuning for workspace size
+```
+by default, `cudnn.fastest` is set to `false`.
+
+
+```lua
+cudnn.verbose = true -- this prints out some more verbose information useful for debugging
+```
+by default, `cudnn.verbose` is set to `false`.
+
+
+### Older versions
 For version CuDNN R1, checkout the branch **R1**
 For version CuDNN R2, checkout the branch **R2**
