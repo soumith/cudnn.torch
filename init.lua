@@ -5,6 +5,8 @@ include 'ffi.lua'
 local C = cudnn.C
 local ffi = require 'ffi'
 
+cudnn.benchmark = true
+
 local maxStreamsPerDevice = 1024
 local numDevices = cutorch.getDeviceCount()
 -- this tensor keeps track of whether a handle has been initialized or not

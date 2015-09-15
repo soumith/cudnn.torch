@@ -6,6 +6,11 @@ local cudnn = require 'cudnn.env'
 local ffi = require 'ffi'
 local errcheck = cudnn.errcheck
 
+local NULL
+if not jit then
+    NULL = ffi.C.NULL
+end
+
 cudnn.functional = {}
 
 local one = torch.FloatTensor({1});
@@ -177,7 +182,7 @@ cudnn.functional.Convolution2D_updateGradInput = function(handle, input, weight,
                oDesc[0], gradOutput:data(),
                convDesc[0],
 	       algType[0],
-               ffi.C.NULL, 0,
+               NULL, 0,
                zero:data(),
                iDesc[0], gradInput:data());
 
@@ -244,7 +249,7 @@ cudnn.functional.Convolution2D_accGradParameters = function(handle, input, gradW
              oDesc[0], gradOutput:data(),
              convDesc[0],
              algType[0],
-             ffi.C.NULL, 0,
+             NULL, 0,
              one:data(),
              weightDesc[0], gradWeight:data());
 end
