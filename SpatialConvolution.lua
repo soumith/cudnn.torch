@@ -52,6 +52,7 @@ end
 function SpatialConvolution:fastest(mode)
    if mode == nil then mode = true end
    self.fastest_mode = mode
+   self.iSize:fill(0)
    return self
 end
 
@@ -65,6 +66,7 @@ function SpatialConvolution:setMode(fmode, bdmode, bwmode)
    if bwmode ~= nil then
       self.bwmode = bwmode
    end
+   self.iSize:fill(0)
    return self
 end
 
