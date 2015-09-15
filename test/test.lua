@@ -692,15 +692,11 @@ end
 function cudnntest.LogSoftMax_batch()
    local bs = math.random(1,32)
    local from = math.random(1,32)
-   local outi = math.random(1,64)
-   local outj = math.random(1,64)
-   local ini = outi
-   local inj = outj
-   local input = torch.randn(bs,from,inj,ini):cuda()
-   local gradOutput = torch.randn(bs,from,outj,outi):cuda()
+   local input = torch.randn(bs,from):cuda()
+   local gradOutput = torch.randn(bs,from):cuda()
 
    local sconv = nn.LogSoftMax():cuda()
-   local groundtruth = sconv:forward(input:view(bs,-1))
+   local groundtruth = sconv:forward(input)
    local groundgrad = sconv:backward(input, gradOutput)
    cutorch.synchronize()
    local gconv = cudnn.LogSoftMax():cuda()
@@ -713,8 +709,8 @@ function cudnntest.LogSoftMax_batch()
    local rescuda = gconv:forward(input)
    local resgrad = gconv:backward(input, gradOutput)
    cutorch.synchronize()
-   mytester:asserteq(rescuda:dim(), 4, 'error in dimension')
-   mytester:asserteq(resgrad:dim(), 4, 'error in dimension')
+   mytester:asserteq(rescuda:dim(), 2, 'error in dimension')
+   mytester:asserteq(resgrad:dim(), 2, 'error in dimension')
 
    local error = rescuda:float() - groundtruth:float()
    mytester:assertlt(error:abs():max(),
