@@ -26,7 +26,9 @@ cudnn.Sigmoid(inplace[=false])
 
 -- SoftMax can be run in fast mode or accurate mode. Default is accurate mode.
 cudnn.SoftMax(fastMode [= false])          -- SoftMax across each image (just like nn.SoftMax)
+cudnn.LogSoftMax()                         -- LogSoftMax across each image (just like nn.LogSoftMax)
 cudnn.SpatialSoftMax(fastMode [= false])   -- SoftMax across feature-maps (per spatial location)
+cudnn.SpatialLogSoftMax()                  -- LogSoftMax across feature-maps (per spatial location)
 
 -- Volumetric inputs (4D or 5D batched mode)
 cudnn.VolumetricConvolution(nInputPlane, nOutputPlane, kT, kW, kH, dT, dW, dH, padT, padW, padH)
