@@ -331,20 +331,25 @@ function cudnntest.SpatialMaxPooling_batch()
    local from = math.random(1,32)
    local ki = math.random(2,4)
    local kj = math.random(2,4)
-   local si = ki
-   local sj = kj
-   local outi = math.random(1,64)
-   local outj = math.random(1,64)
-   local ini = (outi-1)*si+ki
-   local inj = (outj-1)*sj+kj
+   local si = math.random(1,4)
+   local sj = math.random(1,4)
+   local outi = math.random(16,64)
+   local outj = math.random(16,64)
+   local padi = math.random(0,ki/2-1)
+   local padj = math.random(0,kj/2-1)
+   local ini = (outi-1)*si+ki - padi*2
+   local inj = (outj-1)*sj+kj - padj*2
+   local ceil_mode = math.random(0,1) == 1
    local input = torch.randn(bs,from,inj,ini):cuda()
    local gradOutput = torch.randn(bs,from,outj,outi):cuda()
 
-   local sconv = nn.SpatialMaxPooling(ki,kj,si,sj):cuda()
+   local sconv = nn.SpatialMaxPooling(ki,kj,si,sj,padi,padj):cuda()
+   if ceil_mode then sconv:ceil() end
    local groundtruth = sconv:forward(input)
    local groundgrad = sconv:backward(input, gradOutput)
    cutorch.synchronize()
-   local gconv = cudnn.SpatialMaxPooling(ki,kj,si,sj):cuda()
+   local gconv = cudnn.SpatialMaxPooling(ki,kj,si,sj,padi,padj):cuda()
+   if ceil_mode then sconv:ceil() end
    local rescuda = gconv:forward(input)
    -- serialize and deserialize
    torch.save('modelTemp.t7', gconv)
@@ -364,20 +369,25 @@ function cudnntest.SpatialMaxPooling_single()
    local from = math.random(1,32)
    local ki = math.random(2,4)
    local kj = math.random(2,4)
-   local si = ki
-   local sj = kj
-   local outi = math.random(1,64)
-   local outj = math.random(1,64)
-   local ini = (outi-1)*si+ki
-   local inj = (outj-1)*sj+kj
+   local si = math.random(1,4)
+   local sj = math.random(1,4)
+   local outi = math.random(16,64)
+   local outj = math.random(16,64)
+   local padi = math.random(0,ki/2-1)
+   local padj = math.random(0,kj/2-1)
+   local ini = (outi-1)*si+ki - padi*2
+   local inj = (outj-1)*sj+kj - padj*2
+   local ceil_mode = math.random(0,1) == 1
    local input = torch.randn(from,inj,ini):cuda()
    local gradOutput = torch.randn(from,outj,outi):cuda()
 
-   local sconv = nn.SpatialMaxPooling(ki,kj,si,sj):cuda()
+   local sconv = nn.SpatialMaxPooling(ki,kj,si,sj,padi,padj):cuda()
+   if ceil_mode then sconv:ceil() end
    local groundtruth = sconv:forward(input)
    local groundgrad = sconv:backward(input, gradOutput)
    cutorch.synchronize()
-   local gconv = cudnn.SpatialMaxPooling(ki,kj,si,sj):cuda()
+   local gconv = cudnn.SpatialMaxPooling(ki,kj,si,sj,padi,padj):cuda()
+   if ceil_mode then sconv:ceil() end
    local _ = gconv:forward(input)
    -- serialize and deserialize
    torch.save('modelTemp.t7', gconv)
