@@ -315,7 +315,7 @@ function SpatialConvolution:createIODescriptors(input)
         local kH, kW = self.kH, self.kW
         local oH, oW = oSize[3], oSize[4]
         self.input_offset = self.nInputPlane / self.groups * iH * iW
-        self.output_offset = self.nOutputPlane / self.groups * oH, oW
+        self.output_offset = self.nOutputPlane / self.groups * oH * oW
         self.weight_offset = self.nInputPlane / self.groups * self.nOutputPlane / self.groups * kH * kW
 
         if not batch then
