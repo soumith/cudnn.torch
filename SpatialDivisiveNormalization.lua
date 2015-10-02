@@ -22,7 +22,7 @@ function DivisiveNorm:resetDescriptors()
    local function destroyDesc(d)
       errcheck('cudnnDestroyDivisiveNormDescriptor', d[0]);
    end
-   ffi.gc(self.DivisiveNormDesc, destroyPoolDesc)
+   ffi.gc(self.DivisiveNormDesc, destroyDesc)
 end
 
 function DivisiveNorm:createIODescriptors(input)

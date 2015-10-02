@@ -22,7 +22,7 @@ function LRN:resetDescriptors()
    local function destroyDesc(d)
       errcheck('cudnnDestroyLRNDescriptor', d[0]);
    end
-   ffi.gc(self.LRNDesc, destroyPoolDesc)
+   ffi.gc(self.LRNDesc, destroyDesc)
 end
 
 function LRN:createIODescriptors(input)
