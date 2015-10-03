@@ -218,7 +218,7 @@ function VolumetricConvolution:updateOutput(input)
             self.extraBuffer:data(), self.extraBufferSizeInBytes,
             zero:data(),
             self.oDesc[0], self.output:data());
-   errcheck('cudnnAddTensor', cudnn.getHandle(),
+   errcheck('cudnnAddTensor_v2', cudnn.getHandle(),
             'CUDNN_ADD_SAME_C', one:data(),
             self.biasDesc[0], self.bias:data(), one:data(),
             self.oDescBias[0], self.output:data());
