@@ -1,9 +1,6 @@
 require 'cudnn'
 require 'torch'
 
-cudnn.benchmark=true
-cudnn.verbose=true
-
 function bench(title, nInputC, nOutputC, kH, kW, sH, sW, iH, iW, nBatch, ...)
    local m1 = cudnn.SpatialConvolution(nInputC,nOutputC,kW,kH, sW, sH):setMode(...):fastest():cuda()
    local i1 = torch.zeros(nBatch, nInputC, iH, iW):cuda()
