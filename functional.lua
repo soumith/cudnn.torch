@@ -27,7 +27,7 @@ cudnn.functional.bias2D_updateOutput = function(handle, bias, output)
 
     local biasDesc = cudnn.toDescriptor(bias:view(1, bias:nElement(),1,1))
     local oDesc = cudnn.toDescriptor(output)
-    errcheck('cudnnAddTensor', handle,
+    errcheck('cudnnAddTensor_v2', handle,
              'CUDNN_ADD_SAME_C',
              one:data(), biasDesc[0], bias:data(),
              one:data(), oDesc[0], output:data())

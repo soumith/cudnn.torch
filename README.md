@@ -1,13 +1,13 @@
 cudnn.torch
 ===========
 
-Torch7 FFI bindings for NVidia CuDNN (R3) kernels!
+Torch7 FFI bindings for NVidia CuDNN (R4) kernels!
 
 Modules are API compatible their [`nn`](https://github.com/torch/nn) equivalents. Fully unit-tested against `nn` implementations.
 
 #### Installation
 
-* Install CuDNN (version R3)
+* Install CuDNN (version R4 EA)
 * Have at least Cuda 7.0
 * Have `libcudnn.so` in your library path (Install it from https://developer.nvidia.com/cuDNN )
 
@@ -61,3 +61,4 @@ by default, `cudnn.verbose` is set to `false`.
 ### Older versions
 For version CuDNN R1, checkout the branch **R1**
 For version CuDNN R2, checkout the branch **R2**
+For version CuDNN R3, checkout the branch **R3**
