@@ -1,13 +1,13 @@
 cudnn.torch
 ===========
 
-Torch7 FFI bindings for NVidia CuDNN (R3) kernels!
+Torch7 FFI bindings for NVidia CuDNN (R4) kernels!
 
 Modules are API compatible their [`nn`](https://github.com/torch/nn) equivalents. Fully unit-tested against `nn` implementations.
 
 #### Installation
 
-* Install CuDNN (version R3)
+* Install CuDNN (version R4 EA)
 * Have at least Cuda 7.0
 * Have `libcudnn.so` in your library path (Install it from https://developer.nvidia.com/cuDNN )
 
@@ -61,3 +61,20 @@ by default, `cudnn.verbose` is set to `false`.
 ### Older versions
 For version CuDNN R1, checkout the branch **R1**
 For version CuDNN R2, checkout the branch **R2**
+For version CuDNN R3, checkout the branch **R3**
+
+
+R4 Release Notes:
+- Rather than resolving v3-v4 diffs, I have imported new cudnn.h with its entirety and converted comments and defines. This should be less error-prone.
+- addTensor_v2 uses changed to new AddTensor API.
+
+R4 TODO: 
+per-activation BN code needs to be added (new .lua similar to SpatialBN.lua, as per Andrei:
+I believe we have at least one thing missing - per-activation BN (Torch implementation in nn.BatchNormalization.lua).
+What I believe we have now is an integration of implementation for nn.SpatialBatchNormalization.lua
+
+This is very similar to SpatialBatchNormalizaiton.lua but should use a different cudnnBatchNormalizationMode_t and tensor dimensions need to be adjusted accordingly.
+For Spatial BN normalization is performed over N with 1CHW result and for per-activation it's done over NHW with 1C11 result.
+
+Per-activation BN is only used after non-convolutional layers where spatially-invariant behavior is not expected.
+

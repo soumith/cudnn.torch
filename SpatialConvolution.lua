@@ -381,7 +381,6 @@ function SpatialConvolution:updateOutput(input)
 
     -- add bias
     errcheck('cudnnAddTensor', cudnn.getHandle(),
-             'CUDNN_ADD_SAME_C',
              one:data(), self.biasDesc[0], self.bias:data(),
              one:data(), self.oDescForBias[0], self.output:data())
 
