@@ -24,6 +24,8 @@ function SpatialConvolution:__init(nInputPlane, nOutputPlane,
     self.weight = torch.Tensor(nOutputPlane, nInputPlane/self.groups, kW, kH)
     self.gradWeight = torch.Tensor(nOutputPlane, nInputPlane/self.groups, kW, kH)
     self:reset()
+    -- should nil for serialization, the reset will still work
+    self.reset = nil
     self.iSize = torch.LongStorage(4):fill(0)
 end
 
