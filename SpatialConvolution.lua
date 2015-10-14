@@ -263,6 +263,7 @@ function SpatialConvolution:createIODescriptors(input)
             algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST'
         end
         if cudnn.benchmark then -- the manual auto-tuner is run
+<<<<<<< HEAD
             if autotunerCache[3][autotunerHash] then
                 algType[0] = autotunerCache[3][autotunerHash]
             else
@@ -284,6 +285,19 @@ function SpatialConvolution:createIODescriptors(input)
                               shape(self.weight), shape(input[input_slice]),
                               shape(self.output[output_slice])))
                 end
+=======
+            local perfResults = ffi.new("cudnnConvolutionBwdDataAlgoPerf_t[?]", 1)
+            local intt = torch.IntTensor(1);
+            errcheck('cudnnFindConvolutionBackwardDataAlgorithm',
+                     cudnn.getHandle(),
+                     self.weightDesc[0], self.oDesc[0],
+                     self.convDesc[0], self.iDesc[0],
+                     1, intt:data(), perfResults)
+            algType[0] = perfResults[0].algo
+            if cudnn.verbose then
+                print('cudnnConvolutionBwdDataAlgoPerf_t\tAutoTuning:', perfResults[0].time, '\t',
+                      tonumber(perfResults[0].memory), '\t', tonumber(perfResults[0].algo))
+>>>>>>> 350243991bf7c1f76648c668df2df6be644a2b31
             end
         else
             errcheck('cudnnGetConvolutionBackwardDataAlgorithm',
