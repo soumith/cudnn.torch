@@ -151,8 +151,8 @@ function SpatialConvolution:createIODescriptors(input)
                      1, intt:data(), perfResults)
             algType[0] = perfResults[0].algo
             if cudnn.verbose then
-                print('AutoTuning:', perfResults[0].time,
-                      tonumber(perfResults[0].memory), tonumber(perfResults[0].algo))
+                print('cudnnConvolutionFwdAlgoPerf\t\tAutoTuning:', perfResults[0].time, '\t',
+                      tonumber(perfResults[0].memory), '\t', tonumber(perfResults[0].algo))
             end
         else
             errcheck('cudnnGetConvolutionForwardAlgorithm',
@@ -190,8 +190,8 @@ function SpatialConvolution:createIODescriptors(input)
                      1, intt:data(), perfResults)
             algType[0] = perfResults[0].algo
             if cudnn.verbose then
-                print('AutoTuning:', perfResults[0].time,
-                      tonumber(perfResults[0].memory), tonumber(perfResults[0].algo))
+               print('cudnnFindConvolutionBwdFilterAlgoPerf_t\tAutoTuning:', perfResults[0].time, '\t',
+                      tonumber(perfResults[0].memory), '\t', tonumber(perfResults[0].algo))
             end
         else
             errcheck('cudnnGetConvolutionBackwardFilterAlgorithm',
@@ -228,8 +228,8 @@ function SpatialConvolution:createIODescriptors(input)
                      1, intt:data(), perfResults)
             algType[0] = perfResults[0].algo
             if cudnn.verbose then
-                print('AutoTuning:', perfResults[0].time,
-                      tonumber(perfResults[0].memory), tonumber(perfResults[0].algo))
+                print('cudnnConvolutionBwdDataAlgoPerf_t\tAutoTuning:', perfResults[0].time, '\t',
+                      tonumber(perfResults[0].memory), '\t', tonumber(perfResults[0].algo))
             end
         else
             errcheck('cudnnGetConvolutionBackwardDataAlgorithm',
