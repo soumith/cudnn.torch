@@ -31,7 +31,7 @@ function SpatialBatchNormalization:updateOutput(input)
             cudnn.getHandle(), self.mode, one:data(), zero:data(),
             self.iDesc[0], input:data(), self.output:data(),
             self.sDesc[0], self.weight:data(), self.bias:data(),
-            self.momentum, self.running_mean:data(), self.running_std:data(), self.eps, save_mean:data(), save_std:data());
+            self.momentum, self.running_mean:data(), self.running_std:data(), self.eps, self.save_mean:data(), self.save_std:data());
    else
       errcheck('cudnnBatchNormalizationForwardInference',
             cudnn.getHandle(), self.mode, one:data(), zero:data(),
@@ -50,7 +50,7 @@ function SpatialBatchNormalization:updateGradInput(input, gradOutput)
       self.iDesc[0], input:data(), gradOutput:data(), self.gradInput:data(),
                      -- input is bottom, gradOutput is topDiff, self.gradInput is resultBottomDiff
       self.sDesc[0], self.weight:data(), self.gradWeight:data(), self.gradBias:data(),
-      self.eps, save_mean:data(), save_std:data());
+      self.eps, self.save_mean:data(), self.save_std:data());
    return self.gradInput
 end
 
