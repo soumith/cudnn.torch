@@ -68,7 +68,12 @@ function SpatialSoftMax:updateOutput(input)
 end
 
 function SpatialSoftMax:updateGradInput(input, gradOutput)
-   assert(gradOutput:isContiguous());
+   if not gradOutput:isContiguous() then
+      self._gradOutput = self._gradOutput or gradOutput.new()
+      self._gradOutput:resizeAs(gradOutput):copy(gradOutput)
+      gradOutput = self._gradOutput
+   end
+
    self:createIODescriptors(input)
    errcheck('cudnnSoftmaxBackward',
             cudnn.getHandle(),
