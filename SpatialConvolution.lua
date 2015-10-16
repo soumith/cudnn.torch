@@ -21,8 +21,8 @@ function SpatialConvolution:__init(nInputPlane, nOutputPlane,
            'nInputPlane should be divisible by nGroups')
     assert(nOutputPlane % self.groups == 0,
            'nOutputPlane should be divisible by nGroups')
-    self.weight = torch.Tensor(nOutputPlane, nInputPlane/self.groups, kW, kH)
-    self.gradWeight = torch.Tensor(nOutputPlane, nInputPlane/self.groups, kW, kH)
+    self.weight = torch.Tensor(nOutputPlane, nInputPlane/self.groups, kH, kW)
+    self.gradWeight = torch.Tensor(nOutputPlane, nInputPlane/self.groups, kH, kW)
     self:reset()
     -- should nil for serialization, the reset will still work
     self.reset = nil
