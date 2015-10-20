@@ -110,6 +110,7 @@ include 'SpatialLogSoftMax.lua'
 include 'SoftMax.lua'
 include 'LogSoftMax.lua'
 include 'SpatialCrossMapLRN.lua'
+include 'SpatialCrossEntropyCriterion.lua'
 
 include 'functional.lua'
 
