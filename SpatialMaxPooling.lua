@@ -4,3 +4,7 @@ function SpatialMaxPooling:__init(kW, kH, dW, dH, padW, padH)
    parent.__init(self, kW, kH, dW, dH, padW, padH)
    self.mode = 'CUDNN_POOLING_MAX'
 end
+
+function SpatialMaxPooling:__tostring__()
+   return nn.SpatialMaxPooling.__tostring__(self)
+end
