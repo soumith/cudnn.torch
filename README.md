@@ -30,6 +30,8 @@ cudnn.LogSoftMax()                         -- LogSoftMax across each image (just
 cudnn.SpatialSoftMax(fastMode [= false])   -- SoftMax across feature-maps (per spatial location)
 cudnn.SpatialLogSoftMax()                  -- LogSoftMax across feature-maps (per spatial location)
 
+cudnn.SpatialCrossEntropyCriterion()       -- A spatial version of LogSoftMax + ClassNLLCriterion in one shot
+
 -- Volumetric inputs (4D or 5D batched mode)
 cudnn.VolumetricConvolution(nInputPlane, nOutputPlane, kT, kW, kH, dT, dW, dH, padT, padW, padH)
 cudnn.VolumetricMaxPooling(kT, kW, kH, dT, dW, dH, padT, padW, padH)

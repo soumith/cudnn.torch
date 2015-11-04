@@ -111,6 +111,7 @@ include 'SoftMax.lua'
 include 'LogSoftMax.lua'
 include 'SpatialCrossMapLRN.lua'
 include 'SpatialBatchNormalization.lua'
+include 'SpatialCrossEntropyCriterion.lua'
 
 include 'functional.lua'
 
