@@ -30,6 +30,8 @@ cudnn.LogSoftMax()                         -- LogSoftMax across each image (just
 cudnn.SpatialSoftMax(fastMode [= false])   -- SoftMax across feature-maps (per spatial location)
 cudnn.SpatialLogSoftMax()                  -- LogSoftMax across feature-maps (per spatial location)
 
+cudnn.SpatialCrossEntropyCriterion()       -- A spatial version of LogSoftMax + ClassNLLCriterion in one shot
+
 -- Volumetric inputs (4D or 5D batched mode)
 cudnn.VolumetricConvolution(nInputPlane, nOutputPlane, kT, kW, kH, dT, dW, dH, padT, padW, padH)
 cudnn.VolumetricMaxPooling(kT, kW, kH, dT, dW, dH, padT, padW, padH)
@@ -68,7 +70,7 @@ R4 Release Notes:
 - Rather than resolving v3-v4 diffs, I have imported new cudnn.h with its entirety and converted comments and defines. This should be less error-prone.
 - addTensor_v2 uses changed to new AddTensor API.
 
-R4 TODO: 
+R4 TODO:
 per-activation BN code needs to be added (new .lua similar to SpatialBN.lua, as per Andrei:
 I believe we have at least one thing missing - per-activation BN (Torch implementation in nn.BatchNormalization.lua).
 What I believe we have now is an integration of implementation for nn.SpatialBatchNormalization.lua
@@ -77,4 +79,3 @@ This is very similar to SpatialBatchNormalizaiton.lua but should use a different
 For Spatial BN normalization is performed over N with 1CHW result and for per-activation it's done over NHW with 1C11 result.
 
 Per-activation BN is only used after non-convolutional layers where spatially-invariant behavior is not expected.
-
