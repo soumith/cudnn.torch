@@ -731,6 +731,7 @@ function cudnntest.LogSoftMax_batch()
 end
 
 function cudnntest.SpatialLogSoftMax()
+<<<<<<< HEAD
     -- batch
     local numLabels = math.random(5,10)
     local h = math.random(5,10)
@@ -823,8 +824,6 @@ function cudnntest.SpatialCrossEntropyCriterion()
     mytester:assertlt(err, precision_backward, 'error in difference between central difference and :backward')
 
 end
-
-
 
 function cudnntest.functional_bias2D()
    local bs = math.random(1,32)

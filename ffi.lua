@@ -567,7 +567,7 @@ cudnnStatus_t             cudnnConvolutionBackwardFilter_v3(
                                 const void                         *beta,
                                 const cudnnFilterDescriptor_t       dwDesc,
                                 void                               *dw );
-                                                           
+
 /*********************************************************/
 /* helper function to provide the convolution algo that fit best the requirement */
 typedef enum
@@ -937,7 +937,7 @@ cudnnStatus_t             cudnnCreateLRNDescriptor(
 typedef enum { CUDNN_LRN_MIN_N     = 1,       /*  minimum allowed lrnN */
                CUDNN_LRN_MAX_N     = 16 }      /*  maximum allowed lrnN */
              LRN_MinMaxFakeEnum;
- 
+
 /*  define CUDNN_LRN_MIN_K     1e-5    -- minimum allowed lrnK */
 /*  define CUDNN_LRN_MIN_BETA  0.01    -- minimum allowed lrnBeta */
 
@@ -1228,7 +1228,7 @@ cudnnStatus_t             cudnnGetConvolutionNdDescriptor_v2(
                                 int                                 strideA[],
                                 int                                 upscaleA[],
                                 cudnnConvolutionMode_t             *mode );
-                                                         
+
 cudnnStatus_t             cudnnAddTensor_v2(
                                 cudnnHandle_t                       handle,
                                 cudnnAddMode_t                      mode,
@@ -1238,7 +1238,7 @@ cudnnStatus_t             cudnnAddTensor_v2(
                                 const void                         *beta,
                                 cudnnTensorDescriptor_t             yDesc,
                                 void                               *y );
-                                            
+
 cudnnStatus_t             cudnnConvolutionBackwardFilter_v2(
                                 cudnnHandle_t                       handle,
                                 const void                         *alpha,
@@ -1250,7 +1250,7 @@ cudnnStatus_t             cudnnConvolutionBackwardFilter_v2(
                                 const void                         *beta,
                                 const cudnnFilterDescriptor_t       dxDesc,
                                 void                               *dx );
-                                                           
+
 cudnnStatus_t             cudnnConvolutionBackwardData_v2(
                                 cudnnHandle_t                       handle,
                                 const void                         *alpha,
@@ -1264,12 +1264,19 @@ cudnnStatus_t             cudnnConvolutionBackwardData_v2(
                                 void                               *dx );
 ]]
 
-local ok,err = pcall(function() cudnn.C = ffi.load('libcudnn') end)
+local libnames = {'libcudnn.so.4', 'libcudnn.4.dylib'}
+
+local ok = false
+for i=1,#libnames do
+   ok = pcall(function () cudnn.C = ffi.load(libnames[i]) end)
+   if ok then break; end
+end
+
 if not ok then
    print(err)
-   error([['libcudnn not found in library path.
+   error([['libcudnn (R4) not found in library path.
 Please install CuDNN from https://developer.nvidia.com/cuDNN
-Then make sure all the files named as libcudnn.so* are placed in your library load path (for example /usr/local/lib , or manually add a path to LD_LIBRARY_PATH)
+Then make sure files named as libcudnn.so.4 or libcudnn.4.dylib are placed in your library load path (for example /usr/local/lib , or manually add a path to LD_LIBRARY_PATH)
 ]])
 end
 
