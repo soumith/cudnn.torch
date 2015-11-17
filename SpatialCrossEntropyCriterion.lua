@@ -14,11 +14,10 @@ local SpatialCrossEntropyCriterion, parent = torch.class('cudnn.SpatialCrossEntr
     input = batchSize x nClasses x H x W
     target = batchSize x H x W
 ]]--
-function SpatialCrossEntropyCriterion:__init()
+function SpatialCrossEntropyCriterion:__init(weights)
     parent.__init(self)
     self.slsm = cudnn.SpatialLogSoftMax()
-    self.nll = nn.ClassNLLCriterion()
-    self.nll.sizeAverage = false
+    self.nll = nn.ClassNLLCriterion(weights)
     self.sizeAverage = true
 end
 
@@ -44,6 +43,9 @@ function SpatialCrossEntropyCriterion:updateOutput(input, target)
     -- apply SpatialLogSoftMax to input
     self.slsm:updateOutput(input)
 
+    -- Update submodule sizeAverage to make it consistent.
+    self.nll.sizeAverage = self.sizeAverage
+
     -- fold the height and width dims into the mini-batch dim.
     self.nll:updateOutput(transpose(self.slsm.output), target:view(-1))
     self.output = self.nll.output
@@ -62,9 +64,6 @@ function SpatialCrossEntropyCriterion:updateGradInput(input, target)
     -- unfold the height and width dims back
     self.slsm:updateGradInput(input, transposeBack(self.nll.gradInput, input))
     self.gradInput = self.slsm.gradInput
-    if self.sizeAverage then
-        self.gradInput:div(input:size(1))
-    end
     return self.gradInput
 end
 
