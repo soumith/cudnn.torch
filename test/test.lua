@@ -731,7 +731,6 @@ function cudnntest.LogSoftMax_batch()
 end
 
 function cudnntest.SpatialLogSoftMax()
-<<<<<<< HEAD
     -- batch
     local numLabels = math.random(5,10)
     local h = math.random(5,10)
@@ -765,33 +764,30 @@ function cudnntest.SpatialLogSoftMax()
     mytester:assertlt(err, precision_backward, 'error in difference between central difference and :backward')
 end
 
-
 function cudnntest.SpatialBatchNormalization()
-   -- batch   
-   local h = 4 --math.random(5,10)
-   local w = 4 --math.random(5,10)
-   local bsz = 4 --math.random(1, 32)
-   local from = 4 --math.random(1, 32)
-   local input = torch.randn(bsz,from,h,w):cuda()
-   local gradOutput = torch.randn(bsz,from,h,w):cuda()
-   local cbn = cudnn.SpatialBatchNormalization(bsz, 1e-3):cuda()
-   local gbn = nn.SpatialBatchNormalization(bsz, 1e-3):cuda()
+   -- batch
+      local h = math.random(5,10)
+      local w = math.random(5,10)
+      local bsz = math.random(1, 32)
+      local from = math.random(1, 32)
+      local input = torch.randn(bsz,from,h,w):cuda()
+      local gradOutput = torch.randn(bsz,from,h,w):cuda()
+      local cbn = cudnn.SpatialBatchNormalization(from, 1e-3):cuda()
+      local gbn = nn.SpatialBatchNormalization(from, 1e-3):cuda()
+      cbn.weight:copy(gbn.weight)
+      cbn.bias:copy(gbn.bias)
+      local rescuda = cbn:forward(input)
+      local groundtruth = gbn:forward(input)
+      local resgrad = cbn:backward(input, gradOutput)
+      local groundgrad = gbn:backward(input, gradOutput)
 
-   local rescuda = cbn:forward(input)
-   local groundtruth = gbn:forward(input)
-   local resgrad = cbn:backward(input, gradOutput)
-   local groundgrad = gbn:backward(input, gradOutput)
-   
-
-   local error = rescuda:float() - groundtruth:float()
-   mytester:assertlt(error:abs():max(),
-                     precision_forward, 'error in batch normalization (forward) ')
-   error = resgrad:float() - groundgrad:float()
-   mytester:assertlt(error:abs():max(),
-                     precision_backward, 'error in batch normalization (backward) ')
-   
+      local error = rescuda:float() - groundtruth:float()
+      mytester:assertlt(error:abs():max(),
+                        precision_forward, 'error in batch normalization (forward) ')
+      error = resgrad:float() - groundgrad:float()
+      mytester:assertlt(error:abs():max(),
+                        precision_backward, 'error in batch normalization (backward) ')
 end
-
 
 function cudnntest.SpatialCrossEntropyCriterion()
     -- batch
