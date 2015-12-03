@@ -11,31 +11,37 @@ function SpatialBatchNormalization:__init(nFeature, eps, momentum, affine)
 end
 
 function SpatialBatchNormalization:createIODescriptors(input)
+   assert(input:dim() == 4)   
    assert(torch.typename(self.weight) == 'torch.CudaTensor' and torch.typename(self.bias) == 'torch.CudaTensor',
           'Only CUDA tensors are supported for cudnn.SpatialBatchNormalization!')
-   self.iDesc = cudnn.toDescriptor(input)
-   self.sDesc = cudnn.toDescriptor(self.bias:view(1, self.nFeature, 1, 1))
+   if not self.iDesc or not self.oDesc or     
+      input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
+   or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
+      self.iSize = input:size()
+      self.output:resizeAs(input)
+      self.gradInput:resizeAs(input)
+      self.iDesc = cudnn.toDescriptor(input)
+      self.oDesc = cudnn.toDescriptor(self.output)
+      self.sDesc = cudnn.toDescriptor(self.bias:view(1, self.nFeature, 1, 1))
+   end
 end
 
 local one = torch.FloatTensor({1});
 local zero = torch.FloatTensor({0});
 
 function SpatialBatchNormalization:updateOutput(input)
-   self:createIODescriptors(input)
-
-   self.output:resizeAs(input)
-   self.gradInput:resizeAs(input)
+   self:createIODescriptors(input)   
 
    if self.train then
       errcheck('cudnnBatchNormalizationForwardTraining',
             cudnn.getHandle(), self.mode, one:data(), zero:data(),
-            self.iDesc[0], input:data(), self.output:data(),
+            self.iDesc[0], input:data(), self.oDesc[0], self.output:data(),
             self.sDesc[0], self.weight:data(), self.bias:data(),
             self.momentum, self.running_mean:data(), self.running_std:data(), self.eps, self.save_mean:data(), self.save_std:data());
    else
       errcheck('cudnnBatchNormalizationForwardInference',
             cudnn.getHandle(), self.mode, one:data(), zero:data(),
-            self.iDesc[0], input:data(), self.output:data(),
+            self.iDesc[0], input:data(), self.oDesc[0], self.output:data(),
             self.sDesc[0], self.weight:data(), self.bias:data(),
             self.running_mean:data(), self.running_std:data(), self.eps);
    end
@@ -47,7 +53,7 @@ function SpatialBatchNormalization:updateGradInput(input, gradOutput)
    self:createIODescriptors(input)
    errcheck('cudnnBatchNormalizationBackward',
       cudnn.getHandle(), self.mode, one:data(), zero:data(),
-      self.iDesc[0], input:data(), gradOutput:data(), self.gradInput:data(),
+      self.iDesc[0], input:data(), self.iDesc[0], gradOutput:data(), self.iDesc[0], self.gradInput:data(),
                      -- input is bottom, gradOutput is topDiff, self.gradInput is resultBottomDiff
       self.sDesc[0], self.weight:data(), self.gradWeight:data(), self.gradBias:data(),
       self.eps, self.save_mean:data(), self.save_std:data());

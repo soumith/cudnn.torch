@@ -731,71 +731,95 @@ function cudnntest.LogSoftMax_batch()
 end
 
 function cudnntest.SpatialLogSoftMax()
+    -- batch
+    local numLabels = math.random(5,10)
+    local h = math.random(5,10)
+    local w = math.random(5,10)
+    local bsz = math.random(3, 7)
+    local input = torch.zeros(bsz, numLabels, h, w):normal():cuda()
+    local target = torch.zeros(bsz, numLabels, h, w):normal():cuda()
+
+    local cri = cudnn.SpatialLogSoftMax():cuda()
+    local gcri = nn.LogSoftMax():cuda()
+
+    local op = cri:forward(input, target)
+    local gi = cri:backward(input, target)
+
+    local gop = op:clone():zero()
+    local ggi = gi:clone():zero()
+
+    for i=1,h do
+        for j=1,w do
+            local i1 = input[{{}, {}, {i}, {j}}]:contiguous():squeeze()
+            local t1 = target[{{}, {}, {i}, {j}}]:contiguous():squeeze()
+            local gop1 = gcri:forward(i1, t1)
+            local ggi1 = gcri:backward(i1, t1)
+            gop[{{}, {}, {i}, {j}}]:copy(gop1)
+            ggi[{{}, {}, {i}, {j}}]:copy(ggi1)
+        end
+    end
+    local err = (gi - ggi):abs():max()
+    mytester:assertlt(err, precision_backward, 'error in difference between central difference and :backward')
+    local err = (op - gop):abs():max()
+    mytester:assertlt(err, precision_backward, 'error in difference between central difference and :backward')
+end
+
+function cudnntest.SpatialBatchNormalization()
    -- batch
-   local numLabels = math.random(5,10)
-   local h = math.random(5,10)
-   local w = math.random(5,10)
-   local bsz = math.random(3, 7)
-   local input = torch.zeros(bsz, numLabels, h, w):normal():cuda()
-   local target = torch.zeros(bsz, numLabels, h, w):normal():cuda()
+      local h = math.random(5,10)
+      local w = math.random(5,10)
+      local bsz = math.random(1, 32)
+      local from = math.random(1, 32)
+      local input = torch.randn(bsz,from,h,w):cuda()
+      local gradOutput = torch.randn(bsz,from,h,w):cuda()
+      local cbn = cudnn.SpatialBatchNormalization(from, 1e-3):cuda()
+      local gbn = nn.SpatialBatchNormalization(from, 1e-3):cuda()
+      cbn.weight:copy(gbn.weight)
+      cbn.bias:copy(gbn.bias)
+      local rescuda = cbn:forward(input)
+      local groundtruth = gbn:forward(input)
+      local resgrad = cbn:backward(input, gradOutput)
+      local groundgrad = gbn:backward(input, gradOutput)
 
-   local cri = cudnn.SpatialLogSoftMax():cuda()
-   local gcri = nn.LogSoftMax():cuda()
-
-   local op = cri:forward(input, target)
-   local gi = cri:backward(input, target)
-
-   local gop = op:clone():zero()
-   local ggi = gi:clone():zero()
-
-   for i=1,h do
-      for j=1,w do
-         local i1 = input[{{}, {}, {i}, {j}}]:contiguous():squeeze()
-         local t1 = target[{{}, {}, {i}, {j}}]:contiguous():squeeze()
-         local gop1 = gcri:forward(i1, t1)
-         local ggi1 = gcri:backward(i1, t1)
-         gop[{{}, {}, {i}, {j}}]:copy(gop1)
-         ggi[{{}, {}, {i}, {j}}]:copy(ggi1)
-      end
-   end
-   local err = (gi - ggi):abs():max()
-   mytester:assertlt(err, precision_backward, 'error in difference between central difference and :backward')
-   local err = (op - gop):abs():max()
-   mytester:assertlt(err, precision_backward, 'error in difference between central difference and :backward')
+      local error = rescuda:float() - groundtruth:float()
+      mytester:assertlt(error:abs():max(),
+                        precision_forward, 'error in batch normalization (forward) ')
+      error = resgrad:float() - groundgrad:float()
+      mytester:assertlt(error:abs():max(),
+                        precision_backward, 'error in batch normalization (backward) ')
 end
 
 function cudnntest.SpatialCrossEntropyCriterion()
-   -- batch
-   local numLabels = math.random(5,10)
-   local h = math.random(5,10)
-   local w = math.random(5,10)
-   local bsz = math.random(3, 7)
-   local input = torch.zeros(bsz, numLabels, h, w):normal():cuda()
-   local target = torch.Tensor(bsz, h, w):random(1, numLabels):cuda()
+    -- batch
+    local numLabels = math.random(5,10)
+    local h = math.random(5,10)
+    local w = math.random(5,10)
+    local bsz = math.random(3, 7)
+    local input = torch.zeros(bsz, numLabels, h, w):normal():cuda()
+    local target = torch.Tensor(bsz, h, w):random(1, numLabels):cuda()
 
-   local cri = cudnn.SpatialCrossEntropyCriterion():cuda()
+    local cri = cudnn.SpatialCrossEntropyCriterion():cuda()
 
-   local gcri = nn.CrossEntropyCriterion():cuda()
+    local gcri = nn.CrossEntropyCriterion():cuda()
 
-   local op = cri:forward(input, target)
-   local gi = cri:backward(input, target)
+    local op = cri:forward(input, target)
+    local gi = cri:backward(input, target)
 
-   local ggi = gi:clone():zero()
+    local ggi = gi:clone():zero()
 
-   for i=1,h do
-      for j=1,w do
-         local i1 = input[{{}, {}, {i}, {j}}]:contiguous():squeeze()
-         local t1 = target[{{}, {i}, {j}}]:contiguous():squeeze()
-         local gop1 = gcri:forward(i1, t1)
-         local ggi1 = gcri:backward(i1, t1)
-         ggi[{{}, {}, {i}, {j}}]:copy(ggi1)
-      end
-   end
-   local err = (gi - ggi):abs():max()
-   mytester:assertlt(err, precision_backward, 'error in difference between central difference and :backward')
+    for i=1,h do
+        for j=1,w do
+            local i1 = input[{{}, {}, {i}, {j}}]:contiguous():squeeze()
+            local t1 = target[{{}, {i}, {j}}]:contiguous():squeeze()
+            local gop1 = gcri:forward(i1, t1)
+            local ggi1 = gcri:backward(i1, t1)
+            ggi[{{}, {}, {i}, {j}}]:copy(ggi1)
+        end
+    end
+    local err = (gi - ggi):abs():max()
+    mytester:assertlt(err, precision_backward, 'error in difference between central difference and :backward')
 
 end
-
 
 function cudnntest.functional_bias2D()
    local bs = math.random(1,32)
