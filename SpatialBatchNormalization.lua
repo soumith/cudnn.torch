@@ -11,10 +11,10 @@ function SpatialBatchNormalization:__init(nFeature, eps, momentum, affine)
 end
 
 function SpatialBatchNormalization:createIODescriptors(input)
-   assert(input:dim() == 4)   
+   assert(input:dim() == 4)
    assert(torch.typename(self.weight) == 'torch.CudaTensor' and torch.typename(self.bias) == 'torch.CudaTensor',
           'Only CUDA tensors are supported for cudnn.SpatialBatchNormalization!')
-   if not self.iDesc or not self.oDesc or     
+   if not self.iDesc or not self.oDesc or
       input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
    or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
       self.iSize = input:size()
@@ -30,7 +30,7 @@ local one = torch.FloatTensor({1});
 local zero = torch.FloatTensor({0});
 
 function SpatialBatchNormalization:updateOutput(input)
-   self:createIODescriptors(input)   
+   self:createIODescriptors(input)
 
    if self.train then
       errcheck('cudnnBatchNormalizationForwardTraining',
@@ -65,6 +65,7 @@ end
 
 function SpatialBatchNormalization:write(f)
    self.iDesc = nil
+   self.oDesc = nil
    self.sDesc = nil
    local var = {}
    for k,v in pairs(self) do
