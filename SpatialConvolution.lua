@@ -12,10 +12,8 @@ function SpatialConvolution:__init(nInputPlane, nOutputPlane,
                             kW, kH, dW, dH, padW, padH, groups)
     local delayedReset = self.reset
     self.reset = function() end
-    parent.__init(self, nInputPlane, nOutputPlane, kW, kH, dW, dH)
+    parent.__init(self, nInputPlane, nOutputPlane, kW, kH, dW, dH, padW, padH)
     self.reset = delayedReset
-    self.padW = padW or 0
-    self.padH = padH or 0
     self.groups = groups or 1
     assert(nInputPlane % self.groups == 0,
            'nInputPlane should be divisible by nGroups')
