@@ -1,6 +1,6 @@
 local VolumetricAveragePooling, parent = torch.class('cudnn.VolumetricAveragePooling', 'cudnn._Pooling3D')
 
-function VolumetricAveragePooling:__init(kT, kW, kH, dT, dW, dH, padT, padW, padH)
-   parent.__init(self, kT, kW, kH, dT, dW, dH, padT, padW, padH)
+function VolumetricAveragePooling:updateOutput(input)
    self.mode = 'CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING'
+   return parent.updateOutput(self, input)
 end
