@@ -840,7 +840,6 @@ function cudnntest.SpatialLogSoftMax()
     mytester:assertlt(err, precision_backward, 'error in difference between central difference and :backward')
 end
 
---[[
 function cudnntest.SpatialCrossEntropyCriterion()
     -- batch
     local numLabels = math.random(5,10)
@@ -872,7 +871,6 @@ function cudnntest.SpatialCrossEntropyCriterion()
     mytester:assertlt(err, precision_backward, 'error in difference between central difference and :backward')
 
 end
-]]
 
 
 
