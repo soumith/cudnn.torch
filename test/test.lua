@@ -608,6 +608,45 @@ function cudnntest.Sigmoid_batch()
    nonlinBatch('Sigmoid')
 end
 
+function cudnntest.SpatialCrossMapLRN_batch()
+   local bs = math.random(4,10)
+   local inputSize = math.random(6,9)
+   local size = math.random(1,3)*2+1
+   local nbfeatures = math.random(3,8)
+   local alpha = math.random(1,100)/100
+   local beta  = math.random(0,100)/100
+   local k = math.random(1,3)
+
+   local tm = {}
+   local title = string.format('SpatialCrossMapLRN.forward')
+   times[title] = tm
+
+   local input = torch.rand(bs, nbfeatures, inputSize, inputSize):cuda()
+   local gradOutput = torch.rand(input:size()):cuda()
+   local sconv = nn.SpatialCrossMapLRN(size, alpha, beta, k):cuda()
+   local gconv = cudnn.SpatialCrossMapLRN(size, alpha, beta, k):cuda()
+
+   local groundtruth = sconv:forward(input):clone()
+   local groundgrad = sconv:backward(input, gradOutput)
+   cutorch.synchronize()
+   gconv:forward(input)
+   -- serialize and deserialize
+   torch.save('modelTemp.t7', gconv)
+   gconv = torch.load('modelTemp.t7')
+   local rescuda = gconv:forward(input)
+   local resgrad = gconv:backward(input, gradOutput)
+   cutorch.synchronize()
+   mytester:asserteq(rescuda:dim(), 4, 'error in dimension')
+   mytester:asserteq(resgrad:dim(), 4, 'error in dimension')
+   local error = rescuda:float() - groundtruth:float()
+   mytester:assertlt(error:abs():max(), precision_forward,
+                     'error on state (forward) ')
+   error = resgrad:float() - groundgrad:float()
+   mytester:assertlt(error:abs():max(), precision_backward,
+                     'error on state (backward) ')
+end
+
+
 function cudnntest.SoftMax_single()
    local sz = math.random(1,64)
    local input = torch.randn(sz):cuda()
@@ -801,6 +840,7 @@ function cudnntest.SpatialLogSoftMax()
     mytester:assertlt(err, precision_backward, 'error in difference between central difference and :backward')
 end
 
+--[[
 function cudnntest.SpatialCrossEntropyCriterion()
     -- batch
     local numLabels = math.random(5,10)
@@ -832,6 +872,7 @@ function cudnntest.SpatialCrossEntropyCriterion()
     mytester:assertlt(err, precision_backward, 'error in difference between central difference and :backward')
 
 end
+]]
 
 
 
