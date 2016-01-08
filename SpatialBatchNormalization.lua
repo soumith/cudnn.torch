@@ -1,13 +1,29 @@
-local SpatialBatchNormalization, parent = torch.class('cudnn.SpatialBatchNormalization', 'nn.SpatialBatchNormalization')
+local SpatialBatchNormalization, parent = torch.class('cudnn.SpatialBatchNormalization', 'nn.Module')
 local ffi = require 'ffi'
 local errcheck = cudnn.errcheck
 
 function SpatialBatchNormalization:__init(nFeature, eps, momentum, affine)
-   parent.__init(self, nFeature, eps, momentum, affine)
+   parent.__init(self)
+   assert(nFeature and type(nFeature) == 'number',
+       'Missing argument #1: Number of feature planes. ')
+   assert(nFeature ~= 0, 'To set affine=false call BatchNormalization'
+     .. '(nFeature,  eps, momentum, false) ')
+   assert(affine == nil or affine == true, 'only affine supported')
+
    self.mode = 'CUDNN_BATCHNORM_SPATIAL'
    self.nFeature = nFeature
+   self.eps = eps or 1e-5
+   self.train = true
+   self.momentum = momentum or 0.1
    self.save_mean = torch.Tensor(nFeature)
    self.save_std = torch.Tensor(nFeature)
+   self.running_mean = torch.zeros(nFeature)
+   self.running_std = torch.ones(nFeature)
+   self.weight = torch.Tensor(nFeature)
+   self.bias = torch.Tensor(nFeature)
+   self.gradWeight = torch.Tensor(nFeature)
+   self.gradBias = torch.Tensor(nFeature)
+   self:reset()
 end
 
 function SpatialBatchNormalization:createIODescriptors(input)
@@ -28,6 +44,11 @@ end
 
 local one = torch.FloatTensor({1});
 local zero = torch.FloatTensor({0});
+
+function SpatialBatchNormalization:reset()
+   self.weight:uniform()
+   self.bias:zero()
+end
 
 function SpatialBatchNormalization:updateOutput(input)
    self:createIODescriptors(input)
