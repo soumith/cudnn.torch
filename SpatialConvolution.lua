@@ -33,7 +33,7 @@ end
 function SpatialConvolution:resetWeightDescriptors()
     assert(torch.typename(self.weight) == 'torch.CudaTensor',
            'Only Cuda supported duh!')
-    assert(torch.typename(self.bias) == 'torch.CudaTensor',
+    assert(torch.typename(self.bias) == 'torch.CudaTensor' or not self.bias,
            'Only Cuda supported duh!')
     -- for compatibility
     self.groups = self.groups or 1
@@ -52,7 +52,9 @@ function SpatialConvolution:resetWeightDescriptors()
     ffi.gc(self.weightDesc, destroyWDesc)
 
     -- create descriptor for bias
-    self.biasDesc = cudnn.toDescriptor(self.bias:view(1, self.nOutputPlane,1,1))
+    if self.bias then
+        self.biasDesc = cudnn.toDescriptor(self.bias:view(1, self.nOutputPlane,1,1))
+    end
 end
 
 function SpatialConvolution:fastest(mode)
@@ -382,9 +384,11 @@ function SpatialConvolution:updateOutput(input)
     end
 
     -- add bias
-    errcheck('cudnnAddTensor', cudnn.getHandle(),
-             one:data(), self.biasDesc[0], self.bias:data(),
-             one:data(), self.oDescForBias[0], self.output:data())
+    if self.bias then
+        errcheck('cudnnAddTensor', cudnn.getHandle(),
+                 one:data(), self.biasDesc[0], self.bias:data(),
+                 one:data(), self.oDescForBias[0], self.output:data())
+    end
 
     return self.output
 end
@@ -424,11 +428,13 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
     self:createIODescriptors(input)
 
     -- gradBias
-    errcheck('cudnnConvolutionBackwardBias', cudnn.getHandle(),
-             self.scaleT:data(),
-             self.oDescForBias[0], gradOutput:data(),
-             one:data(),
-             self.biasDesc[0], self.gradBias:data())
+    if self.bias then
+        errcheck('cudnnConvolutionBackwardBias', cudnn.getHandle(),
+                 self.scaleT:data(),
+                 self.oDescForBias[0], gradOutput:data(),
+                 one:data(),
+                 self.biasDesc[0], self.gradBias:data())
+    end
 
     for g = 0, self.groups - 1 do
         -- gradWeight
