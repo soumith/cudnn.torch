@@ -366,7 +366,7 @@ function cudnntest.SpatialMaxPooling_batch()
    local groundgrad = sconv:backward(input, gradOutput)
    cutorch.synchronize()
    local gconv = cudnn.SpatialMaxPooling(ki,kj,si,sj,padi,padj):cuda()
-   if ceil_mode then sconv:ceil() end
+   if ceil_mode then gconv:ceil() end
    local rescuda = gconv:forward(input)
    -- serialize and deserialize
    torch.save('modelTemp.t7', gconv)
@@ -409,7 +409,7 @@ function cudnntest.SpatialMaxPooling_single()
    local groundgrad = sconv:backward(input, gradOutput)
    cutorch.synchronize()
    local gconv = cudnn.SpatialMaxPooling(ki,kj,si,sj,padi,padj):cuda()
-   if ceil_mode then sconv:ceil() end
+   if ceil_mode then gconv:ceil() end
    local _ = gconv:forward(input)
    -- serialize and deserialize
    torch.save('modelTemp.t7', gconv)
