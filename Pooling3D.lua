@@ -124,10 +124,14 @@ function Pooling:updateGradInput(input, gradOutput)
    return self.gradInput
 end
 
-function Pooling:write(f)
+function Pooling:clearDesc()
    self.poolDesc = nil
    self.iDesc = nil
    self.oDesc = nil
+end
+
+function Pooling:write(f)
+   self:clearDesc()
    local var = {}
    for k,v in pairs(self) do
       var[k] = v
