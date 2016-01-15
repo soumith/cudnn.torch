@@ -4,6 +4,7 @@ cudnn.torch
 Torch7 FFI bindings for NVidia CuDNN (R3) kernels!
 
 Modules are API compatible their [`nn`](https://github.com/torch/nn) equivalents. Fully unit-tested against `nn` implementations.
+Conversion between `nn` and `cudnn` is available through `cudnn.convert` function.
 
 #### Installation
 
@@ -59,6 +60,27 @@ cudnn.verbose = true -- this prints out some more verbose information useful for
 ```
 by default, `cudnn.verbose` is set to `false`.
 
+### Conversion between `cudnn` and `nn`
+
+Conversion is done by `cudnn.convert` function which takes a network and backend arguments and goes over
+network modules recursively substituting equivalents. No memory copy is done, just metatables are swapped.
+
+```lua
+net = nn.Sequential()
+net:add(nn.SpatialConvolution(3,96,11,11,3,3))
+net:add(nn.ReLU())
+cudnn.convert(net, cudnn)
+print(net)
+```
+
+will result in:
+```
+nn.Sequential {
+  [input -> (1) -> (2) -> output]
+  (1): cudnn.SpatialConvolution(3 -> 96, 11x11, 3,3)
+  (2): cudnn.ReLU
+}
+```
 
 ### Older versions
 For version CuDNN R1, checkout the branch **R1**

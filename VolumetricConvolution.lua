@@ -264,7 +264,7 @@ function VolumetricConvolution:accGradParameters(input, gradOutput, scale)
         self.weightDesc[0], self.gradWeight:data());
 end
 
-function VolumetricConvolution:write(f)
+function VolumetricConvolution:clearDesc()
    self.weightDesc = nil
    self.biasDesc = nil
    self.convDesc = nil
@@ -276,6 +276,11 @@ function VolumetricConvolution:write(f)
    self.bwdFilterAlgType = nil
    self.extraBuffer = nil
    self.extraBufferInBytes = nil
+   self.scaleT = nil
+end
+
+function VolumetricConvolution:write(f)
+   self:clearDesc()
    local var = {}
    for k,v in pairs(self) do
       var[k] = v

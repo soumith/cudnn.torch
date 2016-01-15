@@ -113,5 +113,6 @@ include 'SpatialCrossMapLRN.lua'
 include 'SpatialCrossEntropyCriterion.lua'
 
 include 'functional.lua'
+include 'convert.lua'
 
 return cudnn
