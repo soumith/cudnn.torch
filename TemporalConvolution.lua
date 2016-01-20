@@ -1,5 +1,5 @@
 local TemporalConvolution, parent =
-    torch.class('cudnn.TemporalConvolution', 'cudnn.SpatialConvolution')
+    torch.class('cudnn.TemporalConvolution', 'nn.TemporalConvolution')
 --use cudnn to perform temporal convolutions
 --note: if padH parameter is not passed, no padding will be performed, as in parent TemporalConvolution
 --however, instead of separately padding data, as is required now for nn.TemporalConvolution, 
@@ -12,11 +12,11 @@ function TemporalConvolution:__init(inputFrameSize, outputFrameSize,
     local kW = inputFrameSize
     local nInputPlane = 1 -- single channel
     local nOutputPlane = outputFrameSize
-    parent.__init(self, nInputPlane, nOutputPlane, kW, kH, 1, dH,0,padH)
-    self.weight = self.weight:view(nOutputPlane,inputFrameSize*kH)
-    self.gradWeight = self.gradWeight:view(outputFrameSize, inputFrameSize*kH)
     self.inputFrameSize = inputFrameSize
     self.outputFrameSize = outputFramesize
+    cudnn.SpatialConvolution.__init(self, nInputPlane, nOutputPlane, kW, kH, 1, dH,0,padH)
+    self.weight = self.weight:view(nOutputPlane,inputFrameSize*kH)
+    self.gradWeight = self.gradWeight:view(outputFrameSize, inputFrameSize*kH)
 --self.dW and self.kW now have different meaning than in nn.TemporalConvolution, because
 --W and H are switched in temporal and spatial
 end
@@ -28,10 +28,19 @@ function TemporalConvolution:createIODescriptors(input)
     or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
 	   sizeChanged = true
     end
-    parent.createIODescriptors(self,input)
+    cudnn.SpatialConvolution.createIODescriptors(self,input)
     if sizeChanged then
        self.oSize = self.output:size()
     end
+end
+
+function TemporalConvolution:fastest(mode)
+    self = cudnn.SpatialConvolution.fastest(self,mode)
+    return self    
+end
+
+function TemporalConvolution:resetWeightDescriptors()
+    cudnn.SpatialConvolution.resetWeightDescriptors(self)
 end
 
 local function inputview(input)
@@ -49,7 +58,7 @@ function TemporalConvolution:updateOutput(input)
    self._output = self._output or torch.CudaTensor()
    if self.output:storage() then self._output:set(self.output:storage()) else self._output = self.output end
    if self.buffer:storage() then self.output:set(self.buffer:storage()) else self.output = self.buffer end
-   parent.updateOutput(self,_input)
+   cudnn.SpatialConvolution.updateOutput(self,_input)
    self.buffer = self.output:view(self.oSize):transpose(2,3)   
    self.output  = self._output:resize(self.buffer:size()):copy(self.buffer)
    -- self.output here is always 4D, use input dimensions to properly view output
@@ -78,7 +87,7 @@ function TemporalConvolution:updateGradInput(input, gradOutput)
    if not self.gradInput then return end
    local _gradOutput = transposeGradOutput(gradOutput,self.buffer)
    local _input = inputview(input)
-   self.gradInput = parent.updateGradInput(self,_input, _gradOutput)
+   self.gradInput = cudnn.SpatialConvolution.updateGradInput(self,_input, _gradOutput)
    if input:dim()==3 then
       self.gradInput = self.gradInput:view(self.gradInput:size(1),self.gradInput:size(3),self.gradInput:size(4))
    else
@@ -92,12 +101,12 @@ function TemporalConvolution:accGradParameters(input,gradOutput,scale)
     local _input = inputview(input)
 -- transpose gradOutput (it will likely be transposed twice, hopefully, no big deal
     local _gradOutput = transposeGradOutput(gradOutput,self.buffer)
-    parent.accGradParameters(self,_input,_gradOutput,scale)
+    cudnn.SpatialConvolution.accGradParameters(self,_input,_gradOutput,scale)
 end
 
 function TemporalConvolution:write(f)
   self.buffer = nil
   self._ouptut = nil
   self.oSize = nil
-  parent.write(self,f)
+  cudnn.SpatialConvolution.write(self,f)
 end
