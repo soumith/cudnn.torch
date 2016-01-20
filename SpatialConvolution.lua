@@ -445,7 +445,7 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
     end
 end
 
-function SpatialConvolution:write(f)
+function SpatialConvolution:clearDesc()
     self.weightDesc = nil
     self.biasDesc = nil
     self.convDesc = nil
@@ -458,6 +458,11 @@ function SpatialConvolution:write(f)
     self.bwdFilterAlgType = nil
     self.extraBuffer = nil
     self.extraBufferSizeInBytes = nil
+    self.scaleT = nil
+end
+
+function SpatialConvolution:write(f)
+    self:clearDesc()
     local var = {}
     for k,v in pairs(self) do
         var[k] = v

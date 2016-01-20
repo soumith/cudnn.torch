@@ -90,9 +90,13 @@ function LRN:updateGradInput(input, gradOutput)
    return self.gradInput
 end
 
-function LRN:write(f)
+function LRN:clearDesc()
    self.LRNDesc = nil
    self.iDesc = nil
+end
+
+function LRN:write(f)
+   self:clearDesc()
    local var = {}
    for k,v in pairs(self) do
       var[k] = v

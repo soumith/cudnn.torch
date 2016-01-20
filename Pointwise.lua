@@ -54,8 +54,12 @@ function Pointwise:updateGradInput(input, gradOutput)
    return self.gradInput
 end
 
-function Pointwise:write(f)
+function Pointwise:clearDesc()
    self.iDesc = nil
+end
+
+function Pointwise:write(f)
+   self:clearDesc()
    local var = {}
    for k,v in pairs(self) do
       var[k] = v
