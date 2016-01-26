@@ -112,7 +112,7 @@ include 'LogSoftMax.lua'
 include 'SpatialCrossMapLRN.lua'
 include 'SpatialBatchNormalization.lua'
 include 'SpatialCrossEntropyCriterion.lua'
-
+include 'TemporalConvolution.lua'
 include 'functional.lua'
 
 

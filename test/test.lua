@@ -163,6 +163,154 @@ function cudnntest.SpatialConvolution_backward_single()
                      'error on bias (backward) ')
 end
 
+function cudnntest.TemporalConvolution_batch()
+   local bs = math.random(1,32)
+   local inputFrameSize = math.random(1,64)
+   local outputFrameSize = math.random(1,64)
+   local ki = math.random(1,15)
+   local si = math.random(1,ki)
+   local outi = math.random(1,15)
+   local ini = (outi-1)*si+ki
+   local scale = math.random()
+
+   local input = torch.randn(bs,ini,inputFrameSize):cuda()
+   local gradOutput = torch.randn(bs,outi,outputFrameSize):cuda()
+   local sconv = nn.TemporalConvolution(inputFrameSize,outputFrameSize, ki, si):cuda()   
+   local groundForward = sconv:forward(input)
+   sconv:zeroGradParameters()
+   local groundgrad = sconv:backward(input, gradOutput, scale)
+   cutorch.synchronize()
+   local groundweight = sconv.gradWeight
+   local groundbias = sconv.gradBias
+
+   local gconv = cudnn.TemporalConvolution(inputFrameSize,outputFrameSize, ki, si):cuda():fastest()
+   gconv.weight:copy(sconv.weight:view(gconv.weight:size()))
+   gconv.bias:copy(sconv.bias)
+   gconv:forward(input)
+
+   -- serialize and deserialize
+   torch.save('modelTemp.t7', gconv)
+   gconv = torch.load('modelTemp.t7')
+
+   local cudaForward = gconv:forward(input)
+   gconv:zeroGradParameters()
+   local rescuda = gconv:backward(input, gradOutput, scale)
+   cutorch.synchronize()
+   local weightcuda = gconv.gradWeight
+   local biascuda = gconv.gradBias
+
+   local ferror = cudaForward:float() - groundForward:float()
+   local error = rescuda:float() - groundgrad:float()
+   local werror = weightcuda:float() - groundweight:float()
+   local berror = biascuda:float() - groundbias:float()
+   mytester:assertlt(ferror:abs():max(), precision_forward, 'error on forward  ')
+   mytester:assertlt(error:abs():max(), precision_backward, 'error on state (backward) ')
+   mytester:assertlt(werror:abs():max(), precision_backward, 'error on weight (backward) ')
+   mytester:assertlt(berror:abs():max(), precision_backward, 'error on bias (backward) ')
+end
+
+function cudnntest.TemporalConvolution_padding_batch()
+   local bs = math.random(1,32)
+   local inputFrameSize = math.random(1,64)
+   local outputFrameSize = math.random(1,64)
+   local ki = math.random(2,15)
+   local pad_h = math.floor(ki/2)
+   local si = math.random(1,ki)
+   local outi = math.random(1,15)
+   local ini = (outi-1)*si+ki
+   local scale = math.random()
+
+   local inputpadded = torch.randn(bs,ini,inputFrameSize):cuda()
+   for i=1,pad_h do
+      inputpadded:narrow(2,i,1):fill(0)
+      inputpadded:narrow(2,ini-i+1,1):fill(0)
+   end
+   local input = torch.Tensor(bs,ini - 2 * pad_h, inputFrameSize):cuda()
+   input:copy(inputpadded:narrow(2, pad_h+1, ini - 2 * pad_h))
+   local gradOutput = torch.randn(bs,outi,outputFrameSize):cuda()
+   local sconv = nn.TemporalConvolution(inputFrameSize,outputFrameSize, ki, si):cuda()   
+   local groundForward = sconv:forward(inputpadded)
+   sconv:zeroGradParameters()
+   local groundgrad = sconv:backward(inputpadded, gradOutput, scale)
+   cutorch.synchronize()
+   local groundweight = sconv.gradWeight
+   local groundbias = sconv.gradBias
+
+   local gconv = cudnn.TemporalConvolution(inputFrameSize,outputFrameSize, ki, si,pad_h):cuda():fastest()
+   gconv.weight:copy(sconv.weight:view(gconv.weight:size()))
+   gconv.bias:copy(sconv.bias)
+   gconv:forward(input)
+
+   -- serialize and deserialize
+   torch.save('modelTemp.t7', gconv)
+   gconv = torch.load('modelTemp.t7')
+
+   local cudaForward = gconv:forward(input)
+   gconv:zeroGradParameters()
+   local rescuda = gconv:backward(input, gradOutput, scale)
+   cutorch.synchronize()
+   local weightcuda = gconv.gradWeight
+   local biascuda = gconv.gradBias
+
+   local ferror = cudaForward:float() - groundForward:float()
+   groundgrad = groundgrad:narrow(2, pad_h + 1, ini - 2 * pad_h)
+   local error = rescuda:float() - groundgrad:float()
+   local werror = weightcuda:float() - groundweight:float()
+   local berror = biascuda:float() - groundbias:float()
+   mytester:assertlt(ferror:abs():max(), precision_forward, 'error on forward  ')
+   mytester:assertlt(error:abs():max(), precision_backward, 'error on state (backward) ')
+   mytester:assertlt(werror:abs():max(), precision_backward, 'error on weight (backward) ')
+   mytester:assertlt(berror:abs():max(), precision_backward, 'error on bias (backward) ')
+end
+
+
+function cudnntest.TemporalConvolution_single()
+   local inputFrameSize = math.random(1,64)
+   local outputFrameSize = math.random(1,64)
+   local ki = math.random(1,15)
+   local si = math.random(1,ki)
+   local outi = math.random(1,15)
+   local ini = (outi-1)*si+ki
+   local scale = math.random()
+
+   local input = torch.randn(ini,inputFrameSize):cuda()
+   local gradOutput = torch.randn(outi,outputFrameSize):cuda()
+   local sconv = nn.TemporalConvolution(inputFrameSize,outputFrameSize, ki, si):cuda()
+   local groundForward = sconv:forward(input)
+   sconv:zeroGradParameters()
+   local groundgrad = sconv:backward(input, gradOutput, scale)
+   cutorch.synchronize()
+   local groundweight = sconv.gradWeight
+   local groundbias = sconv.gradBias
+
+   local gconv = cudnn.TemporalConvolution(inputFrameSize,outputFrameSize, ki, si):cuda():fastest()
+   gconv.weight:copy(sconv.weight:view(gconv.weight:size()))
+   gconv.bias:copy(sconv.bias)
+   gconv:forward(input)
+
+   -- serialize and deserialize
+   torch.save('modelTemp.t7', gconv)
+   gconv = torch.load('modelTemp.t7')
+
+   local cudaForward = gconv:forward(input)
+   gconv:zeroGradParameters()
+   local rescuda = gconv:backward(input, gradOutput, scale)
+   cutorch.synchronize()
+   local weightcuda = gconv.gradWeight
+   local biascuda = gconv.gradBias
+
+   local ferror = cudaForward:float() - groundForward:float()
+   local error = rescuda:float() - groundgrad:float()
+   local werror = weightcuda:float() - groundweight:float()
+   local berror = biascuda:float() - groundbias:float()
+   mytester:assertlt(ferror:abs():max(), precision_forward, 'error on forward  ')
+   mytester:assertlt(error:abs():max(), precision_backward, 'error on state (backward) ')
+   mytester:assertlt(werror:abs():max(), precision_backward, 'error on weight (backward) ')
+   mytester:assertlt(berror:abs():max(), precision_backward, 'error on bias (backward) ')
+end
+
+
+
 function cudnntest.VolumetricConvolution_forward_single()
    local from = math.random(1,16)
    local to = math.random(1,16)
