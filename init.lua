@@ -101,6 +101,7 @@ include 'SpatialAveragePooling.lua'
 include 'Pooling3D.lua'
 include 'VolumetricMaxPooling.lua'
 include 'VolumetricAveragePooling.lua'
+include 'VolumetricBatchNormalization.lua'
 include 'Pointwise.lua'
 include 'ReLU.lua'
 include 'Tanh.lua'
@@ -110,9 +111,10 @@ include 'SpatialLogSoftMax.lua'
 include 'SoftMax.lua'
 include 'LogSoftMax.lua'
 include 'SpatialCrossMapLRN.lua'
+include 'SpatialBatchNormalization.lua'
 include 'SpatialCrossEntropyCriterion.lua'
 
 include 'functional.lua'
-include 'convert.lua'
+
 
 return cudnn
