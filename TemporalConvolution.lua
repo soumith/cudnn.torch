@@ -2,8 +2,8 @@ local TemporalConvolution, parent =
     torch.class('cudnn.TemporalConvolution', 'nn.TemporalConvolution')
 --use cudnn to perform temporal convolutions
 --note: if padH parameter is not passed, no padding will be performed, as in parent TemporalConvolution
---however, instead of separately padding data, as is required now for nn.TemporalConvolution, 
---it is recommended to pass padding parameter to this routine and use cudnn implicit padding facilities. 
+--however, instead of separately padding data, as is required now for nn.TemporalConvolution,
+--it is recommended to pass padding parameter to this routine and use cudnn implicit padding facilities.
 --limitation is that padding will be equal on both sides.
 
 function TemporalConvolution:__init(inputFrameSize, outputFrameSize,
@@ -36,7 +36,7 @@ end
 
 function TemporalConvolution:fastest(mode)
     self = cudnn.SpatialConvolution.fastest(self,mode)
-    return self    
+    return self
 end
 
 function TemporalConvolution:resetWeightDescriptors()
@@ -53,34 +53,34 @@ end
 
 function TemporalConvolution:updateOutput(input)
    local _input = inputview(input)
-   assert(_input:size(4) == self.inputFrameSize,'invalid input frame size')  
+   assert(_input:size(4) == self.inputFrameSize,'invalid input frame size')
    self.buffer = self.buffer or torch.CudaTensor()
    self._output = self._output or torch.CudaTensor()
    if self.output:storage() then self._output:set(self.output:storage()) else self._output = self.output end
    if self.buffer:storage() then self.output:set(self.buffer:storage()) else self.output = self.buffer end
    cudnn.SpatialConvolution.updateOutput(self,_input)
-   self.buffer = self.output:view(self.oSize):transpose(2,3)   
+   self.buffer = self.output:view(self.oSize):transpose(2,3)
    self.output  = self._output:resize(self.buffer:size()):copy(self.buffer)
    -- self.output here is always 4D, use input dimensions to properly view output
    if input:dim()==3 then
      self.output=self.output:view(self.oSize[1], self.oSize[3],self.oSize[2])
-   else 
+   else
      self.output=self.output:view(self.oSize[3], self.oSize[2])
-   end  
+   end
    return self.output
 end
 
 local function transposeGradOutput(src,dst)
     assert(src:dim() == 2 or src:dim() == 3, 'gradOutput has to be 2D or 3D');
-    local srctransposed = src:transpose(src:dim(),src:dim()-1)    
+    local srctransposed = src:transpose(src:dim(),src:dim()-1)
     dst:resize(srctransposed:size())
     dst:copy(srctransposed)
     if src:dim()==3 then
       dst = dst:view(dst:size(1),dst:size(2),dst:size(3),1)
     else
       dst = dst:view(dst:size(1),dst:size(2),1)
-    end      
-    return dst 
+    end
+    return dst
 end
 
 function TemporalConvolution:updateGradInput(input, gradOutput)
@@ -108,5 +108,10 @@ function TemporalConvolution:write(f)
   self.buffer = nil
   self._ouptut = nil
   self.oSize = nil
-  cudnn.SpatialConvolution.write(self,f)
+  cudnn.SpatialConvolution.clearDesc(self)
+    local var = {}
+    for k,v in pairs(self) do
+        var[k] = v
+    end
+    f:writeObject(var)
 end
