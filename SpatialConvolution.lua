@@ -86,6 +86,12 @@ function SpatialConvolution:resetMode()
     return self
 end
 
+function SpatialConvolution:noBias()
+   self.bias = nil
+   self.gradBias = nil
+   return self
+end
+
 function SpatialConvolution:createIODescriptors(input)
     local batch = true
     if input:dim() == 3 then
