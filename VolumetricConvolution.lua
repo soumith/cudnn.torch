@@ -3,17 +3,6 @@ local VolumetricConvolution, parent
 local ffi = require 'ffi'
 local errcheck = cudnn.errcheck
 
-function VolumetricConvolution:__init(nInputPlane, nOutputPlane,
-                               kT, kW, kH,
-                               dT, dW, dH,
-                               padT, padW, padH)
-   parent.__init(self, nInputPlane, nOutputPlane, kT, kW, kH, dT, dW, dH)
-   self.padT = padT or 0
-   self.padW = padW or 0
-   self.padH = padH or 0
-   self.iSize = torch.LongStorage(5):fill(0)
-end
-
 -- if you change the configuration of the module manually, call this
 function VolumetricConvolution:resetWeightDescriptors()
    assert(torch.typename(self.weight) == 'torch.CudaTensor',
@@ -41,6 +30,7 @@ end
 function VolumetricConvolution:fastest(mode)
    if mode == nil then mode = true end
    self.fastest_mode = mode
+   self.iSize = self.iSize or torch.LongStorage(4)
    self.iSize:fill(0)
    return self
 end
@@ -55,6 +45,7 @@ function VolumetricConvolution:setMode(fmode, bdmode, bwmode)
    if bwmode ~= nil then
       self.bwmode = bwmode
    end
+   self.iSize = self.iSize or torch.LongStorage(4)
    self.iSize:fill(0)
    return self
 end
@@ -74,6 +65,7 @@ function VolumetricConvolution:createIODescriptors(input)
       batch = false
    end
    assert(input:dim() == 5 and input:isContiguous());
+   self.iSize = self.iSize or torch.LongStorage(4):fill(0)
    if not self.iDesc or not self.oDesc or
       input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
    or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4]

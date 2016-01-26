@@ -1,6 +1,6 @@
 local SoftMax, parent = torch.class('cudnn.SoftMax', 'cudnn.SpatialSoftMax')
 
-function SoftMax:__init(fast)
-   parent.__init(self, fast)
+function SoftMax:updateOutput(input)
    self.mode = 'CUDNN_SOFTMAX_MODE_INSTANCE'
+   return parent.updateOutput(self, input)
 end
