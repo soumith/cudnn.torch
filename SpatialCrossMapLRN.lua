@@ -2,14 +2,14 @@ local LRN, parent = torch.class('cudnn.SpatialCrossMapLRN', 'nn.Module')
 local ffi = require 'ffi'
 local errcheck = cudnn.errcheck
 
-function LRN:__init(size, alpha, beta, K)
+function LRN:__init(size, alpha, beta, k)
    parent.__init(self)
    self.size = size or 5
    self.alpha = alpha or 1e-4
    self.beta = beta or 0.75
-   self.K = K or 1.0
+   self.k = k or 1.0
    assert(self.size >= 1 and self.size <= 16, "size has to be between 1 and 16")
-   assert(self.K >= 1e-5, "K has to be greater than 1e-5")
+   assert(self.k >= 1e-5, "k has to be greater than 1e-5")
    assert(self.beta >= 0.01, "Beta has to be > 0.01")
 end
 
@@ -18,7 +18,7 @@ function LRN:resetDescriptors()
    self.LRNDesc = ffi.new('struct cudnnLRNStruct*[1]')
    errcheck('cudnnCreateLRNDescriptor', self.LRNDesc)
    errcheck('cudnnSetLRNDescriptor', self.LRNDesc[0], self.size,
-            self.alpha, self.beta, self.K);
+            self.alpha, self.beta, self.k);
    local function destroyDesc(d)
       errcheck('cudnnDestroyLRNDescriptor', d[0]);
    end
@@ -56,6 +56,7 @@ local one = torch.FloatTensor({1});
 local zero = torch.FloatTensor({0});
 
 function LRN:updateOutput(input)
+   if self.K then self.k, self.K = self.K, nil end
    if not self.LRNDesc then self:resetDescriptors() end
    self:createIODescriptors(input)
    errcheck('cudnnLRNCrossChannelForward', cudnn.getHandle(),
@@ -89,9 +90,13 @@ function LRN:updateGradInput(input, gradOutput)
    return self.gradInput
 end
 
-function LRN:write(f)
+function LRN:clearDesc()
    self.LRNDesc = nil
    self.iDesc = nil
+end
+
+function LRN:write(f)
+   self:clearDesc()
    local var = {}
    for k,v in pairs(self) do
       var[k] = v

@@ -1,5 +1,5 @@
-local SpatialConvolution, parent =
-    torch.class('cudnn.SpatialConvolution', 'nn.SpatialConvolution')
+local SpatialFullConvolution, parent =
+    torch.class('cudnn.SpatialFullConvolution', 'nn.SpatialFullConvolution')
 local ffi = require 'ffi'
 local errcheck = cudnn.errcheck
 
@@ -8,7 +8,7 @@ autotunerCache[1] = {} -- forward
 autotunerCache[2] = {} -- backwardFilter
 autotunerCache[3] = {} -- backwardData
 
-function SpatialConvolution:__init(nInputPlane, nOutputPlane,
+function SpatialFullConvolution:__init(nInputPlane, nOutputPlane,
                             kW, kH, dW, dH, padW, padH, groups)
     local delayedReset = self.reset
     self.reset = function() end
@@ -26,13 +26,14 @@ function SpatialConvolution:__init(nInputPlane, nOutputPlane,
     self:reset()
     -- should nil for serialization, the reset will still work
     self.reset = nil
+    self.iSize = torch.LongStorage(4):fill(0)
 end
 
 -- if you change the configuration of the module manually, call this
-function SpatialConvolution:resetWeightDescriptors()
+function SpatialFullConvolution:resetWeightDescriptors()
     assert(torch.typename(self.weight) == 'torch.CudaTensor',
            'Only Cuda supported duh!')
-    assert(torch.typename(self.bias) == 'torch.CudaTensor' or not self.bias,
+    assert(torch.typename(self.bias) == 'torch.CudaTensor',
            'Only Cuda supported duh!')
     -- for compatibility
     self.groups = self.groups or 1
@@ -51,20 +52,17 @@ function SpatialConvolution:resetWeightDescriptors()
     ffi.gc(self.weightDesc, destroyWDesc)
 
     -- create descriptor for bias
-    if self.bias then
-        self.biasDesc = cudnn.toDescriptor(self.bias:view(1, self.nOutputPlane,1,1))
-    end
+    self.biasDesc = cudnn.toDescriptor(self.bias:view(1, self.nOutputPlane,1,1))
 end
 
-function SpatialConvolution:fastest(mode)
+function SpatialFullConvolution:fastest(mode)
     if mode == nil then mode = true end
     self.fastest_mode = mode
-    self.iSize = self.iSize or torch.LongStorage(4)
     self.iSize:fill(0)
     return self
 end
 
-function SpatialConvolution:setMode(fmode, bdmode, bwmode)
+function SpatialFullConvolution:setMode(fmode, bdmode, bwmode)
     if fmode ~= nil then
         self.fmode = fmode
     end
@@ -74,26 +72,24 @@ function SpatialConvolution:setMode(fmode, bdmode, bwmode)
     if bwmode ~= nil then
         self.bwmode = bwmode
     end
-    self.iSize = self.iSize or torch.LongStorage(4)
     self.iSize:fill(0)
     return self
 end
 
-function SpatialConvolution:resetMode()
+function SpatialFullConvolution:resetMode()
     self.fmode = nil
     self.bdmode = nil
     self.bwmode = nil
     return self
 end
 
-function SpatialConvolution:createIODescriptors(input)
+function SpatialFullConvolution:createIODescriptors(input)
     local batch = true
     if input:dim() == 3 then
         input = input:view(1, input:size(1), input:size(2), input:size(3))
         batch = false
     end
     assert(input:dim() == 4 and input:isContiguous());
-    self.iSize = self.iSize or torch.LongStorage(4):fill(0)
     if not self.iDesc or not self.oDesc or
         input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
     or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
@@ -338,38 +334,11 @@ end
 local one = torch.FloatTensor({1});
 local zero = torch.FloatTensor({0});
 
-function SpatialConvolution:updateOutput(input)
+function SpatialFullConvolution:updateOutput(input)
     if not self.weightDesc then self:resetWeightDescriptors() end
     self:createIODescriptors(input)
 
-    local prevStream
-    local streamQueue = {}
-    if self.groups > 1 then -- try to do stream parallelization
-        prevStream = cutorch.getStream()
-
-        --[[
-            Only if prevStream is 0, then do parallelization.
-            the justification for this is that this is a hard problem, there is no
-            way to know if one is doing other kinds of stream-parallelization
-            (like GPUConcat), and if thats the case, streams are already
-            being ideally exploited.
-        --]]
-
-        if prevStream == 0 then
-            cutorch.reserveStreams(self.groups)
-            for i=1,self.groups do
-                cutorch.streamWaitFor(i, {prevStream})
-            end
-        end
-    end
-
     for g = 0, self.groups - 1 do
-        -- stream-parallelize if appropriate
-        if self.groups > 1 and prevStream == 0 then
-            cutorch.setStream(g + 1)
-            table.insert(streamQueue, g + 1)
-        end
-
         errcheck('cudnnConvolutionForward', cudnn.getHandle(),
                  one:data(),
                  self.iDesc[0], input:data() + g*self.input_offset,
@@ -380,22 +349,15 @@ function SpatialConvolution:updateOutput(input)
                  self.oDesc[0], self.output:data() + g*self.output_offset);
     end
 
-    if prevStream == 0 then
-        cutorch.setStream(prevStream)
-        cutorch.streamWaitFor(prevStream, streamQueue)
-    end
-
     -- add bias
-    if self.bias then
-        errcheck('cudnnAddTensor', cudnn.getHandle(),
-                 one:data(), self.biasDesc[0], self.bias:data(),
-                 one:data(), self.oDescForBias[0], self.output:data())
-    end
+    errcheck('cudnnAddTensor', cudnn.getHandle(),
+             one:data(), self.biasDesc[0], self.bias:data(),
+             one:data(), self.oDescForBias[0], self.output:data())
 
     return self.output
 end
 
-function SpatialConvolution:updateGradInput(input, gradOutput)
+function SpatialFullConvolution:updateGradInput(input, gradOutput)
     if not self.gradInput then return end
 
     assert(gradOutput:dim() == 3 or gradOutput:dim() == 4, 'gradOutput has to be 3D or 4D');
@@ -417,7 +379,7 @@ function SpatialConvolution:updateGradInput(input, gradOutput)
     return self.gradInput
 end
 
-function SpatialConvolution:accGradParameters(input, gradOutput, scale)
+function SpatialFullConvolution:accGradParameters(input, gradOutput, scale)
     self.scaleT = self.scaleT or torch.FloatTensor(1):fill(1.0)
     -- this line forces this member to always be on CPU (needed for cudnn)
     self.scaleT = self.scaleT:float()
@@ -430,13 +392,11 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
     self:createIODescriptors(input)
 
     -- gradBias
-    if self.bias then
-        errcheck('cudnnConvolutionBackwardBias', cudnn.getHandle(),
-                 self.scaleT:data(),
-                 self.oDescForBias[0], gradOutput:data(),
-                 one:data(),
-                 self.biasDesc[0], self.gradBias:data())
-    end
+    errcheck('cudnnConvolutionBackwardBias', cudnn.getHandle(),
+             self.scaleT:data(),
+             self.oDescForBias[0], gradOutput:data(),
+             one:data(),
+             self.biasDesc[0], self.gradBias:data())
 
     for g = 0, self.groups - 1 do
         -- gradWeight
@@ -452,7 +412,7 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
     end
 end
 
-function SpatialConvolution:clearDesc()
+function SpatialFullConvolution:write(f)
     self.weightDesc = nil
     self.biasDesc = nil
     self.convDesc = nil
@@ -465,11 +425,6 @@ function SpatialConvolution:clearDesc()
     self.bwdFilterAlgType = nil
     self.extraBuffer = nil
     self.extraBufferSizeInBytes = nil
-    self.scaleT = nil
-end
-
-function SpatialConvolution:write(f)
-    self:clearDesc()
     local var = {}
     for k,v in pairs(self) do
         var[k] = v
