@@ -221,6 +221,15 @@ function cudnntest.SpatialConvolution_backward_single()
   test(sconv, gconv)
 end
 
+function cudnntest.SpatialConvolution_batch_reshape()
+   local gconv = cudnn.SpatialConvolution(4, 8, 4, 4, 2, 2):cuda()
+   local outputBatch = gconv:forward(torch.rand(1, 4, 32, 32):cuda())
+   mytester:asserteq(outputBatch:dim(), 4, 'error in dimension')
+
+   local outputNoBatch = gconv:forward(torch.rand(4, 32, 32):cuda())
+   mytester:asserteq(outputNoBatch:dim(), 3, 'error in dimension')
+end
+
 function cudnntest.VolumetricConvolution_forward_single()
    local from = math.random(1,16)
    local to = math.random(1,16)
