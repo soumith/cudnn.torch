@@ -479,8 +479,8 @@ function cudnntest.VolumetricConvolution_backward_single()
 end
 
 function cudnntest.VolumetricMaxPooling_batch()
-   local bs = math.random(1,32)
-   local from = math.random(1,32)
+   local bs = math.random(1,4)
+   local from = math.random(1,4)
    local ki = math.random(2,4)
    local kj = math.random(2,4)
    local kk = math.random(2,4)
@@ -1186,6 +1186,11 @@ function cudnntest.SpatialCrossEntropyCriterion()
             ggi[{{}, {}, {i}, {j}}]:copy(ggi1)
         end
     end
+    
+    -- nn.CrossEntropy in contrast to cudnn.SpatialCrossEntropyCriterion cannot
+    -- average over the last spatial dimensions because it is run in a loop
+    ggi:div(h * w)
+    
     local err = (gi - ggi):abs():max()
     mytester:assertlt(err, precision_backward, 'error in difference between central difference and :backward')
 
