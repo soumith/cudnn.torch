@@ -407,6 +407,11 @@ function cudnntest.VolumetricConvolution_forward_single()
      mytester:assertlt(ferr, precision_io, torch.typename(gconv) .. ' - i/o forward err ')
      mytester:assertlt(berr, precision_io, torch.typename(gconv) .. ' - i/o backward err ')
    end
+
+   test(sconv, gconv)
+   local gconv = cudnn.convert(sconv, cudnn):cuda()
+   mytester:asserteq(torch.typename(gconv), 'cudnn.VolumetricConvolution', 'conversion type check')
+   test(sconv, gconv)
 end
 
 function cudnntest.VolumetricConvolution_backward_single()
