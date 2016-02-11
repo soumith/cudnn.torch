@@ -2,6 +2,8 @@ local SpatialBatchNormalization, parent = torch.class('cudnn.SpatialBatchNormali
 local ffi = require 'ffi'
 local errcheck = cudnn.errcheck
 
+SpatialBatchNormalization.__version = 2
+
 function SpatialBatchNormalization:__init(nFeature, eps, momentum, affine)
    parent.__init(self, nFeature, eps, momentum, affine)
    self.mode = 'CUDNN_BATCHNORM_SPATIAL'
@@ -53,13 +55,13 @@ local function backward(self,input,gradOutput, scale)
    assert(gradOutput:isContiguous())
    self:createIODescriptors(input)
    scale = scale or 1
-   scaleTens:fill(scale) 	
+   scaleTens:fill(scale)
    errcheck('cudnnBatchNormalizationBackward',
       cudnn.getHandle(), self.mode, one:data(), zero:data(), scaleTens:data(), one:data(),
       self.iDesc[0], input:data(), self.iDesc[0], gradOutput:data(), self.iDesc[0], self.gradInput:data(),
                      -- input is bottom, gradOutput is topDiff, self.gradInput is resultBottomDiff
       self.sDesc[0], self.weight:data(), self.gradWeight:data(), self.gradBias:data(),
-      self.eps, self.save_mean:data(), self.save_std:data());   
+      self.eps, self.save_mean:data(), self.save_std:data());
    return self.gradInput
 end
 
@@ -85,4 +87,15 @@ function SpatialBatchNormalization:write(f)
       var[k] = v
    end
    f:writeObject(var)
+end
+
+function SpatialBatchNormalization:read(file, version)
+   parent.read(self, file)
+   if version < 2 then
+      if self.running_std then
+         -- for models before https://github.com/soumith/cudnn.torch/pull/101
+         self.running_var = self.running_std:pow(-2):add(-self.eps)
+         self.running_std = nil
+      end
+   end
 end
