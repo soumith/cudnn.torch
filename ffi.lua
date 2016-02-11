@@ -1073,7 +1073,7 @@ cudnnStatus_t             cudnnBatchNormalizationForwardTraining(
 
                                 const cudnnTensorDescriptor_t       xDesc,
                                 const void                         *x, /*  NxCxHxW */
-                                const cudnnTensorDescriptor_t    yDesc, 
+                                const cudnnTensorDescriptor_t    yDesc,
                                 void                               *y, /*  NxCxHxW */
 
                                 /*  Same shared desc for all the 6 tensors below in the argument list. */
@@ -1140,7 +1140,7 @@ cudnnStatus_t             cudnnBatchNormalizationForwardInference(
 
                                 const cudnnTensorDescriptor_t       xDesc,
                                 const void                         *x, /*  NxCxHxW */
-                                const cudnnTensorDescriptor_t    yDesc, 
+                                const cudnnTensorDescriptor_t    yDesc,
                                 void                               *y, /*  NxCxHxW */
 
                                 /*  Same desc for all 4 tensors below */
@@ -1190,9 +1190,9 @@ cudnnStatus_t             cudnnBatchNormalizationBackward(
 
                                 const cudnnTensorDescriptor_t       xDesc, /*  same desc for x, dx, dy */
                                 const void                         *x,
-                                const cudnnTensorDescriptor_t    dyDesc, 
+                                const cudnnTensorDescriptor_t    dyDesc,
                                 const void                         *dy,
-                                const cudnnTensorDescriptor_t    dxDesc, 
+                                const cudnnTensorDescriptor_t    dxDesc,
                                 void                               *dx,
 
                                 /*  this tensor desc is used for all the 4 tensors below */
@@ -1283,8 +1283,8 @@ Then make sure files named as libcudnn.so.4 or libcudnn.4.dylib are placed in yo
 end
 
 cudnn.version = tonumber(cudnn.C.cudnnGetVersion())
-if cudnn.version < 4000 then
-  error('These bindings are for version 4000 or above, '
+if cudnn.version < 4005 then
+  error('These bindings are for version 4005 or above, '
         .. 'while the loaded CuDNN is version: ' .. cudnn.version
            .. '  \nAre you using an older version of CuDNN?')
 end
