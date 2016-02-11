@@ -1183,9 +1183,10 @@ cudnnStatus_t             cudnnBatchNormalizationForwardInference(
 cudnnStatus_t             cudnnBatchNormalizationBackward(
                                 cudnnHandle_t                       handle,
                                 cudnnBatchNormMode_t                mode,
-
-                                const void                         *alpha,
-                                const void                         *beta,
+                                const void                         *alphaDataDiff,
+                                const void                         *betaDataDiff,
+                                const void                         *alphaParamDiff,
+                                const void                         *betaParamDiff,
 
                                 const cudnnTensorDescriptor_t       xDesc, /*  same desc for x, dx, dy */
                                 const void                         *x,
