@@ -28,8 +28,6 @@ function SpatialBatchNormalization:__init(nFeature, eps, momentum, affine)
       self:reset()
    end
    self.mode = 'CUDNN_BATCHNORM_SPATIAL'
-   self.save_mean = torch.Tensor(nFeature)
-   self.save_std = torch.Tensor(nFeature)
 end
 
 function SpatialBatchNormalization:createIODescriptors(input)
@@ -55,6 +53,11 @@ local scaleTens = torch.FloatTensor(1);
 
 function SpatialBatchNormalization:updateOutput(input)
    self:createIODescriptors(input)
+
+   self.save_mean = self.save_mean or input.new()
+   self.save_mean:resizeAs(self.running_mean)
+   self.save_std = self.save_std or input.new()
+   self.save_std:resizeAs(self.running_std)
 
    if self.train then
       errcheck('cudnnBatchNormalizationForwardTraining',
@@ -99,13 +102,23 @@ end
 function SpatialBatchNormalization:accGradParameters(input, gradOutput, scale)
 end
 
-function SpatialBatchNormalization:write(f)
+function SpatialBatchNormalization:clearDesc()
    self.iDesc = nil
    self.oDesc = nil
    self.sDesc = nil
+end
+
+function SpatialBatchNormalization:write(f)
+   self:clearDesc()
    local var = {}
    for k,v in pairs(self) do
       var[k] = v
    end
    f:writeObject(var)
+end
+
+function SpatialBatchNormalization:clearState()
+   self:clearDesc()
+   nn.utils.clear(self, 'save_mean', 'save_std')
+   return parent.clearState(self)
 end
