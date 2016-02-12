@@ -103,3 +103,8 @@ function LRN:write(f)
    end
    f:writeObject(var)
 end
+
+function LRN:clearState()
+   self:clearDesc()
+   return nn.Module.clearState(self)
+end

@@ -138,3 +138,8 @@ function Pooling:write(f)
    end
    f:writeObject(var)
 end
+
+function Pooling:clearState()
+   self:clearDesc()
+   return parent.clearState(self)
+end

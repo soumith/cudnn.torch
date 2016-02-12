@@ -8,11 +8,14 @@ function SpatialSoftMax:__init(fast)
    else
       self.algorithm = 'CUDNN_SOFTMAX_ACCURATE'
    end
-   self.mode = 'CUDNN_SOFTMAX_MODE_CHANNEL'
-   self.iSize = torch.LongStorage(4):fill(0)
 end
 
 function SpatialSoftMax:createIODescriptors(input)
+   self.mode = self.mode or 'CUDNN_SOFTMAX_MODE_CHANNEL'
+   -- after converting from nn use accurate
+   self.algorithm = self.algorithm or 'CUDNN_SOFTMAX_ACCURATE'
+   self.iSize = self.iSize or torch.LongStorage(4):fill(0)
+
    local batch = true
    local singleDim = false
    if input:dim() == 1 then
@@ -27,6 +30,7 @@ function SpatialSoftMax:createIODescriptors(input)
       batch = false
    end
    assert(input:dim() == 4 and input:isContiguous());
+   
    if not self.iDesc or not self.oDesc or
       input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
    or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
@@ -86,12 +90,22 @@ function SpatialSoftMax:updateGradInput(input, gradOutput)
    return self.gradInput
 end
 
-function SpatialSoftMax:write(f)
+function SpatialSoftMax:clearDesc()
    self.iDesc = nil
    self.oDesc = nil
+end
+
+function SpatialSoftMax:write(f)
+   self:clearDesc()
    local var = {}
    for k,v in pairs(self) do
       var[k] = v
    end
    f:writeObject(var)
+end
+
+function SpatialSoftMax:clearState()
+   self:clearDesc()
+   nn.utils.clear(self, '_gradOutput')
+   return parent.clearState(self)
 end

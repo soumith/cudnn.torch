@@ -287,3 +287,9 @@ function VolumetricConvolution:write(f)
    end
    f:writeObject(var)
 end
+
+function VolumetricConvolution:clearState()
+   self:clearDesc()
+   nn.utils.clear(self, 'extraBuffer')
+   return nn.Module.clearState(self)
+end

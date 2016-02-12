@@ -104,14 +104,23 @@ function TemporalConvolution:accGradParameters(input,gradOutput,scale)
     cudnn.SpatialConvolution.accGradParameters(self,_input,_gradOutput,scale)
 end
 
-function TemporalConvolution:write(f)
+function TemporalConvolution:clearDesc()
   self.buffer = nil
   self._ouptut = nil
   self.oSize = nil
+end
+
+function TemporalConvolution:write(f)
+  self:clearDesc()
   cudnn.SpatialConvolution.clearDesc(self)
     local var = {}
     for k,v in pairs(self) do
         var[k] = v
     end
     f:writeObject(var)
+end
+
+function TemporalConvolution:clearState()
+   self:clearDesc()
+   return parent.clearState(self)
 end
