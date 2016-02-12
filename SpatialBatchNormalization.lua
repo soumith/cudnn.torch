@@ -94,7 +94,7 @@ function SpatialBatchNormalization:read(file, version)
    if version < 2 then
       if self.running_std then
          -- for models before https://github.com/soumith/cudnn.torch/pull/101
-         self.running_var = self.running_std:pow(-2):add(-self.eps)
+         self.running_var = self.running_std
          self.running_std = nil
       end
    end
