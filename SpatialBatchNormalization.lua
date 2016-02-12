@@ -90,7 +90,7 @@ function SpatialBatchNormalization:write(f)
 end
 
 function SpatialBatchNormalization:read(file, version)
-   parent.read(self, file)
+   parent.read(self, file, version)
    if version < 2 then
       if self.running_std then
          -- for models before https://github.com/soumith/cudnn.torch/pull/101
