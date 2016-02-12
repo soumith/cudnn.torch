@@ -1,5 +1,6 @@
 -- modules that can be converted to nn seamlessly
 local layer_list = {
+  'SpatialBatchNormalization',
   'SpatialConvolution',
   'SpatialCrossMapLRN',
   'SpatialMaxPooling',
