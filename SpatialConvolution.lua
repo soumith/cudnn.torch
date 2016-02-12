@@ -482,3 +482,8 @@ function SpatialConvolution:write(f)
     end
     f:writeObject(var)
 end
+
+function SpatialConvolution:clearState()
+   self:clearDesc()
+   return nn.Module.clearState(self)
+end
