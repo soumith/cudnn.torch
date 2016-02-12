@@ -1135,28 +1135,40 @@ function cudnntest.SpatialLogSoftMax()
 end
 
 function cudnntest.SpatialBatchNormalization()
-   -- batch
-      local h = math.random(5,10)
-      local w = math.random(5,10)
-      local bsz = math.random(1, 32)
-      local from = math.random(1, 32)
-      local input = torch.randn(bsz,from,h,w):cuda()
-      local gradOutput = torch.randn(bsz,from,h,w):cuda()
-      local cbn = cudnn.SpatialBatchNormalization(from, 1e-3):cuda()
-      local gbn = nn.SpatialBatchNormalization(from, 1e-3):cuda()
-      cbn.weight:copy(gbn.weight)
-      cbn.bias:copy(gbn.bias)
-      local rescuda = cbn:forward(input)
-      local groundtruth = gbn:forward(input)
-      local resgrad = cbn:backward(input, gradOutput)
-      local groundgrad = gbn:backward(input, gradOutput)
+   local h = math.random(5,10)
+   local w = math.random(5,10)
+   local bsz = math.random(1, 32)
+   local from = math.random(1, 32)
+   local input = torch.randn(bsz,from,h,w):cuda()
+   local gradOutput = torch.randn(bsz,from,h,w):cuda()
+   local sconv = nn.SpatialBatchNormalization(from, 1e-3):cuda()
+   local gconv = cudnn.SpatialBatchNormalization(from, 1e-3):cuda()
+
+   local function test(sconv, gconv)
+      gconv.weight:copy(sconv.weight)
+      gconv.bias:copy(sconv.bias)
+      local rescuda = gconv:forward(input)
+      local groundtruth = sconv:forward(input)
+      local resgrad = gconv:backward(input, gradOutput)
+      local groundgrad = sconv:backward(input, gradOutput)
 
       local error = rescuda:float() - groundtruth:float()
       mytester:assertlt(error:abs():max(),
-                        precision_forward, 'error in batch normalization (forward) ')
+      precision_forward, 'error in batch normalization (forward) ')
       error = resgrad:float() - groundgrad:float()
       mytester:assertlt(error:abs():max(),
-                        precision_backward, 'error in batch normalization (backward) ')
+      precision_backward, 'error in batch normalization (backward) ')
+
+      -- IO
+      local ferr,berr = jac.testIO(gconv, input)
+      mytester:assertlt(ferr, precision_io, torch.typename(gconv) .. ' - i/o forward err ')
+      mytester:assertlt(berr, precision_io, torch.typename(gconv) .. ' - i/o backward err ')
+   end
+
+   test(sconv, gconv)
+   local gconv = cudnn.convert(sconv, cudnn)
+   mytester:asserteq(torch.typename(gconv), 'cudnn.SpatialBatchNormalization', 'conversion type check')
+   test(sconv, gconv)
 end
 
 function cudnntest.SpatialCrossEntropyCriterion()
