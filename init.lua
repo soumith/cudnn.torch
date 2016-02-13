@@ -1,7 +1,7 @@
 require 'cutorch'
 require 'nn'
 cudnn = require 'cudnn.env'
-include 'ffi.lua'
+require('cudnn.ffi')
 local C = cudnn.C
 local ffi = require 'ffi'
 
@@ -93,28 +93,28 @@ function cudnn.getSharedWorkspace()
     return sharedBuffer[device][stream]
 end
 
-include 'SpatialConvolution.lua'
-include 'VolumetricConvolution.lua'
-include 'Pooling.lua'
-include 'SpatialMaxPooling.lua'
-include 'SpatialAveragePooling.lua'
-include 'Pooling3D.lua'
-include 'VolumetricMaxPooling.lua'
-include 'VolumetricAveragePooling.lua'
-include 'Pointwise.lua'
-include 'ReLU.lua'
-include 'Tanh.lua'
-include 'Sigmoid.lua'
-include 'SpatialSoftMax.lua'
-include 'SpatialLogSoftMax.lua'
-include 'SoftMax.lua'
-include 'LogSoftMax.lua'
-include 'SpatialCrossMapLRN.lua'
-include 'SpatialBatchNormalization.lua'
-include 'SpatialCrossEntropyCriterion.lua'
-include 'TemporalConvolution.lua'
-include 'functional.lua'
-include 'convert.lua'
+require('cudnn.SpatialConvolution')
+require('cudnn.VolumetricConvolution')
+require('cudnn.Pooling')
+require('cudnn.SpatialMaxPooling')
+require('cudnn.SpatialAveragePooling')
+require('cudnn.Pooling3D')
+require('cudnn.VolumetricMaxPooling')
+require('cudnn.VolumetricAveragePooling')
+require('cudnn.Pointwise')
+require('cudnn.ReLU')
+require('cudnn.Tanh')
+require('cudnn.Sigmoid')
+require('cudnn.SpatialSoftMax')
+require('cudnn.SpatialLogSoftMax')
+require('cudnn.SoftMax')
+require('cudnn.LogSoftMax')
+require('cudnn.SpatialCrossMapLRN')
+require('cudnn.SpatialBatchNormalization')
+require('cudnn.SpatialCrossEntropyCriterion')
+require('cudnn.TemporalConvolution')
+require('cudnn.functional')
+require('cudnn.convert')
 
 
 return cudnn
