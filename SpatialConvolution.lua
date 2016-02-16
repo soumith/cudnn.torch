@@ -348,34 +348,7 @@ function SpatialConvolution:updateOutput(input)
     if not self.weightDesc then self:resetWeightDescriptors() end
     self:createIODescriptors(input)
 
-    local prevStream
-    local streamQueue = {}
-    if self.groups > 1 then -- try to do stream parallelization
-        prevStream = cutorch.getStream()
-
-        --[[
-            Only if prevStream is 0, then do parallelization.
-            the justification for this is that this is a hard problem, there is no
-            way to know if one is doing other kinds of stream-parallelization
-            (like GPUConcat), and if thats the case, streams are already
-            being ideally exploited.
-        --]]
-
-        if prevStream == 0 then
-            cutorch.reserveStreams(self.groups)
-            for i=1,self.groups do
-                cutorch.streamWaitFor(i, {prevStream})
-            end
-        end
-    end
-
     for g = 0, self.groups - 1 do
-        -- stream-parallelize if appropriate
-        if self.groups > 1 and prevStream == 0 then
-            cutorch.setStream(g + 1)
-            table.insert(streamQueue, g + 1)
-        end
-
         errcheck('cudnnConvolutionForward', cudnn.getHandle(),
                  one:data(),
                  self.iDesc[0], input:data() + g*self.input_offset,
@@ -384,11 +357,6 @@ function SpatialConvolution:updateOutput(input)
                  self.extraBuffer:data(), self.extraBufferSizeInBytes,
                  zero:data(),
                  self.oDesc[0], self.output:data() + g*self.output_offset);
-    end
-
-    if prevStream == 0 then
-        cutorch.setStream(prevStream)
-        cutorch.streamWaitFor(prevStream, streamQueue)
     end
 
     -- add bias
