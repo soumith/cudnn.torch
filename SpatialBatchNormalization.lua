@@ -133,3 +133,8 @@ function SpatialBatchNormalization:clearState()
    nn.utils.clear(self, 'save_mean', 'save_std')
    return parent.clearState(self)
 end
+
+function SpatialBatchNormalization:reset()
+   self.weight:uniform()
+   self.bias:zero()
+end
