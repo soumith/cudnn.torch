@@ -30,6 +30,17 @@ function SpatialBatchNormalization:__init(nFeature, eps, momentum, affine)
    self.mode = 'CUDNN_BATCHNORM_SPATIAL'
 end
 
+function SpatialBatchNormalization:reset()
+   if self.weight then
+      self.weight:uniform()
+   end
+   if self.bias then
+      self.bias:zero()
+   end
+   self.running_mean:zero()
+   self.running_std:fill(1)
+end
+
 function SpatialBatchNormalization:createIODescriptors(input)
    assert(input:dim() == 4)
    assert(torch.typename(self.weight) == 'torch.CudaTensor' and torch.typename(self.bias) == 'torch.CudaTensor',
