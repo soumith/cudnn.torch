@@ -42,19 +42,17 @@ function SpatialBatchNormalization:reset()
 end
 
 function SpatialBatchNormalization:createIODescriptors(input)
-   assert(input:dim() == 4)
+   assert(input:dim() == 4 or input:dim() == 5)
    assert(torch.typename(self.weight) == 'torch.CudaTensor' and torch.typename(self.bias) == 'torch.CudaTensor',
           'Only CUDA tensors are supported for cudnn.SpatialBatchNormalization!')
-   if not self.iDesc or not self.oDesc or
-      input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
-   or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
+   if not self.iDesc or not self.oDesc or not self.iSize or not input:isSize(self.iSize) then
       local nFeature = self.running_mean:numel()
       self.iSize = input:size()
       self.output:resizeAs(input)
       self.gradInput:resizeAs(input)
       self.iDesc = cudnn.toDescriptor(input)
       self.oDesc = cudnn.toDescriptor(self.output)
-      self.sDesc = cudnn.toDescriptor(self.bias:view(1, nFeature, 1, 1))
+      self.sDesc = cudnn.toDescriptor(input:dim() == 4 and self.bias:view(1, nFeature, 1, 1) or self.bias:view(1, nFeature, 1, 1, 1))
    end
 end
 
