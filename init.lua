@@ -70,6 +70,12 @@ function cudnn.toDescriptor(t)
       errcheck('cudnnDestroyTensorDescriptor', d[0]);
    end
    ffi.gc(descriptor, destroy)
+   -- view 2D and 3D as 4D
+   if t:dim() == 2 then
+      t = t:view(t:size(1), t:size(2), 1, 1)
+   elseif t:dim() == 3 then
+      t = t:view(t:size(1), t:size(2), t:size(3), 1)
+   end
    -- set descriptor
    local size = torch.LongTensor(t:size()):int()
    local stride = torch.LongTensor(t:stride()):int()
@@ -110,7 +116,9 @@ require('cudnn.SpatialLogSoftMax')
 require('cudnn.SoftMax')
 require('cudnn.LogSoftMax')
 require('cudnn.SpatialCrossMapLRN')
+require('cudnn.BatchNormalization')
 require('cudnn.SpatialBatchNormalization')
+require('cudnn.VolumetricBatchNormalization')
 require('cudnn.SpatialCrossEntropyCriterion')
 require('cudnn.TemporalConvolution')
 require('cudnn.functional')
