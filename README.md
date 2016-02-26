@@ -1,14 +1,14 @@
 cudnn.torch
 ===========
 
-Torch7 FFI bindings for NVIDIA cuDNN (R4) kernels!
+Torch7 FFI bindings for NVIDIA cuDNN (R5) kernels!
 
 Modules are API compatible their [`nn`](https://github.com/torch/nn) equivalents. Fully unit-tested against `nn` implementations.
 Conversion between `nn` and `cudnn` is available through `cudnn.convert` function.
 
 #### Installation
 
-* Install cuDNN (version R4 EA)
+* Install cuDNN (version R5 EA)
 * Have at least CUDA 7.0
 * Have `libcudnn.so` in your library path (Install it from https://developer.nvidia.com/cuDNN )
 
@@ -86,8 +86,7 @@ nn.Sequential {
 For version CuDNN R1, checkout the branch **R1**
 For version CuDNN R2, checkout the branch **R2**
 For version CuDNN R3, checkout the branch **R3**
+For version CuDNN R3, checkout the branch **master**
 
 
-R4 Release Notes:
-- Rather than resolving v3-v4 diffs, I have imported new cudnn.h with its entirety and converted comments and defines. This should be less error-prone.
-- addTensor_v2 uses changed to new AddTensor API.
+R5 Release Notes:

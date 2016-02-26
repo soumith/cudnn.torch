@@ -1266,7 +1266,7 @@ cudnnStatus_t             cudnnConvolutionBackwardData_v2(
                                 void                               *dx );
 ]]
 
-local libnames = {'libcudnn.so.4', 'libcudnn.4.dylib'}
+local libnames = {'libcudnn.so.5', 'libcudnn.5.dylib'}
 
 local ok = false
 for i=1,#libnames do
@@ -1275,15 +1275,16 @@ for i=1,#libnames do
 end
 
 if not ok then
-   error([['libcudnn (R4) not found in library path.
+   print(err)
+   error([['libcudnn (R5) not found in library path.
 Please install CuDNN from https://developer.nvidia.com/cuDNN
-Then make sure files named as libcudnn.so.4 or libcudnn.4.dylib are placed in your library load path (for example /usr/local/lib , or manually add a path to LD_LIBRARY_PATH)
+Then make sure files named as libcudnn.so.5 or libcudnn.5.dylib are placed in your library load path (for example /usr/local/lib , or manually add a path to LD_LIBRARY_PATH)
 ]])
 end
 
 cudnn.version = tonumber(cudnn.C.cudnnGetVersion())
-if cudnn.version < 4005 then
-  error('These bindings are for version 4005 or above, '
+if cudnn.version < 5001 then
+  error('These bindings are for version 5001 or above, '
         .. 'while the loaded CuDNN is version: ' .. cudnn.version
            .. '  \nAre you using an older version of CuDNN?')
 end
