@@ -344,8 +344,23 @@ end
 local one = torch.FloatTensor({1});
 local zero = torch.FloatTensor({0});
 
+local function makeContiguous(self, input, gradOutput)
+   if not input:isContiguous() then
+      self._input = self._input or input.new()
+      self._input:typeAs(input):resizeAs(input):copy(input)
+      input = self._input
+   end
+   if gradOutput and not gradOutput:isContiguous() then
+      self._gradOutput = self._gradOutput or gradOutput.new()
+      self._gradOutput:typeAs(gradOutput):resizeAs(gradOutput):copy(gradOutput)
+      gradOutput = self._gradOutput
+   end
+   return input, gradOutput
+end
+
 function SpatialConvolution:updateOutput(input)
     if not self.weightDesc then self:resetWeightDescriptors() end
+    input = makeContiguous(self, input)
     self:createIODescriptors(input)
 
     for g = 0, self.groups - 1 do
@@ -372,8 +387,8 @@ end
 function SpatialConvolution:updateGradInput(input, gradOutput)
     if not self.gradInput then return end
 
+    input, gradOutput = makeContiguous(self, input, gradOutput)
     assert(gradOutput:dim() == 3 or gradOutput:dim() == 4, 'gradOutput has to be 3D or 4D');
-    assert(gradOutput:isContiguous(), 'gradOutput has to be contiguous')
     if not self.weightDesc then self:resetWeightDescriptors() end
     self:createIODescriptors(input)
 
@@ -398,8 +413,9 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
     scale = scale or 1.0
     self.scaleT[1] = scale
 
+    input, gradOutput = makeContiguous(self, input, gradOutput)
+
     assert(gradOutput:dim() == 3 or gradOutput:dim() == 4, 'gradOutput has to be 3D or 4D');
-    assert(gradOutput:isContiguous(), 'gradOutput has to be contiguous')
     if not self.weightDesc then self:resetWeightDescriptors() end
     self:createIODescriptors(input)
 
