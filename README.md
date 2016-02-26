@@ -91,5 +91,4 @@ For version CuDNN R2, checkout the branch **R2**
 For version CuDNN R3, checkout the branch **R3**
 For version CuDNN R4, checkout the branch **master**
 
-
 R5 Release Notes:

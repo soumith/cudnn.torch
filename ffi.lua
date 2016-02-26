@@ -1577,7 +1577,6 @@ cudnnStatus_t             cudnnActivationBackward_v4(
                                 const cudnnTensorDescriptor_t       dxDesc,
                                 void                               *dx );
 
-
 ]]
 
 local libnames = {'libcudnn.so.5', 'libcudnn.5.dylib'}
