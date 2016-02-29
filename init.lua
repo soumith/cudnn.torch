@@ -79,7 +79,7 @@ function cudnn.toDescriptor(t)
    -- set descriptor
    local size = torch.LongTensor(t:size()):int()
    local stride = torch.LongTensor(t:stride()):int()
-   errcheck('cudnnSetTensorNdDescriptor', descriptor[0], 'CUDNN_DATA_FLOAT',
+   errcheck('cudnnSetTensorNdDescriptor', descriptor[0], 'CUDNN_DATA_HALF',
             t:dim(), size:data(), stride:data())
    return descriptor
 end

@@ -43,7 +43,7 @@ function SpatialConvolution:resetWeightDescriptors()
                               self.nInputPlane/self.groups,
                               self.kH, self.kW})
     errcheck('cudnnSetFilterNdDescriptor', self.weightDesc[0],
-             'CUDNN_DATA_FLOAT', 4,
+             'CUDNN_DATA_HALF', 4,
              desc:data());
     local function destroyWDesc(d)
         errcheck('cudnnDestroyFilterDescriptor', d[0]);
