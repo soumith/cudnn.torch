@@ -272,7 +272,7 @@ function cudnntest.TemporalConvolution_padding_batch()
    local ki = math.random(2,15)
    local pad_h = math.floor(ki/2)
    local si = math.random(1,ki)
-   local outi = math.random(1,15)
+   local outi = math.random(2,15)
    local ini = (outi-1)*si+ki
    local scale = math.random()
 
