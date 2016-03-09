@@ -26,7 +26,7 @@ local zero = torch.FloatTensor({0});
 function Pointwise:updateOutput(input)
    self:createIODescriptors(input)
    if self.inplace then self.output:set(input) end
-   errcheck('cudnnActivationForward',
+   errcheck('cudnnActivationForward_v3',
             cudnn.getHandle(), self.mode,
             one:data(),
             self.iDesc[0], input:data(),
@@ -43,7 +43,7 @@ function Pointwise:updateGradInput(input, gradOutput)
    end
    self:createIODescriptors(input)
    if self.inplace then self.output:set(input); self.gradInput:set(gradOutput) end
-   errcheck('cudnnActivationBackward',
+   errcheck('cudnnActivationBackward_v3',
             cudnn.getHandle(), self.mode,
             one:data(),
             self.iDesc[0], self.output:data(),

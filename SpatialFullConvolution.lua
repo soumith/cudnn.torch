@@ -1,4 +1,4 @@
-local SpatialFullConvolution, parent =
+ocal SpatialFullConvolution, parent =
     torch.class('cudnn.SpatialFullConvolution', 'nn.SpatialFullConvolution')
 local ffi = require 'ffi'
 local errcheck = cudnn.errcheck
@@ -93,7 +93,7 @@ function SpatialFullConvolution:createIODescriptors(input)
         local pad = torch.IntTensor({self.padH, self.padW})
         local stride = torch.IntTensor({self.dH, self.dW})
         local upscale = torch.IntTensor({1,1})
-        errcheck('cudnnSetConvolutionNdDescriptor_v3', self.convDesc[0],
+        errcheck('cudnnSetConvolutionNdDescriptor', self.convDesc[0],
                  2, pad:data(),
                  stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
                  'CUDNN_DATA_FLOAT');
@@ -309,7 +309,7 @@ function SpatialFullConvolution:updateOutput(input)
     self:createIODescriptors(input)
 
     -- Because SpatialFullConvolution is performing the adjoint of the forward
-    -- convolution operator, we need to swap the forward and backward passes.  
+    -- convolution operator, we need to swap the forward and backward passes.
     errcheck('cudnnConvolutionBackwardData', cudnn.getHandle(),
              one:data(),
              self.weightDesc[0], self.weight:data(),

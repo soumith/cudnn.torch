@@ -14,7 +14,7 @@ function VolumetricConvolution:resetWeightDescriptors()
    errcheck('cudnnCreateFilterDescriptor', self.weightDesc)
    local desc = torch.IntTensor({self.nOutputPlane, self.nInputPlane,
                              self.kT, self.kH, self.kW})
-   errcheck('cudnnSetFilterNdDescriptor', self.weightDesc[0],
+   errcheck('cudnnSetFilterNdDescriptor_v3', self.weightDesc[0],
             'CUDNN_DATA_FLOAT', 5,
             desc:data());
    local function destroyWDesc(d)
@@ -81,7 +81,7 @@ function VolumetricConvolution:createIODescriptors(input)
          local pad = torch.IntTensor({self.padT, self.padH, self.padW})
          local stride = torch.IntTensor({self.dT, self.dH, self.dW})
          local upscale = torch.IntTensor({1,1,1})
-         errcheck('cudnnSetConvolutionNdDescriptor_v3', self.convDesc[0],
+         errcheck('cudnnSetConvolutionNdDescriptor', self.convDesc[0],
                   3, pad:data(),
                   stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
           'CUDNN_DATA_FLOAT');
@@ -239,7 +239,7 @@ function VolumetricConvolution:updateGradInput(input, gradOutput)
           'gradOutput has to be a 4D or 5D tensor');
    if not self.weightDesc then self:resetWeightDescriptors() end
    self:createIODescriptors(input)
-   errcheck('cudnnConvolutionBackwardData_v3', cudnn.getHandle(),
+   errcheck('cudnnConvolutionBackwardData', cudnn.getHandle(),
         one:data(),
         self.weightDesc[0], self.weight:data(),
         self.oDesc[0], gradOutput:data(),
@@ -270,7 +270,7 @@ function VolumetricConvolution:accGradParameters(input, gradOutput, scale)
             one:data(),
             self.biasDesc[0], self.gradBias:data());
    -- gradWeight
-   errcheck('cudnnConvolutionBackwardFilter_v3', cudnn.getHandle(),
+   errcheck('cudnnConvolutionBackwardFilter', cudnn.getHandle(),
         self.scaleT:data(),
         self.iDesc[0], input:data(),
         self.oDesc[0], gradOutput:data(),
