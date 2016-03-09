@@ -369,6 +369,18 @@ cudnnStatus_t             cudnnFindConvolutionForwardAlgorithm(
                                 int                                *returnedAlgoCount,
                                 cudnnConvolutionFwdAlgoPerf_t      *perfResults );
 
+
+
+cudnnStatus_t             cudnnGetConvolutionForwardAlgorithm(
+                                cudnnHandle_t                       handle,
+                                const cudnnTensorDescriptor_t       xDesc,
+                                const cudnnFilterDescriptor_t       wDesc,
+                                const cudnnConvolutionDescriptor_t  convDesc,
+                                const cudnnTensorDescriptor_t       yDesc,
+                                cudnnConvolutionFwdPreference_t     preference,
+                                size_t                              memoryLimitInbytes,
+                                cudnnConvolutionFwdAlgo_t          *algo );
+
 cudnnStatus_t             cudnnGetConvolutionForwardAlgorithm(
                                 cudnnHandle_t                       handle,
                                 const cudnnTensorDescriptor_t       xDesc,
@@ -383,17 +395,6 @@ cudnnStatus_t             cudnnGetConvolutionForwardAlgorithm(
                                 cudnnConvolutionFwdAlgoPerf_t      *perfResults,
                                 void                               *workSpace,
                                 size_t                              workSpaceSizeInBytes );
-
-
-cudnnStatus_t  cudnnGetConvolutionForwardAlgorithm(
-                                cudnnHandle_t                       handle,
-                                const cudnnTensorDescriptor_t       xDesc,
-                                const cudnnFilterDescriptor_t       wDesc,
-                                const cudnnConvolutionDescriptor_t  convDesc,
-                                const cudnnTensorDescriptor_t       yDesc,
-                                cudnnConvolutionFwdPreference_t     preference,
-                                size_t                              memoryLimitInbytes,
-                                cudnnConvolutionFwdAlgo_t          *algo );
 
 /*
  *  convolution algorithm (which requires potentially some workspace)

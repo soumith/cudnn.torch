@@ -42,7 +42,7 @@ function SpatialConvolution:resetWeightDescriptors()
     local desc = torch.IntTensor({self.nOutputPlane/self.groups,
                               self.nInputPlane/self.groups,
                               self.kH, self.kW})
-    errcheck('cudnnSetFilterNdDescriptor', self.weightDesc[0],
+    errcheck('cudnnSetFilterNdDescriptor_v3', self.weightDesc[0],
              'CUDNN_DATA_FLOAT', 4,
              desc:data());
     local function destroyWDesc(d)
@@ -123,7 +123,7 @@ function SpatialConvolution:createIODescriptors(input)
         local pad = torch.IntTensor({self.padH, self.padW})
         local stride = torch.IntTensor({self.dH, self.dW})
         local upscale = torch.IntTensor({1,1})
-        errcheck('cudnnSetConvolutionNdDescriptor_v3', self.convDesc[0],
+        errcheck('cudnnSetConvolutionNdDescriptor', self.convDesc[0],
                  2, pad:data(),
                  stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
                  'CUDNN_DATA_FLOAT');
@@ -393,7 +393,7 @@ function SpatialConvolution:updateGradInput(input, gradOutput)
     self:createIODescriptors(input)
 
     for g = 0,self.groups - 1 do
-        errcheck('cudnnConvolutionBackwardData_v3', cudnn.getHandle(),
+        errcheck('cudnnConvolutionBackwardData', cudnn.getHandle(),
                  one:data(),
                  self.weightDesc[0], self.weight:data() + g*self.weight_offset,
                  self.oDesc[0], gradOutput:data() + g*self.output_offset,
@@ -430,7 +430,7 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
 
     for g = 0, self.groups - 1 do
         -- gradWeight
-        errcheck('cudnnConvolutionBackwardFilter_v3', cudnn.getHandle(),
+        errcheck('cudnnConvolutionBackwardFilter', cudnn.getHandle(),
                  self.scaleT:data(),
                  self.iDesc[0], input:data() + g*self.input_offset,
                  self.oDesc[0], gradOutput:data() + g*self.output_offset,
