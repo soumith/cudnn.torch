@@ -15,11 +15,17 @@ function Pointwise:createIODescriptors(input)
        self.gradInput:resizeAs(input)
        self.output:resizeAs(input)
    end
+   if not self.activDesc then
+      self.activDesc = ffi.new('struct cudnnActivationStruct*[1]')
+      errcheck('cudnnCreateActivationDescriptor', self.activDesc)
+      errcheck('cudnnSetActivationDescriptor', self.activDesc[0], self.mode, 'CUDNN_PROPAGATE_NAN', 0.0);
+   end
    local nElem = input:nElement()
    self.nElem = self.nElem or nElem -- this goes to the second branch only once
    if self.iDesc and nElem == self.nElem then return end
    self.nElem = nElem
    self.iDesc = cudnn.toDescriptor(input:view(1,1,1,nElem))
+
 end
 
 local one = torch.FloatTensor({1});
@@ -27,22 +33,13 @@ local zero = torch.FloatTensor({0});
 
 function Pointwise:updateOutput(input)
    self:createIODescriptors(input)
-   local activDesc = ffi.new('struct cudnnActivationStruct*[1]')
-   errcheck('cudnnCreateActivationDescriptor', activDesc)
-   errcheck('cudnnSetActivationDescriptor', activDesc[0], self.mode, 'CUDNN_PROPAGATE_NAN', 0.0);
    if self.inplace then self.output:set(input) end
    errcheck('cudnnActivationForward',
-            cudnn.getHandle(), activDesc[0],
+            cudnn.getHandle(), self.activDesc[0],
             one:data(),
             self.iDesc[0], input:data(),
             zero:data(),
             self.iDesc[0], self.output:data());
-
-   local function destroyActivationDesc(d)
-       errcheck('cudnnDestroyActivationDescriptor', d[0]);
-   end
-   ffi.gc(activDesc, destroyActivationDesc)
-
    return self.output
 end
 
@@ -53,25 +50,15 @@ function Pointwise:updateGradInput(input, gradOutput)
       gradOutput = self._gradOutput
    end
    self:createIODescriptors(input)
-   local activDesc = ffi.new('struct cudnnActivationStruct*[1]')
-   errcheck('cudnnCreateActivationDescriptor', activDesc)
-   errcheck('cudnnSetActivationDescriptor', activDesc[0], self.mode, 'CUDNN_PROPAGATE_NAN', 0.0);
-
    if self.inplace then self.output:set(input); self.gradInput:set(gradOutput) end
    errcheck('cudnnActivationBackward',
-            cudnn.getHandle(), activDesc[0],
+            cudnn.getHandle(), self.activDesc[0],
             one:data(),
             self.iDesc[0], self.output:data(),
             self.iDesc[0], gradOutput:data(),
             self.iDesc[0], input:data(),
             zero:data(),
             self.iDesc[0], self.gradInput:data());
-
-   local function destroyActivationDesc(d)
-       errcheck('cudnnDestroyActivationDescriptor', d[0]);
-   end
-   ffi.gc(activDesc, destroyActivationDesc)
-
    return self.gradInput
 end
 
@@ -81,6 +68,7 @@ end
 
 function Pointwise:write(f)
    self:clearDesc()
+   nn.utils.clear(self, 'activDesc')
    local var = {}
    for k,v in pairs(self) do
       var[k] = v
@@ -91,5 +79,6 @@ end
 function Pointwise:clearState()
    self:clearDesc()
    self._gradOutput = nil
+   nn.utils.clear(self, 'activDesc')
    return parent.clearState(self)
 end
