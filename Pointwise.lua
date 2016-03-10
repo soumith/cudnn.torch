@@ -64,11 +64,14 @@ end
 
 function Pointwise:clearDesc()
    self.iDesc = nil
+   if self.activDesc then
+      errcheck('cudnnDestroyActivationDescriptor', self.activDesc[0]);
+      self.activDesc = nil
+   end
 end
 
 function Pointwise:write(f)
    self:clearDesc()
-   nn.utils.clear(self, 'activDesc')
    local var = {}
    for k,v in pairs(self) do
       var[k] = v
