@@ -60,7 +60,7 @@ cudnn.functional.Convolution2D_updateOutput = function(handle, input, weight, ou
    local nOutputPlane, nInputPlane, kH, kW
        = weight:size(1), weight:size(2), weight:size(3), weight:size(4)
    local desc = torch.IntTensor({nOutputPlane, nInputPlane, kH, kW})
-   errcheck('cudnnSetFilterNdDescriptor_v3', weightDesc[0], 'CUDNN_DATA_FLOAT', 4,
+   errcheck('cudnnSetFilterNdDescriptor', weightDesc[0], 'CUDNN_DATA_FLOAT', 'CUDNN_TENSOR_NCHW', 4,
             desc:data());
    local function destroyWDesc(d)
       errcheck('cudnnDestroyFilterDescriptor', d[0]);
@@ -139,7 +139,7 @@ cudnn.functional.Convolution2D_updateGradInput = function(handle, input, weight,
    local nOutputPlane, nInputPlane, kH, kW
        = weight:size(1), weight:size(2), weight:size(3), weight:size(4)
    local desc = torch.IntTensor({nOutputPlane, nInputPlane, kH, kW})
-   errcheck('cudnnSetFilterNdDescriptor_v3', weightDesc[0], 'CUDNN_DATA_FLOAT', 4,
+   errcheck('cudnnSetFilterNdDescriptor', weightDesc[0], 'CUDNN_DATA_FLOAT', 'CUDNN_TENSOR_NCHW', 4,
             desc:data());
    local function destroyWDesc(d)
       errcheck('cudnnDestroyFilterDescriptor', d[0]);
@@ -204,7 +204,7 @@ cudnn.functional.Convolution2D_accGradParameters = function(handle, input, gradW
     local nOutputPlane, nInputPlane, kH, kW
         = gradWeight:size(1), gradWeight:size(2), gradWeight:size(3), gradWeight:size(4)
     local desc = torch.IntTensor({nOutputPlane, nInputPlane, kH, kW})
-    errcheck('cudnnSetFilterNdDescriptor_v3', weightDesc[0], 'CUDNN_DATA_FLOAT', 4,
+    errcheck('cudnnSetFilterNdDescriptor', weightDesc[0], 'CUDNN_DATA_FLOAT', 'CUDNN_TENSOR_NCHW', 4,
              desc:data());
     local function destroyWDesc(d)
         errcheck('cudnnDestroyFilterDescriptor', d[0]);
@@ -284,7 +284,7 @@ cudnn.functional.Pooling_updateOutput = function(handle, mode, input, output,
     local ker = torch.IntTensor({kH, kW})
     local str = torch.IntTensor({dH, dW})
     local pad = torch.IntTensor({padH, padW})
-    errcheck('cudnnSetPoolingNdDescriptor_v3', poolDesc[0], mode, 2,
+    errcheck('cudnnSetPoolingNdDescriptor', poolDesc[0], mode, 'CUDNN_PROPAGATE_NAN', 2,
              ker:data(), pad:data(), str:data());
     local function destroyPoolDesc(d)
         errcheck('cudnnDestroyPoolingDescriptor', d[0]);
@@ -347,7 +347,7 @@ cudnn.functional.Pooling_updateGradInput = function(handle, mode, input, output,
     local ker = torch.IntTensor({kH, kW})
     local str = torch.IntTensor({dH, dW})
     local pad = torch.IntTensor({padH, padW})
-    errcheck('cudnnSetPoolingNdDescriptor_v3', poolDesc[0], mode, 2,
+    errcheck('cudnnSetPoolingNdDescriptor', poolDesc[0], mode, 'CUDNN_PROPAGATE_NAN', 2,
              ker:data(), pad:data(), str:data());
     local function destroyPoolDesc(d)
         errcheck('cudnnDestroyPoolingDescriptor', d[0]);
