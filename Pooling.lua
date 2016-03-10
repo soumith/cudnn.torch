@@ -33,7 +33,7 @@ function Pooling:resetPoolDescriptors()
    local ker = torch.IntTensor({self.kH, self.kW})
    local str = torch.IntTensor({self.dH, self.dW})
    local pad = torch.IntTensor({self.padH, self.padW})
-   errcheck('cudnnSetPoolingNdDescriptor_v3', self.poolDesc[0], self.mode, 2,
+   errcheck('cudnnSetPoolingNdDescriptor', self.poolDesc[0], self.mode, 'CUDNN_PROPAGATE_NAN', 2,
             ker:data(), pad:data(), str:data());
    local function destroyPoolDesc(d)
       errcheck('cudnnDestroyPoolingDescriptor', d[0]);
