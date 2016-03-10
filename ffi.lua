@@ -221,6 +221,7 @@ cudnnStatus_t  cudnnGetFilter4dDescriptor(
 cudnnStatus_t             cudnnSetFilterNdDescriptor(
                                 cudnnFilterDescriptor_t             filterDesc,
                                 cudnnDataType_t                     dataType, /*  image data type */
+                                cudnnTensorFormat_t                 format,
                                 int                                 nbDims,
                                 const int                           filterDimA[] );
 
@@ -369,23 +370,9 @@ cudnnStatus_t             cudnnFindConvolutionForwardAlgorithm(
                                 int                                *returnedAlgoCount,
                                 cudnnConvolutionFwdAlgoPerf_t      *perfResults );
 
+
+
 cudnnStatus_t             cudnnGetConvolutionForwardAlgorithm(
-                                cudnnHandle_t                       handle,
-                                const cudnnTensorDescriptor_t       xDesc,
-                                const void                         *x,
-                                const cudnnFilterDescriptor_t       wDesc,
-                                const void                         *w,
-                                const cudnnConvolutionDescriptor_t  convDesc,
-                                const cudnnTensorDescriptor_t       yDesc,
-                                void                               *y,
-                                const int                           requestedAlgoCount,
-                                int                                *returnedAlgoCount,
-                                cudnnConvolutionFwdAlgoPerf_t      *perfResults,
-                                void                               *workSpace,
-                                size_t                              workSpaceSizeInBytes );
-
-
-cudnnStatus_t  cudnnGetConvolutionForwardAlgorithm(
                                 cudnnHandle_t                       handle,
                                 const cudnnTensorDescriptor_t       xDesc,
                                 const cudnnFilterDescriptor_t       wDesc,
@@ -394,7 +381,6 @@ cudnnStatus_t  cudnnGetConvolutionForwardAlgorithm(
                                 cudnnConvolutionFwdPreference_t     preference,
                                 size_t                              memoryLimitInbytes,
                                 cudnnConvolutionFwdAlgo_t          *algo );
-
 /*
  *  convolution algorithm (which requires potentially some workspace)
  */

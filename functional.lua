@@ -60,7 +60,7 @@ cudnn.functional.Convolution2D_updateOutput = function(handle, input, weight, ou
    local nOutputPlane, nInputPlane, kH, kW
        = weight:size(1), weight:size(2), weight:size(3), weight:size(4)
    local desc = torch.IntTensor({nOutputPlane, nInputPlane, kH, kW})
-   errcheck('cudnnSetFilterNdDescriptor', weightDesc[0], 'CUDNN_DATA_FLOAT', 4,
+   errcheck('cudnnSetFilterNdDescriptor', weightDesc[0], 'CUDNN_DATA_FLOAT', 'CUDNN_TENSOR_NCHW', 4,
             desc:data());
    local function destroyWDesc(d)
       errcheck('cudnnDestroyFilterDescriptor', d[0]);
@@ -73,7 +73,7 @@ cudnn.functional.Convolution2D_updateOutput = function(handle, input, weight, ou
    local pad = torch.IntTensor({padH, padW})
    local stride = torch.IntTensor({strideH, strideW})
    local upscale = torch.IntTensor({1,1})
-   errcheck('cudnnSetConvolutionNdDescriptor_v3', convDesc[0],
+   errcheck('cudnnSetConvolutionNdDescriptor', convDesc[0],
             2, pad:data(),
             stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
             'CUDNN_DATA_FLOAT');
@@ -139,7 +139,7 @@ cudnn.functional.Convolution2D_updateGradInput = function(handle, input, weight,
    local nOutputPlane, nInputPlane, kH, kW
        = weight:size(1), weight:size(2), weight:size(3), weight:size(4)
    local desc = torch.IntTensor({nOutputPlane, nInputPlane, kH, kW})
-   errcheck('cudnnSetFilterNdDescriptor', weightDesc[0], 'CUDNN_DATA_FLOAT', 4,
+   errcheck('cudnnSetFilterNdDescriptor', weightDesc[0], 'CUDNN_DATA_FLOAT', 'CUDNN_TENSOR_NCHW', 4,
             desc:data());
    local function destroyWDesc(d)
       errcheck('cudnnDestroyFilterDescriptor', d[0]);
@@ -152,7 +152,7 @@ cudnn.functional.Convolution2D_updateGradInput = function(handle, input, weight,
    local pad = torch.IntTensor({padH, padW})
    local stride = torch.IntTensor({strideH, strideW})
    local upscale = torch.IntTensor({1,1})
-   errcheck('cudnnSetConvolutionNdDescriptor_v3', convDesc[0],
+   errcheck('cudnnSetConvolutionNdDescriptor', convDesc[0],
             2, pad:data(),
             stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
             'CUDNN_DATA_FLOAT');
@@ -175,7 +175,7 @@ cudnn.functional.Convolution2D_updateGradInput = function(handle, input, weight,
             algSearchMode, 0, algType)
 
    -- do convolution
-   errcheck('cudnnConvolutionBackwardData_v3', handle,
+   errcheck('cudnnConvolutionBackwardData', handle,
                one:data(),
                weightDesc[0], weight:data(),
                oDesc[0], gradOutput:data(),
@@ -204,7 +204,7 @@ cudnn.functional.Convolution2D_accGradParameters = function(handle, input, gradW
     local nOutputPlane, nInputPlane, kH, kW
         = gradWeight:size(1), gradWeight:size(2), gradWeight:size(3), gradWeight:size(4)
     local desc = torch.IntTensor({nOutputPlane, nInputPlane, kH, kW})
-    errcheck('cudnnSetFilterNdDescriptor', weightDesc[0], 'CUDNN_DATA_FLOAT', 4,
+    errcheck('cudnnSetFilterNdDescriptor', weightDesc[0], 'CUDNN_DATA_FLOAT', 'CUDNN_TENSOR_NCHW', 4,
              desc:data());
     local function destroyWDesc(d)
         errcheck('cudnnDestroyFilterDescriptor', d[0]);
@@ -217,7 +217,7 @@ cudnn.functional.Convolution2D_accGradParameters = function(handle, input, gradW
     local pad = torch.IntTensor({padH, padW})
     local stride = torch.IntTensor({strideH, strideW})
     local upscale = torch.IntTensor({1,1})
-    errcheck('cudnnSetConvolutionNdDescriptor_v3', convDesc[0],
+    errcheck('cudnnSetConvolutionNdDescriptor', convDesc[0],
              2, pad:data(),
              stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
              'CUDNN_DATA_FLOAT');
@@ -242,7 +242,7 @@ cudnn.functional.Convolution2D_accGradParameters = function(handle, input, gradW
 
 
     -- do convolution
-    errcheck('cudnnConvolutionBackwardFilter_v3', handle,
+    errcheck('cudnnConvolutionBackwardFilter', handle,
              scaleT:data(),
              iDesc[0], input:data(),
              oDesc[0], gradOutput:data(),
@@ -284,7 +284,7 @@ cudnn.functional.Pooling_updateOutput = function(handle, mode, input, output,
     local ker = torch.IntTensor({kH, kW})
     local str = torch.IntTensor({dH, dW})
     local pad = torch.IntTensor({padH, padW})
-    errcheck('cudnnSetPoolingNdDescriptor', poolDesc[0], mode, 2,
+    errcheck('cudnnSetPoolingNdDescriptor', poolDesc[0], mode, 'CUDNN_PROPAGATE_NAN', 2,
              ker:data(), pad:data(), str:data());
     local function destroyPoolDesc(d)
         errcheck('cudnnDestroyPoolingDescriptor', d[0]);
@@ -347,7 +347,7 @@ cudnn.functional.Pooling_updateGradInput = function(handle, mode, input, output,
     local ker = torch.IntTensor({kH, kW})
     local str = torch.IntTensor({dH, dW})
     local pad = torch.IntTensor({padH, padW})
-    errcheck('cudnnSetPoolingNdDescriptor', poolDesc[0], mode, 2,
+    errcheck('cudnnSetPoolingNdDescriptor', poolDesc[0], mode, 'CUDNN_PROPAGATE_NAN', 2,
              ker:data(), pad:data(), str:data());
     local function destroyPoolDesc(d)
         errcheck('cudnnDestroyPoolingDescriptor', d[0]);
