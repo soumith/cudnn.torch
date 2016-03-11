@@ -1,4 +1,4 @@
-ocal SpatialFullConvolution, parent =
+local SpatialFullConvolution, parent =
     torch.class('cudnn.SpatialFullConvolution', 'nn.SpatialFullConvolution')
 local ffi = require 'ffi'
 local errcheck = cudnn.errcheck

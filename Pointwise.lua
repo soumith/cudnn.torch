@@ -15,11 +15,21 @@ function Pointwise:createIODescriptors(input)
        self.gradInput:resizeAs(input)
        self.output:resizeAs(input)
    end
+
    if not self.activDesc then
       self.activDesc = ffi.new('struct cudnnActivationStruct*[1]')
       errcheck('cudnnCreateActivationDescriptor', self.activDesc)
       errcheck('cudnnSetActivationDescriptor', self.activDesc[0], self.mode, 'CUDNN_PROPAGATE_NAN', 0.0);
+
+      local function destroyADesc(a)
+         if (a[0]) then
+            errcheck('cudnnDestroyActivationDescriptor', a[0]);
+            a[0] = nil
+         end
+      end
+      ffi.gc(self.activDesc, destroyADesc)
    end
+
    local nElem = input:nElement()
    self.nElem = self.nElem or nElem -- this goes to the second branch only once
    if self.iDesc and nElem == self.nElem then return end
@@ -64,10 +74,7 @@ end
 
 function Pointwise:clearDesc()
    self.iDesc = nil
-   if self.activDesc then
-      errcheck('cudnnDestroyActivationDescriptor', self.activDesc[0]);
-      self.activDesc = nil
-   end
+   self.activDesc = nil
 end
 
 function Pointwise:write(f)
