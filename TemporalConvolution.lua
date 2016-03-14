@@ -94,9 +94,9 @@ function TemporalConvolution:updateGradInput(input, gradOutput)
    end
    self.gradInput = cudnn.SpatialConvolution.updateGradInput(self,_input, _gradOutput)
    if input:dim()==3 then
-      self.gradInput = self.gradInput:view(self.gradInput:size(1),self.gradInput:size(3),self.gradInput:size(4))
+      self.gradInput = self.gradInput:view(self.iSize[1],self.iSize[3],self.iSize[4])
    else
-      self.gradInput = self.gradInput:view(self.gradInput:size(3),self.gradInput:size(4))
+      self.gradInput = self.gradInput:view(self.iSize[3],self.iSize[4])
    end
    return self.gradInput
 end
@@ -111,7 +111,7 @@ end
 
 function TemporalConvolution:clearDesc()
   self.buffer = nil
-  self._ouptut = nil
+  self._output = nil
   self.oSize = nil
 end
 
