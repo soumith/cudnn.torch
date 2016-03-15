@@ -114,15 +114,7 @@ function VolumetricConvolution:createIODescriptors(input)
 
         -----------------------------------------------------------------------
         local function shape(x)
-            local sz = x:size()
-            local str = ''
-            for i=1,sz:size() do
-                str = str .. sz[i] .. 'x'
-            end
-            if #str > 0 then
-                str = str:sub(1, #str-1)
-            end
-            return str
+ 	   return table.concat(x:size():totable(),'x')
         end
         local autotunerHash = shape(self.weight) .. ';'
            .. shape(input) .. ';'
