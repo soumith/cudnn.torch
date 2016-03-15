@@ -129,7 +129,7 @@ local weight = torch.CudaTensor(dims_5[1], dims_5[2], dims_5[3])
 local workspace = cudnn.getSharedWorkspace()
 local workspaceSize = torch.LongTensor(1)
 errcheck('cudnnGetRNNWorkspaceSize', cudnn.getHandle(), rnnDesc[0], inputDescs, workspaceSize:data())
-workspace:resize(workspaceSize[1] / 4) -- sizeof(float)
+workspace:resize(workspaceSize[1] * 40000) -- sizeof(float)
 
 -- Print Descriptor data
 print("hiddenSize = " .. hiddenSize)
