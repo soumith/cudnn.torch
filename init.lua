@@ -101,6 +101,7 @@ end
 
 require('cudnn.SpatialConvolution')
 require('cudnn.VolumetricConvolution')
+require('cudnn.SpatialFullConvolution')
 require('cudnn.Pooling')
 require('cudnn.SpatialMaxPooling')
 require('cudnn.SpatialAveragePooling')
