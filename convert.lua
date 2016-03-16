@@ -42,6 +42,7 @@ function cudnn.convert(net, dst)
       if v == 'ReLU' then y = dst.ReLU() end -- because parameters
       for k,u in pairs(x) do y[k] = u end
       if src == cudnn and x.clearDesc then x:clearDesc() end
+      if src == cudnn and v == 'SpatialAveragePooling' then y.divide = true end
       return y
     end
     local t = torch.typename(x)
