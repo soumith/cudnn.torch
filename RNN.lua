@@ -2,33 +2,30 @@ local RNN, parent = torch.class('cudnn.RNN', 'nn.Module')
 local ffi = require 'ffi'
 local errcheck = cudnn.errcheck
 
-function RNN:__init() -- TODO parameters
+function RNN:__init(inputSize, hiddenSize, seqLength, numLayers, miniBatch)
     parent.__init(self)
 
     self.datatype = 0      -- TODO CUDNN_FLOAT, should get the constant from ffi
-    self.hiddenSize = 1    -- TODO This is a layer parameter, correct?
-    self.inputSize = 1     -- TODO Is this a layer parameter or determined by input?
-    self.seqLength = 1     -- TODO Is this a layer parameter or determined by input?
-    self.numLayers = 1     -- TODO
-    self.miniBatch = 1     -- TODO
-    self.bidirectional = 0 -- TODO
+    self.hiddenSize = hiddenSize
+    self.inputSize = inputSize
+    self.seqLength = seqLength
+    self.numLayers = numLayers
+    self.miniBatch = miniBatch
+    self.bidirectional = 0
     self.inputMode = 0     -- TODO CUDNN_LINEAR_INPUT, should get the constant from ffi
     self.mode = 0          -- TODO CUDNN_RNN_RELU, should get the constant from ffi
-    self.dropout = 0       -- TODO 
-    self.seed = 0x01234567 -- TODO 
+    self.dropout = 0
+    self.seed = 0x01234567
 
     -- TODO should these be CudaTensors ?
-    self.weight = torch.CudaTensor() -- TODO size
-    self.gradWeight = torch.CudaTensor() -- TODO size
-    self.hx = torch.CudaTensor() -- TODO size (should this be internal/external?)
-    self.cx = torch.CudaTensor() -- TODO size (should this be internal/external?)
-    self.hy = torch.CudaTensor() -- TODO size (should this be internal/external?)
-    self.cy = torch.CudaTensor() -- TODO size (should this be internal/external?)
-
-    self.h0 = torch.CudaTensor() -- TODO input hidden copy from output
-    self.c0 = torch.CudaTensor() -- TODO input cell copy from cell
-
-    self.reserve = torch.CudaTensor() -- TODO
+    self.output = torch.CudaTensor()
+    self.weight = torch.CudaTensor()
+    self.gradWeight = torch.CudaTensor()
+    self.hidden = torch.CudaTensor()
+    self.cell = torch.CudaTensor()
+    self.hy = torch.CudaTensor()
+    self.cy = torch.CudaTensor()
+    self.reserve = torch.CudaTensor()
 end
 
 local function createDescriptors(count, descs_type, create_func, destroy_func)
@@ -38,7 +35,7 @@ local function createDescriptors(count, descs_type, create_func, destroy_func)
     end
     local function destroyDescriptors(ds)
         for i = 0, count - 1 do
-            errcheck(destroy_func, ds + i)
+            errcheck(destroy_func, ds[i])
         end
     end
     ffi.gc(ds, destroyDescriptors)
@@ -76,11 +73,18 @@ function RNN:resetDropoutDescriptors()
     if not self.dropoutDesc then
         self.dropoutDesc = createDropoutDescriptors(1)
     end
+
+    self.dropoutStatesSize = torch.LongTensor(1)
+    errcheck('cudnnDropoutGetStatesSize',
+             cudnn.getHandle(),
+             self.dropoutStatesSize:data())
+    self.dropoutStates = torch.CudaTensor(self.dropoutStatesSize[1])
+
     errcheck('cudnnSetDropoutDescriptor',
              self.dropoutDesc[0],
              cudnn.getHandle(),
              self.dropout,
-             nil, 0, -- TODO self.dropoutStates, self.dropoutStatesSize,
+             self.dropoutStates:data(), self.dropoutStatesSize[1],
              self.seed)
 end
 
@@ -88,6 +92,7 @@ function RNN:resetRNNDescriptor()
     if not self.rnnDesc then
         self.rnnDesc = createRNNDescriptors(1)
     end
+
     errcheck('cudnnSetRNNDescriptor',
              self.rnnDesc[0],
              self.hiddenSize,
@@ -104,16 +109,15 @@ function RNN:resetWeightDescriptors()
     if not self.wDesc then
         self.wDesc = createFilterDescriptors(1)
     end
-    local weightSize = ffi.new("size_t[1]")
+
+    local weightSize = torch.LongTensor(1)
     errcheck('cudnnGetRNNParamsSize',
              cudnn.getHandle(),
              self.rnnDesc[0],
              self.xDescs,
-             weightSize)
-    dim = torch.IntTensor(3)
-    dim[1] = tonumber(weightSize[0])
-    dim[2] = 1
-    dim[3] = 1
+             weightSize:data())
+    local dim = torch.IntTensor({weightSize[1] / 4, 1, 1}) -- sizeof(float)
+
     errcheck('cudnnSetFilterNdDescriptor',
              self.wDesc[0],
              self.datatype,
@@ -130,21 +134,11 @@ function RNN:resetIODescriptors()
         self.yDescs = createTensorDescriptors(self.seqLength)
         self.dyDescs = createTensorDescriptors(self.seqLength)
     end
+
     for i = 0, self.seqLength - 1 do
-        -- TODO miniBatch shrink?
-        local currentMiniBatch = self.miniBatch
 
-        -- TODO is the following always correct?
-        local dim = torch.IntTensor(3)
-        dim[1] = self.inputSize
-        dim[2] = currentMiniBatch
-        dim[3] = 1
-
-        -- TODO Is stride used by cudnn RNN functions?
-        local stride = torch.IntTensor(3)
-        stride[1] = 1
-        stride[2] = dim[1]
-        stride[3] = 1
+        local dim = torch.IntTensor({self.inputSize, self.miniBatch, self.seqLength})
+        local stride = torch.IntTensor({1, dim[1], dim[1] * dim[2]})
 
         errcheck('cudnnSetTensorNdDescriptor',
                  self.xDescs[i],
@@ -161,6 +155,7 @@ function RNN:resetIODescriptors()
 
         dim[1] = self.hiddenSize * (self.bidirectional > 0 and 2 or 1)
         stride[2] = dim[1]
+        stride[3] = dim[1] * dim[2]
 
         errcheck('cudnnSetTensorNdDescriptor',
                  self.yDescs[i],
@@ -193,16 +188,10 @@ function RNN:resetHCDescriptors()
     end
 
     -- TODO is the following always correct?
-    local dim = torch.IntTensor(3)
-    dim[1] = self.hiddenSize
-    dim[2] = self.miniBatch
-    dim[3] = self.numLayers
+    local dim = torch.IntTensor({self.hiddenSize, self.miniBatch, self.numLayers})
 
     -- TODO Is stride used by cudnn RNN functions?
-    local stride = torch.IntTensor(3)
-    stride[1] = 1
-    stride[2] = self.hiddenSize
-    stride[3] = 1
+    local stride = torch.IntTensor({1, self.hiddenSize, 1})
 
     local function fill(desc)
         errcheck('cudnnSetTensorNdDescriptor',
@@ -255,43 +244,47 @@ function RNN:updateOutput(input)
     self:resetWeightDescriptors()
 
     local x = self:makeContiguous(input)
-    self.hx:resize(self.numLayers, self.miniBatch, self.hiddenSize) -- TODO correct?
-    local hx = self.hx
-    self.cx:resize(self.numLayers, self.miniBatch, self.hiddenSize) -- TODO correct?
-    local cx = self.cx
 
-    self.output:resize(self.miniBatch, self.seqLength, self.hiddenSize) -- TODO correct?
+    self.hidden:resize(self.hiddenSize, self.miniBatch, self.numLayers)
+    local hx = self.hidden
+
+    self.cell:resize(self.hiddenSize, self.miniBatch, self.numLayers)
+    local cx = self.cell
+
+    self.output:resize(self.hiddenSize, self.miniBatch, self.seqLength)
     local y = self.output
-    self.hy:resize(self.numLayers, self.miniBatch, self.hiddenSize) -- TODO correct?
-    local hy = self.hy -- TODO should this equal hx (in place?)
-    self.cy:resize(self.numLayers, self.miniBatch, self.hiddenSize) -- TODO correct?
-    local cy = self.cy -- TODO should this equal cx (in place?)
 
-    local weightSize = ffi.new("size_t[1]")
+    self.hy:resize(self.hiddenSize, self.miniBatch, self.numLayers)
+    local hy = self.hy
+
+    self.cy:resize(self.hiddenSize, self.miniBatch, self.numLayers)
+    local cy = self.cy
+
+    local weightSize = torch.LongTensor(1)
     errcheck('cudnnGetRNNParamsSize',
              cudnn.getHandle(),
              self.rnnDesc[0],
              self.xDescs,
-             weightSize)
-    self.weight:resize(tonumber(weightSize[0]))
+             weightSize:data())
+    self.weight:resize(weightSize[1] / 4) -- sizeof(float)
     local w = self.weight
 
     self.workspace = cudnn.getSharedWorkspace()
-    local workspaceSize = ffi.new("size_t[1]")
+    local workspaceSize = torch.LongTensor(1)
     errcheck('cudnnGetRNNWorkspaceSize',
              cudnn.getHandle(),
              self.rnnDesc[0],
              self.xDescs,
-             workspaceSize)
-    self.workspace:resize(tonumber(workspaceSize[0]))
+             workspaceSize:data())
+    self.workspace:resize(workspaceSize[1] / 4) -- sizeof(float)
 
-    local reserveSize = ffi.new("size_t[1]")
+    local reserveSize = torch.LongTensor(1)
     errcheck('cudnnGetRNNTrainingReserveSize',
              cudnn.getHandle(),
              self.rnnDesc[0],
              self.xDescs,
-             reserveSize)
-    self.reserve:resize(tonumber(reserveSize[0]))
+             reserveSize:data())
+    self.reserve:resize(reserveSize[1] / 4):zero() -- sizeof(float)
 
     errcheck('cudnnRNNForwardTraining',
              cudnn.getHandle(),
@@ -303,8 +296,8 @@ function RNN:updateOutput(input)
              self.yDescs, y:data(),
              self.hyDesc[0], hy:data(),
              self.cyDesc[0], cy:data(),
-             self.workspace:data(), self.workspace:size(1),
-             self.reserve:data(), self.reserve:size(1))
+             self.workspace:data(), self.workspace:size(1) * 4, -- sizeof(float)
+             self.reserve:data(), self.reserve:size(1) * 4) -- sizeof(float)
 end
 
 function RNN:updateGradInput()

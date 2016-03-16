@@ -72,7 +72,7 @@ local dims_2 = torch.IntTensor({hiddenSize, miniBatch, seqLength})
 local stride_2 = torch.IntTensor({1, dims_2[1], 1})
 
 for i = 0, seqLength - 1 do
-    errcheck('cudnnSetTensorNdDescriptor', inputDescs[i], datatype, 3, dims_2:data(), stride_2:data())
+    errcheck('cudnnSetTensorNdDescriptor', outputDescs[i], datatype, 3, dims_2:data(), stride_2:data())
 end
 
 local output = torch.CudaTensor(dims_2[1], dims_2[2], dims_2[3])

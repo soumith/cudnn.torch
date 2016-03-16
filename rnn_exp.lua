@@ -31,7 +31,7 @@ errcheck('cudnnSetDropoutDescriptor',
          cudnn.getHandle(),
          dropout,
                  -- TODO Using dropoutStates causes an invalid memory access error.
-         nil, 0, -- dropoutStates:data(), dropoutStatesSize[1],
+         dropoutStates:data(), dropoutStatesSize[1],
          seed)
 
 -- RNN Descriptor
@@ -90,7 +90,7 @@ local stride = torch.IntTensor({1, dims[1], 1})
 
 for i = 0, seqLength - 1 do
     errcheck('cudnnSetTensorNdDescriptor',
-             inputDescs[i],
+             outputDescs[i],
              datatype,
              3,
              dims:data(),
@@ -283,11 +283,11 @@ errcheck('cudnnRNNForwardInference',
          cudnn.getHandle(),
          rnnDesc[0],
          inputDescs, input:data(),
-         hiddenInputDesc[0], nil, -- hiddenInput:data(),
-         cellInputDesc[0], nil, -- cellInput:data(),
+         hiddenInputDesc[0], hiddenInput:data(),
+         cellInputDesc[0], cellInput:data(),
          weightDesc[0], weight:data(),
          outputDescs, output:data(),
-         hiddenOutputDesc[0], nil, -- hiddenOutput:data(),
-         cellOutputDesc[0], nil, -- cellOutput:data(),
+         hiddenOutputDesc[0], hiddenOutput:data(),
+         cellOutputDesc[0], cellOutput:data(),
          workspace:data(), workspace:size(1) * 4) -- sizeof(float)
 
