@@ -17,11 +17,12 @@ function RNN:__init(hiddenSize, numLayers)
     self.dropout = 0
     self.seed = 0x01234567
 
+    self.gradInput = torch.CudaTensor()
     self.output = torch.CudaTensor()
     self.weight = torch.CudaTensor()
-    self.gradWeight = torch.CudaTensor()
-    self.hidden = torch.CudaTensor()
-    self.cell = torch.CudaTensor()
+    self.gradParameters = torch.CudaTensor()
+    self.hx = torch.CudaTensor()
+    self.cx = torch.CudaTensor()
     self.hy = torch.CudaTensor()
     self.cy = torch.CudaTensor()
     self.reserve = torch.CudaTensor(1)
@@ -127,9 +128,7 @@ end
 
 function RNN:resetIODescriptors()
     self.xDescs = createTensorDescriptors(self.seqLength)
-    self.dxDescs = createTensorDescriptors(self.seqLength)
     self.yDescs = createTensorDescriptors(self.seqLength)
-    self.dyDescs = createTensorDescriptors(self.seqLength)
 
     for i = 0, self.seqLength - 1 do
         local dim = torch.IntTensor({self.inputSize, self.miniBatch, 1})
@@ -137,12 +136,6 @@ function RNN:resetIODescriptors()
 
         errcheck('cudnnSetTensorNdDescriptor',
                  self.xDescs[i],
-                 self.datatype,
-                 3,
-                 dim:data(),
-                 stride:data())
-        errcheck('cudnnSetTensorNdDescriptor',
-                 self.dxDescs[i],
                  self.datatype,
                  3,
                  dim:data(),
@@ -158,31 +151,17 @@ function RNN:resetIODescriptors()
                  3,
                  dim:data(),
                  stride:data())
-        errcheck('cudnnSetTensorNdDescriptor',
-                 self.dyDescs[i],
-                 self.datatype,
-                 3,
-                 dim:data(),
-                 stride:data())
     end
 end
 
 function RNN:resetHiddenDescriptors()
-    self.hxDesc = cudnn.toDescriptor(self.hidden)
+    self.hxDesc = cudnn.toDescriptor(self.hx)
     self.hyDesc = cudnn.toDescriptor(self.hy)
-    if self.dhx and self.dhy then
-        self.dhxDesc = cudnn.toDescriptor(self.dhx)
-        self.dhyDesc = cudnn.toDescriptor(self.dhy)
-    end
 end
 
 function RNN:resetCellDescriptors()
-    self.cxDesc = cudnn.toDescriptor(self.cell)
+    self.cxDesc = cudnn.toDescriptor(self.cx)
     self.cyDesc = cudnn.toDescriptor(self.cy)
-    if self.dcx and self.dcy then
-        self.dcxDesc = cudnn.toDescriptor(self.dcx)
-        self.dcyDesc = cudnn.toDescriptor(self.dcy)
-    end
 end
 
 function RNN:makeContiguous(input, gradOutput)
@@ -244,13 +223,14 @@ function RNN:updateOutput(input)
         self:resetIODescriptors()
     end
 
-    local hx = self.hidden
-    local cx = self.cell
-    local hy = self.hy
-    local cy = self.cy
+    -- Hidden/cell output becomes the new hidden/cell input.
+    local hx = self.hy
+    local cx = self.cy
+    local hy = self.hx
+    local cy = self.cx
     if resetHC then
-        self.hidden:resize(self.hiddenSize, self.miniBatch, self.numLayers)
-        self.cell:resize(self.hiddenSize, self.miniBatch, self.numLayers)
+        self.hx:resize(self.hiddenSize, self.miniBatch, self.numLayers)
+        self.cx:resize(self.hiddenSize, self.miniBatch, self.numLayers)
         self.hy:resize(self.hiddenSize, self.miniBatch, self.numLayers)
         self.cy:resize(self.hiddenSize, self.miniBatch, self.numLayers)
         self:resetHiddenDescriptors()
@@ -305,41 +285,109 @@ function RNN:updateOutput(input)
              self.cyDesc[0], cy:data(),
              self.workspace:data(), self.workspace:size(1) * 4, -- sizeof(float)
              self.reserve:data(), self.reserve:size(1) * 4) -- sizeof(float)
-
-    -- Hidden/cell output becomes the new hidden/cell input.
-    self.hidden, self.hy = self.hy, self.hidden
-    self.cell, self.cy = self.cy, self.cell
 end
 
 function RNN:updateGradInput(input, gradOutput)
-    -- TODO prepare everything
+
+    assert(input:dim() == 3)
+    assert(input:size(1) == self.inputSize)
+    assert(input:size(2) == self.miniBatch)
+    assert(input:size(3) == self.seqLength)
+
+    assert(gradOutput:dim() == self.output:dim())
+    for i = 1, gradOutput:dim() do
+        assert(gradOutput:size(i) == self.output:size(i))
+    end
+
+    local y = self.output
+    local dy = gradOutput
+    local w = self.weight
+    local hx = self.hx
+    local cx = self.cx
+    local dx = self.gradInput
+
+    if dx:dim() ~= 3 or
+       dx:size(1) ~= input:size(1) or
+       dx:size(2) ~= input:size(2) or
+       dx:size(3) ~= input:size(3) then
+        dx:resizeAs(input)
+    end
+
     errcheck('cudnnRNNBackwardData',
              cudnn.getHandle(),
              self.rnnDesc[0],
              self.yDescs, y:data(),
-             self.dyDescs, dy:data(),
-             self.dhyDesc[0], dhy:data(),
+             self.yDescs, dy:data(),
+             self.hyDesc[0], nil, -- TODO should dhy be ignored?
+             self.cyDesc[0], nil, -- TODO should dhy be ignored?
              self.wDesc[0], w:data(),
              self.hxDesc[0], hx:data(),
              self.cxDesc[0], cx:data(),
-             self.dxDescs, dx:data(),
-             self.dhxDesc[0], dhx:data(),
-             self.dcxDesc[0], dcx:data(),
-             self.workspace:data(), self.workspace:size(1),
-             self.reserve:data(), self.reserve:size(1))
-    
+             self.xDescs, dx:data(),
+             self.hxDesc[0], nil, -- TODO should dhx be ignored?
+             self.cxDesc[0], nil, -- TODO should dcx be ignored?
+             self.workspace:data(), self.workspace:size(1) * 4, -- sizeof(float)
+             self.reserve:data(), self.reserve:size(1) * 4) -- sizeof(float)
 end
 
-function RNN:accGradParameters()
-    -- TODO prepare everything
+function RNN:accGradParameters(input, gradOutput, scale)
+
+    assert(input:dim() == 3)
+    assert(input:size(1) == self.inputSize)
+    assert(input:size(2) == self.miniBatch)
+    assert(input:size(3) == self.seqLength)
+
+    assert(gradOutput:dim() == self.output:dim())
+    for i = 1, gradOutput:dim() do
+        assert(gradOutput:size(i) == self.output:size(i))
+    end
+
+    local x = input
+    local hx = self.hx
+    local y = self.output
+    local dw = self.gradParameters
+
+    if dw:dim() ~= 3 or
+       dw:size(1) ~= self.weight:size(1) or
+       dw:size(2) ~= self.weight:size(2) or
+       dw:size(3) ~= self.weight:size(3) then
+        dw:resizeAs(self.weight)
+    end
+
+    if scale == 0 then
+        return
+    end
+
+    -- cudnnRNNBackwardWeights doesn't accept a scale parameter so instead
+    -- scale before and after.
+    -- TODO: How much does this impact accuracy?
+    if scale ~= 1 then
+        local scaleTensor = torch.Tensor({1 / scale})
+        errcheck('cudnnScaleTensor',
+                 cudnn.getHandle(),
+                 self.wDesc[0],
+                 self.dw:data(),
+                 scaleTensor:data())
+    end
+   
     errcheck('cudnnRNNBackwardWeights',
              cudnn.getHandle(),
              self.rnnDesc[0],
              self.xDescs, x:data(),
              self.hxDesc[0], hx:data(),
              self.yDescs, y:data(),
-             self.workspace:data(), self.workspace:size(1),
-             self.dwDesc[0], dw:data(),
-             self.reserve:data(), self.reserve:size(1))
+             self.workspace:data(), self.workspace:size(1) * 4, -- sizeof(float)
+             self.wDesc[0], dw:data(),
+             self.reserve:data(), self.reserve:size(1) * 4) -- sizeof(float)
+
+
+    if scale ~= 1 then
+        local scaleTensor = torch.Tensor({scale})
+        errcheck('cudnnScaleTensor',
+                 cudnn.getHandle(),
+                 self.wDesc[0],
+                 self.dw:data(),
+                 scaleTensor:data())
+    end
 end
 
