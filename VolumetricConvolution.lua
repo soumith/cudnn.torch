@@ -136,7 +136,7 @@ function VolumetricConvolution:createIODescriptors(input)
             if autotunerCache[1][autotunerHash] then
                 algType[0] = autotunerCache[1][autotunerHash]
                 if cudnn.verbose then
-                    print('Using cached benchmark for: ', autotunerHash)
+                   print('Autotuning VMC FW: using cached algo = ', algType[0], ' for: ', autotunerHash)
                 end
             else
                 local perfResults = ffi.new("cudnnConvolutionFwdAlgoPerf_t[?]", 1)
@@ -150,7 +150,7 @@ function VolumetricConvolution:createIODescriptors(input)
                 autotunerCache[1][autotunerHash] = perfResults[0].algo
                 if cudnn.verbose then
                     print(string.format(
-                              "Autotuning        Forward: Time: %3.5f Memory: %8d Algorithm: %d"
+                              "\nAutotuning VMC    Forward: Time: %3.5f Memory: %8d Algorithm: %d"
                                   .. " Weight: %15s Input: %15s Output: %15s",
                               perfResults[0].time, tonumber(perfResults[0].memory),
                               tonumber(perfResults[0].algo),
@@ -187,6 +187,9 @@ function VolumetricConvolution:createIODescriptors(input)
         if cudnn.benchmark then -- the manual auto-tuner is run
             if autotunerCache[2][autotunerHash] then
                 algType[0] = autotunerCache[2][autotunerHash]
+                if cudnn.verbose then
+                   print('Autotuning VMC BWF: using cached algo = ', algType[0], ' for: ', autotunerHash)
+                end
             else
                 local perfResults = ffi.new("cudnnConvolutionBwdFilterAlgoPerf_t[?]", 1)
                 local intt = torch.IntTensor(1);
@@ -235,6 +238,9 @@ function VolumetricConvolution:createIODescriptors(input)
         if cudnn.benchmark then -- the manual auto-tuner is run
             if autotunerCache[3][autotunerHash] then
                 algType[0] = autotunerCache[3][autotunerHash]
+                if cudnn.verbose then
+                   print('Autotuning VMC BWD: using cached algo = ', algType[0], ' for: ', autotunerHash)
+                end
             else
                 local perfResults = ffi.new("cudnnConvolutionBwdDataAlgoPerf_t[?]", 1)
                 local intt = torch.IntTensor(1);

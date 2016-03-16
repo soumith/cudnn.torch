@@ -168,7 +168,7 @@ function SpatialFullConvolution:createIODescriptors(input)
             if autotunerCache[1][autotunerHash] then
                 algType[0] = autotunerCache[1][autotunerHash]
                 if cudnn.verbose then
-                    print('Using cached benchmark for: ', autotunerHash)
+                   print('Autotuning SFC: using cached algo = ', algType[0], ' for: ', autotunerHash)
                 end
             else
                 local perfResults = ffi.new("cudnnConvolutionFwdAlgoPerf_t[?]", 1)
