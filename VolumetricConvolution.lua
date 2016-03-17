@@ -308,5 +308,7 @@ end
 function VolumetricConvolution:clearState()
    self:clearDesc()
    nn.utils.clear(self, 'extraBuffer')
+   self._gradOutput = nil
+   self._input = nil
    return nn.Module.clearState(self)
 end
