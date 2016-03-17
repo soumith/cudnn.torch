@@ -2,15 +2,16 @@ local RNN, parent = torch.class('cudnn.RNN', 'nn.Module')
 local ffi = require 'ffi'
 local errcheck = cudnn.errcheck
 
-function RNN:__init(hiddenSize, numLayers)
+function RNN:__init(inputSize, hiddenSize, numLayers)
     parent.__init(self)
 
-    self.datatype = 0 -- TODO CUDNN_FLOAT, should get the constant from ffi
+    self.datatype = 'CUDNN_DATA_FLOAT'
+    self.inputSize = inputSize
     self.hiddenSize = hiddenSize
     self.numLayers = numLayers
-    self.bidirectional = 0
-    self.inputMode = 0 -- TODO CUDNN_LINEAR_INPUT, should get the constant from ffi
-    self.mode = 0 -- TODO CUDNN_RNN_RELU, should get the constant from ffi
+    self.bidirectional = 'CUDNN_UNIDIRECTIONAL'
+    self.inputMode = 'CUDNN_LINEAR_INPUT'
+    self.mode = 'CUDNN_RNN_RELU'
     self.dropout = 0
     self.seed = 0x01234567
 
@@ -121,7 +122,7 @@ function RNN:resetWeightDescriptors()
     errcheck('cudnnSetFilterNdDescriptor',
              self.wDesc[0],
              self.datatype,
-             0, -- TODO ffi CUDNN_TENSOR_NCHW
+             'CUDNN_TENSOR_NCHW',
              3,
              dim:data())
 end
@@ -209,7 +210,7 @@ end
 
 function RNN:updateOutput(input)
 
-    assert(input:dim() == 3, "Input should have three dimensions: (seqLength, miniBatch, inputSize)")
+    assert(input:dim() == 3, 'Input should have three dimensions: (seqLength, miniBatch, inputSize)')
 
     -- Decide which descriptors/tensors need to be updated.
     local resetRNN = not DropoutDesc or not RNNDesc
@@ -231,11 +232,7 @@ function RNN:updateOutput(input)
         resetHC = true
     end
 
-    if not self.inputSize then
-      self.inputSize = input:size(3)
-    end
-    assert(resetWeight or input:size(3) == self.inputSize,
-          "Input size has changed! clearState() must be called to resize weights.")
+    assert(resetWeight or input:size(3) == self.inputSize, 'Input size has changed! clearState() must be called to resize weights.')
 
     -- Update descriptors/tensors
     if resetRNN then
@@ -252,18 +249,18 @@ function RNN:updateOutput(input)
     -- Optionally use hiddenInput/cellInput parameters
     local hx = self.hiddenInput
     if hx then
-      assert(hx:dim() == 3, "Hidden input must have 3 dimensions: (numLayers, miniBatch, hiddenSize)")
-      assert(hx:size(1) == self.numLayers, "Hidden input has incorrect number of layers!")
-      assert(hx:size(2) == self.miniBatch, "Hidden input has incorrect number of minibathes!")
-      assert(hx:size(3) == self.hiddenSize, "Hidden input has incorrect size!")
+      assert(hx:dim() == 3, 'Hidden input must have 3 dimensions: (numLayers, miniBatch, hiddenSize)')
+      assert(hx:size(1) == self.numLayers, 'Hidden input has incorrect number of layers!')
+      assert(hx:size(2) == self.miniBatch, 'Hidden input has incorrect number of minibathes!')
+      assert(hx:size(3) == self.hiddenSize, 'Hidden input has incorrect size!')
     end
 
     local cx = self.cellInput
     if cx then
-      assert(cx:dim() == 3, "Cell input must have 3 dimensions: (numLayers, miniBatch, hiddenSize)")
-      assert(cx:size(1) == self.numLayers, "Cell input has incorrect number of layers!")
-      assert(cx:size(2) == self.miniBatch, "Cell input has incorrect number of minibathes!")
-      assert(cx:size(3) == self.hiddenSize, "Cell input has incorrect size!")
+      assert(cx:dim() == 3, 'Cell input must have 3 dimensions: (numLayers, miniBatch, hiddenSize)')
+      assert(cx:size(1) == self.numLayers, 'Cell input has incorrect number of layers!')
+      assert(cx:size(2) == self.miniBatch, 'Cell input has incorrect number of minibathes!')
+      assert(cx:size(3) == self.hiddenSize, 'Cell input has incorrect size!')
     end
 
     local hy = self.hiddenOutput:resize(self.numLayers, self.miniBatch, self.hiddenSize)
@@ -340,13 +337,13 @@ function RNN:updateOutput(input)
 end
 
 function RNN:updateGradInput(input, gradOutput)
-    assert(input:dim() == 3, "Input should have three dimensions: (seqLength, miniBatch, inputSize)")
-    assert(input:size(1) == self.seqLength, "Sequence length has changed!")
-    assert(input:size(2) == self.miniBatch, "Minibatch size has changed!")
-    assert(input:size(3) == self.inputSize, "Input size has changed!")
+    assert(input:dim() == 3, 'Input should have three dimensions: (seqLength, miniBatch, inputSize)')
+    assert(input:size(1) == self.seqLength, 'Sequence length has changed!')
+    assert(input:size(2) == self.miniBatch, 'Minibatch size has changed!')
+    assert(input:size(3) == self.inputSize, 'Input size has changed!')
 
-    assert(gradOutput:isSameSizeAs(self.output), "gradOutput has incorrect size!")
-    assert(self.train, "updateGradInput can only be called when training!")
+    assert(gradOutput:isSameSizeAs(self.output), 'gradOutput has incorrect size!')
+    assert(self.train, 'updateGradInput can only be called when training!')
 
     local x, dy = makeContiguous(self, input, gradOutput)
     local y = self.output
@@ -355,34 +352,34 @@ function RNN:updateGradInput(input, gradOutput)
     local dx = self.gradInput:resizeAs(input)
 
     if hx then
-      assert(hx:dim() == 3, "Hidden input must have 3 dimensions: (numLayers, miniBatch, hiddenSize)")
-      assert(hx:size(1) == self.numLayers, "Hidden input has incorrect number of layers!")
-      assert(hx:size(2) == self.miniBatch, "Hidden input has incorrect number of minibathes!")
-      assert(hx:size(3) == self.hiddenSize, "Hidden input has incorrect size!")
+      assert(hx:dim() == 3, 'Hidden input must have 3 dimensions: (numLayers, miniBatch, hiddenSize)')
+      assert(hx:size(1) == self.numLayers, 'Hidden input has incorrect number of layers!')
+      assert(hx:size(2) == self.miniBatch, 'Hidden input has incorrect number of minibathes!')
+      assert(hx:size(3) == self.hiddenSize, 'Hidden input has incorrect size!')
     end
 
     local cx = self.cellInput
     if cx then
-      assert(cell:dim() == 3, "Cell input must have 3 dimensions: (numLayers, miniBatch, hiddenSize)")
-      assert(cell:size(1) == self.numLayers, "Cell input has incorrect number of layers!")
-      assert(cell:size(2) == self.miniBatch, "Cell input has incorrect number of minibathes!")
-      assert(cell:size(3) == self.hiddenSize, "Cell input has incorrect size!")
+      assert(cell:dim() == 3, 'Cell input must have 3 dimensions: (numLayers, miniBatch, hiddenSize)')
+      assert(cell:size(1) == self.numLayers, 'Cell input has incorrect number of layers!')
+      assert(cell:size(2) == self.miniBatch, 'Cell input has incorrect number of minibathes!')
+      assert(cell:size(3) == self.hiddenSize, 'Cell input has incorrect size!')
     end
 
     local dhy = self.gradHiddenOutput
     if dhy then
-      assert(hx:dim() == 3, "Hidden output gradient must have 3 dimensions: (numLayers, miniBatch, hiddenSize)")
-      assert(hx:size(1) == self.numLayers, "Hidden output gradient has incorrect number of layers!")
-      assert(hx:size(2) == self.miniBatch, "Hidden output gradient has incorrect number of minibathes!")
-      assert(hx:size(3) == self.hiddenSize, "Hidden output gradient has incorrect size!")
+      assert(hx:dim() == 3, 'Hidden output gradient must have 3 dimensions: (numLayers, miniBatch, hiddenSize)')
+      assert(hx:size(1) == self.numLayers, 'Hidden output gradient has incorrect number of layers!')
+      assert(hx:size(2) == self.miniBatch, 'Hidden output gradient has incorrect number of minibathes!')
+      assert(hx:size(3) == self.hiddenSize, 'Hidden output gradient has incorrect size!')
     end
 
     local dcy = self.gradHiddenOutput
     if dcy then
-      assert(cell:dim() == 3, "Cell output gradient must have 3 dimensions: (numLayers, miniBatch, hiddenSize)")
-      assert(cell:size(1) == self.numLayers, "Cell output gradient has incorrect number of layers!")
-      assert(cell:size(2) == self.miniBatch, "Cell output gradient has incorrect number of minibathes!")
-      assert(cell:size(3) == self.hiddenSize, "Cell output gradient has incorrect size!")
+      assert(cell:dim() == 3, 'Cell output gradient must have 3 dimensions: (numLayers, miniBatch, hiddenSize)')
+      assert(cell:size(1) == self.numLayers, 'Cell output gradient has incorrect number of layers!')
+      assert(cell:size(2) == self.miniBatch, 'Cell output gradient has incorrect number of minibathes!')
+      assert(cell:size(3) == self.hiddenSize, 'Cell output gradient has incorrect size!')
     end
 
     local dhx = self.gradHiddenInput:resize(self.numLayers, self.miniBatch, self.hiddenSize)
@@ -406,13 +403,13 @@ function RNN:updateGradInput(input, gradOutput)
 end
 
 function RNN:accGradParameters(input, gradOutput, scale)
-    assert(input:dim() == 3, "Input should have three dimensions: (seqLength, miniBatch, inputSize)")
-    assert(input:size(1) == self.seqLength, "Sequence length has changed!")
-    assert(input:size(2) == self.miniBatch, "Minibatch size has changed!")
-    assert(input:size(3) == self.inputSize, "Input size has changed!")
+    assert(input:dim() == 3, 'Input should have three dimensions: (seqLength, miniBatch, inputSize)')
+    assert(input:size(1) == self.seqLength, 'Sequence length has changed!')
+    assert(input:size(2) == self.miniBatch, 'Minibatch size has changed!')
+    assert(input:size(3) == self.inputSize, 'Input size has changed!')
 
-    assert(gradOutput:isSameSizeAs(self.output), "gradOutput has incorrect size!")
-    assert(self.train, "updateGradInput can only be called when training!")
+    assert(gradOutput:isSameSizeAs(self.output), 'gradOutput has incorrect size!')
+    assert(self.train, 'updateGradInput can only be called when training!')
 
     local x, dy = makeContiguous(self, input, gradOutput)
     local hx = self.hiddenInput
@@ -420,10 +417,10 @@ function RNN:accGradParameters(input, gradOutput, scale)
     local dw = self.gradWeight
 
     if hx then
-      assert(hx:dim() == 3, "Hidden input must have 3 dimensions: (numLayers, miniBatch, hiddenSize)")
-      assert(hx:size(1) == self.numLayers, "Hidden input has incorrect number of layers!")
-      assert(hx:size(2) == self.miniBatch, "Hidden input has incorrect number of minibathes!")
-      assert(hx:size(3) == self.hiddenSize, "Hidden input has incorrect size!")
+      assert(hx:dim() == 3, 'Hidden input must have 3 dimensions: (numLayers, miniBatch, hiddenSize)')
+      assert(hx:size(1) == self.numLayers, 'Hidden input has incorrect number of layers!')
+      assert(hx:size(2) == self.miniBatch, 'Hidden input has incorrect number of minibathes!')
+      assert(hx:size(3) == self.hiddenSize, 'Hidden input has incorrect size!')
     end
 
     if scale == 0 then
