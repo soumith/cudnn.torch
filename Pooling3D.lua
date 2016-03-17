@@ -141,5 +141,6 @@ end
 
 function Pooling:clearState()
    self:clearDesc()
+   self._gradOutput = nil
    return parent.clearState(self)
 end
