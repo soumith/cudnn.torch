@@ -143,7 +143,7 @@ function RNN:resetWeightDescriptor()
             dim:data())
 end
 
-function RNN:resetIODescriptors(input)
+function RNN:resetIODescriptors()
    self.xDescs = createTensorDescriptors(self.seqLength)
    self.yDescs = createTensorDescriptors(self.seqLength)
 
