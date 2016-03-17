@@ -8,6 +8,8 @@ function RNN:__init(inputSize, hiddenSize, numLayers)
     self.datatype = 'CUDNN_DATA_FLOAT'
     self.inputSize = inputSize
     self.hiddenSize = hiddenSize
+    self.seqLength = 1
+    self.miniBatch = 1
     self.numLayers = numLayers
     self.bidirectional = 'CUDNN_UNIDIRECTIONAL'
     self.inputMode = 'CUDNN_LINEAR_INPUT'
@@ -26,6 +28,26 @@ function RNN:__init(inputSize, hiddenSize, numLayers)
     self.gradCellInput = torch.CudaTensor()
 
     self:training()
+    self:reset()
+end
+
+function RNN:reset(stdv)
+   stdv = stdv or 1.0 / math.sqrt(self.hiddenSize)
+
+   self:resetDropoutDescriptor()
+   self:resetRNNDescriptor()
+   self:resetIODescriptors()
+
+   local weightSize = torch.LongTensor(1)
+   errcheck('cudnnGetRNNParamsSize',
+            cudnn.getHandle(),
+            self.rnnDesc[0],
+            self.xDescs,
+            weightSize:data())
+   weightSize[1] = (weightSize[1] + 3) / 4 -- sizeof(float)
+   self.weight:resize(weightSize[1])
+   self.weight:uniform(-stdv, stdv)
+   self.gradWeight:resizeAs(self.weight):zero()
 end
 
 local function createDescriptors(count, descs_type, create_func, destroy_func)
@@ -128,11 +150,11 @@ function RNN:resetWeightDescriptors()
 end
 
 function RNN:resetIODescriptors(input)
-    self.xDescs = createTensorDescriptors(input:size(1))
-    self.yDescs = createTensorDescriptors(self.output:size(1))
+    self.xDescs = createTensorDescriptors(self.seqLength)
+    self.yDescs = createTensorDescriptors(self.seqLength)
 
     for i = 0, self.seqLength - 1 do
-        local dim = torch.IntTensor({input:size(3), input:size(2), input:size(1)})
+        local dim = torch.IntTensor({self.inputSize, self.miniBatch, self.seqLength})
         local stride = torch.IntTensor({1, dim[1], dim[1] * dim[2]})
         errcheck('cudnnSetTensorNdDescriptor',
                  self.xDescs[i],
@@ -141,7 +163,7 @@ function RNN:resetIODescriptors(input)
                  dim:data(),
                  stride:data())
 
-        local dim = torch.IntTensor({self.output:size(3), self.output:size(2), self.output:size(1)})
+        local dim = torch.IntTensor({self.inputSize, self.miniBatch, self.seqLength})
         local stride = torch.IntTensor({1, dim[1], dim[1] * dim[2]})
         errcheck('cudnnSetTensorNdDescriptor',
                  self.yDescs[i],
@@ -273,15 +295,6 @@ function RNN:updateOutput(input)
 
     local w = self.weight
     if resetWeight then
-        local weightSize = torch.LongTensor(1)
-        errcheck('cudnnGetRNNParamsSize',
-                 cudnn.getHandle(),
-                 self.rnnDesc[0],
-                 self.xDescs,
-                 weightSize:data())
-        weightSize[1] = (weightSize[1] + 3) / 4 -- sizeof(float)
-        self.weight:resize(weightSize[1] / 4)
-        self.gradWeight:resizeAs(self.weight):zero()
         self:resetWeightDescriptors()
     end
 
