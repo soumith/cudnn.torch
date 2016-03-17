@@ -360,26 +360,26 @@ function RNN:updateGradInput(input, gradOutput)
 
     local cx = self.cellInput
     if cx then
-      assert(cell:dim() == 3, 'Cell input must have 3 dimensions: (numLayers, miniBatch, hiddenSize)')
-      assert(cell:size(1) == self.numLayers, 'Cell input has incorrect number of layers!')
-      assert(cell:size(2) == self.miniBatch, 'Cell input has incorrect number of minibathes!')
-      assert(cell:size(3) == self.hiddenSize, 'Cell input has incorrect size!')
+      assert(cx:dim() == 3, 'Cell input must have 3 dimensions: (numLayers, miniBatch, hiddenSize)')
+      assert(cx:size(1) == self.numLayers, 'Cell input has incorrect number of layers!')
+      assert(cx:size(2) == self.miniBatch, 'Cell input has incorrect number of minibathes!')
+      assert(cx:size(3) == self.hiddenSize, 'Cell input has incorrect size!')
     end
 
     local dhy = self.gradHiddenOutput
     if dhy then
-      assert(hx:dim() == 3, 'Hidden output gradient must have 3 dimensions: (numLayers, miniBatch, hiddenSize)')
-      assert(hx:size(1) == self.numLayers, 'Hidden output gradient has incorrect number of layers!')
-      assert(hx:size(2) == self.miniBatch, 'Hidden output gradient has incorrect number of minibathes!')
-      assert(hx:size(3) == self.hiddenSize, 'Hidden output gradient has incorrect size!')
+      assert(dhy:dim() == 3, 'Hidden output gradient must have 3 dimensions: (numLayers, miniBatch, hiddenSize)')
+      assert(dhy:size(1) == self.numLayers, 'Hidden output gradient has incorrect number of layers!')
+      assert(dhy:size(2) == self.miniBatch, 'Hidden output gradient has incorrect number of minibathes!')
+      assert(dhy:size(3) == self.hiddenSize, 'Hidden output gradient has incorrect size!')
     end
 
     local dcy = self.gradHiddenOutput
     if dcy then
-      assert(cell:dim() == 3, 'Cell output gradient must have 3 dimensions: (numLayers, miniBatch, hiddenSize)')
-      assert(cell:size(1) == self.numLayers, 'Cell output gradient has incorrect number of layers!')
-      assert(cell:size(2) == self.miniBatch, 'Cell output gradient has incorrect number of minibathes!')
-      assert(cell:size(3) == self.hiddenSize, 'Cell output gradient has incorrect size!')
+      assert(dcy:dim() == 3, 'Cell output gradient must have 3 dimensions: (numLayers, miniBatch, hiddenSize)')
+      assert(dcy:size(1) == self.numLayers, 'Cell output gradient has incorrect number of layers!')
+      assert(dcy:size(2) == self.miniBatch, 'Cell output gradient has incorrect number of minibathes!')
+      assert(dcy:size(3) == self.hiddenSize, 'Cell output gradient has incorrect size!')
     end
 
     local dhx = self.gradHiddenInput:resize(self.numLayers, self.miniBatch, self.hiddenSize)
