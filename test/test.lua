@@ -1,7 +1,7 @@
 require 'cudnn'
 require 'cunn'
 
-local cudnntest = {}
+local cudnntest = torch.TestSuite()
 local precision_forward = 1e-4
 local precision_backward = 1e-2
 local precision_jac = 1e-3
@@ -1174,7 +1174,7 @@ function cudnntest.SpatialBatchNormalization()
    testBatchNormalization('SpatialBatchNormalization', size)
 end
 
-function cudnntest.SpatialBatchNormalization()
+function cudnntest.VolumetricBatchNormalization()
    local size = {
       math.random(1, 32),
       math.random(1, 32),
