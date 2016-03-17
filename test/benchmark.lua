@@ -93,15 +93,19 @@ benchVolumetric("Forward implicit precomp gemm", 512, 512,  3,3,3,  1,1,1, 1,1,1
     CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM         = 0,
     CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM = 1,
     CUDNN_CONVOLUTION_FWD_ALGO_GEMM                  = 2,
-    CUDNN_CONVOLUTION_FWD_ALGO_DIRECT                = 3, // Placeholder
-    CUDNN_CONVOLUTION_FWD_ALGO_FFT                   = 4
+    CUDNN_CONVOLUTION_FWD_ALGO_DIRECT                = 3,
+    CUDNN_CONVOLUTION_FWD_ALGO_FFT                   = 4,
+    CUDNN_CONVOLUTION_FWD_ALGO_FFT_TILING            = 5,
+    CUDNN_CONVOLUTION_FWD_ALGO_WINOGRAD              = 6
 
     CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0         = 0,  // non-deterministic
     CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1         = 1,
-    CUDNN_CONVOLUTION_BWD_FILTER_ALGO_FFT       = 2
+    CUDNN_CONVOLUTION_BWD_FILTER_ALGO_FFT       = 2,
+    CUDNN_CONVOLUTION_BWD_FILTER_ALGO_3         = 3   // non-deterministic, algo0 with workspace
 
-    CUDNN_CONVOLUTION_BWD_DATA_ALGO_0         = 0, // non-deterministic
-    CUDNN_CONVOLUTION_BWD_DATA_ALGO_1         = 1,
-    CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT       = 2,
-
+    CUDNN_CONVOLUTION_BWD_DATA_ALGO_0          = 0, // non-deterministic
+    CUDNN_CONVOLUTION_BWD_DATA_ALGO_1          = 1,
+    CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT        = 2,
+    CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT_TILING = 3,
+    CUDNN_CONVOLUTION_BWD_DATA_ALGO_WINOGRAD   = 4
     ]]--
