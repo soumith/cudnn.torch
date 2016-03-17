@@ -469,5 +469,7 @@ end
 
 function SpatialConvolution:clearState()
    self:clearDesc()
+   self._input = nil
+   self._gradOutput = nil
    return nn.Module.clearState(self)
 end
