@@ -31,29 +31,21 @@ print('CUDNN Version: ', tonumber(cudnn.C.cudnnGetVersion()))
 print("cudnn.SpatialConvolution")
 
 -- just auto-tuned by cudnn with CUDNN_CONVOLUTION_FWD_PREFER_FASTEST mode
-benchSpatial('Forward AutoTuned            ', from, to, kH, kW, sH, sW, iH, iW, batchSize)
 
-benchSpatial('Forward implicit gemm        ', from, to, kH, kW, sH, sW, iH, iW, batchSize,
-      'CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM',
-      'CUDNN_CONVOLUTION_BWD_DATA_ALGO_0',
-      'CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0')
+for i, mode_desc in ipairs({
+	{'Forward AutoTuned            ', nil},
+	{'Forward implicit gemm        ', 'CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM'},
+	{'Forward implicit precomp gemm', 'CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM'},
+	{'Forward gemm                 ', 'CUDNN_CONVOLUTION_FWD_ALGO_GEMM'},
+	{'Forward FFT                  ', 'CUDNN_CONVOLUTION_FWD_ALGO_FFT'},
+	{'Forward FFT tiling           ', 'CUDNN_CONVOLUTION_FWD_ALGO_FFT_TILING'},
+--	{'Forward Winograd             ', 'CUDNN_CONVOLUTION_FWD_ALGO_WINOGRAD'} -- not supported for this size
+}) do
+   local title = mode_desc[1]
+   local mode = mode_desc[2]
 
-benchSpatial('Forward implicit precomp gemm', from, to, kH, kW, sH, sW, iH, iW, batchSize,
-      'CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM',
-      'CUDNN_CONVOLUTION_BWD_DATA_ALGO_0',
-      'CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0')
-
-benchSpatial('Forward gemm                 ', from, to, kH, kW, sH, sW, iH, iW, batchSize,
-      'CUDNN_CONVOLUTION_FWD_ALGO_GEMM',
-      'CUDNN_CONVOLUTION_BWD_DATA_ALGO_0',
-      'CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0')
-
-
-benchSpatial('Forward FFT                  ', from, to, kH, kW, sH, sW, iH, iW, batchSize,
-      'CUDNN_CONVOLUTION_FWD_ALGO_FFT',
-      'CUDNN_CONVOLUTION_BWD_DATA_ALGO_0',
-      'CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0')
-
+   benchSpatial(title, from, to, kH, kW, sH, sW, iH, iW, batchSize, mode)
+end
 
 function benchVolumetric(title, nInputPlane, nOutputPlane, kT, kW, kH, dT, dW, dH, padT, padW, padH, kT_input, kW_input, kH_input, nBatch, ...)
    local gconv = cudnn.VolumetricConvolution(nInputPlane, nOutputPlane, kT, kW, kH, dT, dW, dH, padT, padW, padH):setMode(...):fastest():cuda()
@@ -67,26 +59,21 @@ function benchVolumetric(title, nInputPlane, nOutputPlane, kT, kW, kH, dT, dW, d
 end
 
 print("cudnn.VolumetricConvolution")
-benchVolumetric("Forward Autotuned            ",   3,  64,  3,3,3,  1,1,1, 1,1,1, 16, 112, 112, 50)
-benchVolumetric("Forward Autotuned            ",  64,  64,  3,3,3,  1,1,1, 1,1,1, 16,  56,  56, 50)
-benchVolumetric("Forward Autotuned            ", 128, 128,  3,3,3,  1,1,1, 1,1,1,  8,  28,  28, 50)
-benchVolumetric("Forward Autotuned            ", 256, 256,  3,3,3,  1,1,1, 1,1,1,  8,  28,  28, 50)
-benchVolumetric("Forward Autotuned            ", 256, 256,  3,3,3,  1,1,1, 1,1,1,  4,  14,  14, 50)
-benchVolumetric("Forward Autotuned            ", 512, 512,  3,3,3,  1,1,1, 1,1,1,  4,  14,  14, 50)
-benchVolumetric("Forward Autotuned            ", 512, 512,  3,3,3,  1,1,1, 1,1,1,  2,   7,   7, 50)
 
-benchVolumetric("Forward Autotuned            ", 512, 512,  3,3,3,  1,1,1, 1,1,1,  2,   7,   7, 50)
+for i, mode_desc in ipairs({
+	{'Forward AutoTuned            ', nil},
+	{'Forward implicit gemm        ', 'CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM'},
+	{'Forward implicit precomp gemm', 'CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM'},
+--	{'Forward gemm                 ', 'CUDNN_CONVOLUTION_FWD_ALGO_GEMM'}, -- not supported for this size
+--	{'Forward FFT                  ', 'CUDNN_CONVOLUTION_FWD_ALGO_FFT'}, -- not supported for this size
+	{'Forward FFT tiling           ', 'CUDNN_CONVOLUTION_FWD_ALGO_FFT_TILING'},
+--	{'Forward Winograd             ', 'CUDNN_CONVOLUTION_FWD_ALGO_WINOGRAD'} -- not supported for this size
+}) do
+   local title = mode_desc[1]
+   local mode = mode_desc[2]
 
-benchVolumetric("Forward implicit gemm        ", 512, 512,  3,3,3,  1,1,1, 1,1,1,  2,   7,   7, 50,
-      'CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM',
-      'CUDNN_CONVOLUTION_BWD_DATA_ALGO_0',
-      'CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0')
-
-benchVolumetric("Forward implicit precomp gemm", 512, 512,  3,3,3,  1,1,1, 1,1,1,  2,   7,   7, 50,
-      'CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM',
-      'CUDNN_CONVOLUTION_BWD_DATA_ALGO_0',
-      'CUDNN_CONVOLUTION_BWD_FILTER_ALGO_0')
-
+    benchVolumetric(title, 256, 256,  3,3,3,  1,1,1, 1,1,1,  8,  28,  28, 50, mode)
+end
 
 -- For reference, CuDNN Convolution modes
 --[[
