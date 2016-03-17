@@ -106,5 +106,6 @@ end
 
 function LRN:clearState()
    self:clearDesc()
+   self._gradOutput = nil
    return nn.Module.clearState(self)
 end

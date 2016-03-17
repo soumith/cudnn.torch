@@ -122,5 +122,7 @@ end
 
 function TemporalConvolution:clearState()
    self:clearDesc()
+   self._gradOutput = nil
+   self._input = nil
    return parent.clearState(self)
 end

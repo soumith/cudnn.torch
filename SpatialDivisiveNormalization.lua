@@ -98,3 +98,8 @@ function DivisiveNorm:write(f)
    end
    f:writeObject(var)
 end
+
+function DivisiveNorm:clearState()
+   self._gradOutput = nil
+   return parent.clearState(self)
+end
