@@ -1313,10 +1313,10 @@ math.randomseed(os.time())
 mytester = torch.Tester()
 mytester:add(cudnntest)
 
--- if torch.random(1,2) == 1 then
+if torch.random(1,2) == 1 then
    cudnn.benchmark = true -- run manual auto-tuner
-   cudnn.verbose = true
--- end
+--   cudnn.verbose = true
+end
 
 
 for i=1,cutorch.getDeviceCount() do
