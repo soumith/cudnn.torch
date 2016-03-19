@@ -55,6 +55,7 @@ function benchVolumetric(title, nInputPlane, nOutputPlane, kT, kW, kH, dT, dW, d
 
    local t1 = torch.Timer()
    local output = gconv:forward(input)
+   cutorch.synchronize()
    print(title .. ': ', nInputPlane, nOutputPlane, kT, kW, kH, dT, dW, dH, padT, padW, padH, kT_input, kW_input, kH_input, nBatch, t1:time().real)
 end
 
