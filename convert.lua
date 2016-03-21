@@ -2,6 +2,7 @@
 local layer_list = {
   'SpatialConvolution',
   'SpatialCrossMapLRN',
+  'SpatialFullConvolution',
   'SpatialMaxPooling',
   'SpatialAveragePooling',
   'ReLU',
