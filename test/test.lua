@@ -25,10 +25,11 @@ function cudnntest.SpatialConvolution_forward_batch()
    local inj = (outj-1)*sj+kj
 
    local input = torch.randn(bs,from,inj,ini):cuda()
-   local sconv = nn.SpatialConvolutionMM(from,to,ki,kj,si,sj):cuda()
+   local sconv = nn.SpatialConvolution(from,to,ki,kj,si,sj):cuda()
    local gconv = cudnn.SpatialConvolution(from,to,ki,kj,si,sj):cuda():fastest()
    gconv.weight:copy(sconv.weight)
    gconv.bias:copy(sconv.bias)
+
    local function test(sconv, gconv)
      local groundtruth = sconv:forward(input)
      cutorch.synchronize()
@@ -36,13 +37,6 @@ function cudnntest.SpatialConvolution_forward_batch()
      cutorch.synchronize()
      local error = rescuda:float() - groundtruth:float()
      mytester:assertlt(error:abs():max(), precision_forward, 'error on state (forward) ')
-
-     local gconv = cudnn.convert(sconv, cudnn)
-     mytester:asserteq(torch.typename(gconv), 'cudnn.SpatialConvolution', 'conversion type check')
-     local rescuda = gconv:forward(input)
-     cutorch.synchronize()
-     local error = rescuda:float() - groundtruth:float()
-     mytester:assertlt(error:abs():max(), precision_forward, 'error on state (forward conversion) ')
 
      -- IO
      local ferr,berr = jac.testIO(gconv, input)
@@ -73,7 +67,7 @@ function cudnntest.SpatialConvolution_backward_batch()
 
    local input = torch.randn(bs,from,inj,ini):cuda()
    local gradOutput = torch.randn(bs,to,outj,outi):cuda()
-   local sconv = nn.SpatialConvolutionMM(from,to,ki,kj,si,sj):cuda()
+   local sconv = nn.SpatialConvolution(from,to,ki,kj,si,sj):cuda()
    sconv:forward(input)
    sconv:zeroGradParameters()
    local groundgrad = sconv:backward(input, gradOutput, scale)
@@ -126,7 +120,7 @@ function cudnntest.SpatialConvolution_forward_single()
    local inj = (outj-1)*sj+kj
 
    local input = torch.randn(from,inj,ini):cuda()
-   local sconv = nn.SpatialConvolutionMM(from,to,ki,kj,si,sj):cuda()
+   local sconv = nn.SpatialConvolution(from,to,ki,kj,si,sj):cuda()
    local gconv = cudnn.SpatialConvolution(from,to,ki,kj,si,sj):cuda()
    gconv.weight:copy(sconv.weight)
    gconv.bias:copy(sconv.bias)
@@ -140,13 +134,6 @@ function cudnntest.SpatialConvolution_forward_single()
      local error = rescuda:float() - groundtruth:float()
      mytester:assertlt(error:abs():max(), precision_forward,
                        'error on state (forward) ')
-
-     local gconv = cudnn.convert(sconv, cudnn)
-     mytester:asserteq(torch.typename(gconv), 'cudnn.SpatialConvolution', 'conversion type check')
-     local rescuda = gconv:forward(input)
-     cutorch.synchronize()
-     local error = rescuda:float() - groundtruth:float()
-     mytester:assertlt(error:abs():max(), precision_forward, 'error on state (forward conversion) ')
 
      -- IO
      local ferr,berr = jac.testIO(gconv, input)
@@ -175,7 +162,7 @@ function cudnntest.SpatialConvolution_backward_single()
 
    local input = torch.randn(from,inj,ini):cuda()
    local gradOutput = torch.randn(to,outj,outi):cuda()
-   local sconv = nn.SpatialConvolutionMM(from,to,ki,kj,si,sj):cuda()
+   local sconv = nn.SpatialConvolution(from,to,ki,kj,si,sj):cuda()
    sconv:forward(input)
    sconv:zeroGradParameters()
    local groundgrad = sconv:backward(input, gradOutput)
@@ -395,12 +382,6 @@ function cudnntest.VolumetricConvolution_forward_single()
      local error = rescuda:float() - groundtruth:float()
      mytester:assertlt(error:abs():max(), precision_forward,
                        'error on state (forward) ')
-
-     local gconv = cudnn.convert(sconv, cudnn):cuda()
-     local rescuda = gconv:forward(input)
-     cutorch.synchronize()
-     local error = rescuda:float() - groundtruth:float()
-     mytester:assertlt(error:abs():max(), precision_forward, 'error on state (forward conversion) ')
 
      -- IO
      local ferr,berr = jac.testIO(gconv, input)
