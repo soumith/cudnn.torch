@@ -266,8 +266,8 @@ function RNN:updateOutput(input)
    local x = makeContiguous(self, input)
    local y = self.output:resize(self.seqLength, self.miniBatch, self.hiddenSize)
    local w = self.weight
-   local hy = self.hiddenOutput:resize(self.numLayers, self.miniBatch, self.hiddenSize)
-   local cy = self.cellOutput:resize(self.numLayers, self.miniBatch, self.hiddenSize)
+   local hy = self.hiddenOutput:resize(self.numLayers, self.miniBatch, self.hiddenSize):zero()
+   local cy = self.cellOutput:resize(self.numLayers, self.miniBatch, self.hiddenSize):zero()
 
    -- Optionally use hiddenInput/cellInput parameters
    local hx = self.hiddenInput
@@ -338,6 +338,8 @@ function RNN:updateOutput(input)
                self.cyDesc[0], cy:data(),
                self.workspace:data(), self.workspace:size(1) * 4) -- sizeof(float)
    end
+
+   return self.output
 end
 
 function RNN:updateGradInput(input, gradOutput)
@@ -357,8 +359,8 @@ function RNN:updateGradInput(input, gradOutput)
    local cx = self.cellInput
    local dhy = self.gradHiddenOutput
    local dcy = self.gradCellOutput
-   local dhx = self.gradHiddenInput:resize(self.numLayers, self.miniBatch, self.hiddenSize)
-   local dcx = self.gradCellInput:resize(self.numLayers, self.miniBatch, self.hiddenSize)
+   local dhx = self.gradHiddenInput:resize(self.numLayers, self.miniBatch, self.hiddenSize):zero()
+   local dcx = self.gradCellInput:resize(self.numLayers, self.miniBatch, self.hiddenSize):zero()
 
 
    if hx then
@@ -410,6 +412,8 @@ function RNN:updateGradInput(input, gradOutput)
             self.cxDesc[0], dcx:data(),
             self.workspace:data(), self.workspace:size(1) * 4, -- sizeof(float)
             self.reserve:data(), self.reserve:size(1) * 4) -- sizeof(float)
+
+   return self.gradInput
 end
 
 function RNN:accGradParameters(input, gradOutput, scale)
