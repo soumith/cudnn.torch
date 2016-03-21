@@ -228,7 +228,7 @@ function RNN:updateOutput(input)
    assert(input:dim() == 3, 'input must have 3 dimensions: seqLength, miniBatch, inputSize')
 
    -- Decide which descriptors/tensors need to be updated.
-   local resetRNN = not self.DropoutDesc or not self.RNNDesc
+   local resetRNN = not self.dropoutDesc or not self.RNNDesc
    local resetIO = not self.xDescs or not self.yDescs
    local resetHC = not self.hxDesc or not self.hyDesc or not self.cxDesc or not self.cyDesc
    local resetWeight = not self.wDesc
@@ -330,8 +330,8 @@ function RNN:updateOutput(input)
                cudnn.getHandle(),
                self.rnnDesc[0],
                self.xDescs, x:data(),
-               self.hxDesc[0], hx:data(),
-               self.cxDesc[0], cx:data(),
+               self.hxDesc[0], hx and hx:data() or nil,
+               self.cxDesc[0], cx and cx:data() or nil,
                self.wDesc[0], w:data(),
                self.yDescs, y:data(),
                self.hyDesc[0], hy:data(),
