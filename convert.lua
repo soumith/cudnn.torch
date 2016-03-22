@@ -43,7 +43,10 @@ function cudnn.convert(net, dst)
       if v == 'ReLU' then y = dst.ReLU() end -- because parameters
       for k,u in pairs(x) do y[k] = u end
       if src == cudnn and x.clearDesc then x.clearDesc(y) end
-      if src == cudnn and v == 'SpatialAveragePooling' then y.divide = true end
+      if src == cudnn and v == 'SpatialAveragePooling' then
+        y.divide = true
+        y.count_include_pad = v.mode == 'CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING'
+      end
       return y
     end
     local t = torch.typename(x)
