@@ -6,7 +6,7 @@ ffi.cdef[[
 typedef enum {
         CUDNN_MAJOR  =    5,
         CUDNN_MINOR  =    0,
-        CUDNN_PATCHLEVEL  = 2,
+        CUDNN_PATCHLEVEL  = 4,
         CUDNN_VERSION  =  (CUDNN_MAJOR * 1000 + CUDNN_MINOR * 100 + CUDNN_PATCHLEVEL)
 } cudnnVerFakeEnum;
 
@@ -50,6 +50,7 @@ typedef struct cudnnFilterStruct*          cudnnFilterDescriptor_t;
 typedef struct cudnnLRNStruct*             cudnnLRNDescriptor_t;
 typedef struct cudnnActivationStruct*      cudnnActivationDescriptor_t;
 typedef struct cudnnSpatialTransformerStruct* cudnnSpatialTransformerDescriptor_t;
+typedef struct cudnnOpTensorStruct*        cudnnOpTensorDescriptor_t;
 /*
 * CUDNN data type
 */
@@ -169,15 +170,58 @@ cudnnStatus_t             cudnnTransformTensor(
                                 void                               *y );
 
 
-/* Tensor Bias addition : y = alpha * b + beta * y  */
+/* Tensor Bias addition : C = alpha * A + beta * C  */
 cudnnStatus_t             cudnnAddTensor(
                                 cudnnHandle_t                       handle,
                                 const void                         *alpha,
-                                const cudnnTensorDescriptor_t       bDesc,
-                                const void                         *b,
+                                const cudnnTensorDescriptor_t       aDesc,
+                                const void                         *A,
                                 const void                         *beta,
-                                cudnnTensorDescriptor_t             yDesc,
-                                void                               *y );
+                                const cudnnTensorDescriptor_t       cDesc,
+                                void                               *C );
+
+/*
+* CUDNN OpTensor op type
+*/
+typedef enum
+{
+    CUDNN_OP_TENSOR_ADD = 0,
+    CUDNN_OP_TENSOR_MUL = 1,
+    CUDNN_OP_TENSOR_MIN = 2,
+    CUDNN_OP_TENSOR_MAX = 3,
+} cudnnOpTensorOp_t;
+
+cudnnStatus_t             cudnnCreateOpTensorDescriptor(
+                                cudnnOpTensorDescriptor_t          *opTensorDesc );
+
+cudnnStatus_t             cudnnSetOpTensorDescriptor(
+                                cudnnOpTensorDescriptor_t           opTensorDesc,
+                                cudnnOpTensorOp_t                   opTensorOp,
+                                cudnnDataType_t                     opTensorCompType,
+                                cudnnNanPropagation_t               opTensorNanOpt );
+
+cudnnStatus_t             cudnnGetOpTensorDescriptor(
+                                const cudnnOpTensorDescriptor_t     opTensorDesc,
+                                cudnnOpTensorOp_t                  *opTensorOp,
+                                cudnnDataType_t                    *opTensorCompType,
+                                cudnnNanPropagation_t              *opTensorNanOpt );
+
+cudnnStatus_t             cudnnDestroyOpTensorDescriptor(
+                                cudnnOpTensorDescriptor_t           opTensorDesc );
+
+/* Tensor Bias operation : C = op( alpha1 * A, alpha2 * B ) + beta * C */
+cudnnStatus_t             cudnnOpTensor(
+                                cudnnHandle_t                       handle,
+                                const cudnnOpTensorDescriptor_t     opTensorDesc,
+                                const void                         *alpha1,
+                                const cudnnTensorDescriptor_t       aDesc,
+                                const void                         *A,
+                                const void                         *alpha2,
+                                const cudnnTensorDescriptor_t       bDesc,
+                                const void                         *B,
+                                const void                         *beta,
+                                const cudnnTensorDescriptor_t       cDesc,
+                                void                               *C );
 
 /* Set all values of a tensor to a given value : y[i] = value[0] */
 cudnnStatus_t             cudnnSetTensor(
@@ -842,7 +886,7 @@ typedef enum { CUDNN_LRN_MIN_N     = 1,        /*  minimum allowed lrnN */
                CUDNN_LRN_MAX_N     = 16 }      /*  maximum allowed lrnN */
   LRN_MinMaxFakeEnum;
 
-/* static const float CUDNN_LRN_MIN_K  =   1e-5; */
+/* static const float CUDNN_LRN_MIN_K  =   1e-5; */ /* minimum allowed lrnK*/
 /* static const float CUDNN_LRN_MIN_BETA = 0.01; */   /* minimum allowed lrnBeta*/
 
 /* LRN layer mode */
@@ -1003,8 +1047,8 @@ cudnnStatus_t             cudnnBatchNormalizationForwardTraining(
                                    runningMean = newMean*factor + runningMean*(1-factor) */
                                 void                               *resultRunningMean,
                                 /* Output in training mode, input in inference. Is the moving average
-                                   of 1 / sqrt( epsilon + variance[x] ) */
-                                void                               *resultRunningInvVariance,
+                                   of  variance[x] (factor is applied in the same way as for runningMean) */
+                                void                               *resultRunningVariance,
 
                                 /* Has to be >= CUDNN_BN_MIN_EPSILON. Should be the same in forward and backward functions. */
                                 double                              epsilon,
@@ -1016,7 +1060,7 @@ cudnnStatus_t             cudnnBatchNormalizationForwardTraining(
 
 /*
 * Performs Batch Normalization during Inference:
-* y[i] = bnScale[k]*(x[i]-estimatedMean[k])*estimatedInvVariance[k] + bnBias[k]
+* y[i] = bnScale[k]*(x[i]-estimatedMean[k])/sqrt(epsilon+estimatedVariance[k]) + bnBias[k]
 * with bnScale, bnBias, runningMean, runningInvVariance tensors indexed
 * according to spatial or per-activation mode. Refer to cudnnBatchNormalizationForwardTraining
 * above for notes on function arguments.
@@ -1034,7 +1078,7 @@ cudnnStatus_t             cudnnBatchNormalizationForwardInference(
                                 const void                         *bnScale,
                                 const void                         *bnBias,
                                 const void                         *estimatedMean,
-                                const void                         *estimatedInvVariance,
+                                const void                         *estimatedVariance,
                                 double                              epsilon );
 
 /* Performs backward pass of Batch Normalization layer. Returns x gradient,
@@ -1171,9 +1215,10 @@ cudnnStatus_t             cudnnDropoutBackward(cudnnHandle_t handle,
 /* RNN API */
 typedef enum
   {
-    CUDNN_RNN_RELU = 0, /* Stock RNN with ReLu non-linearity*/
-    CUDNN_LSTM = 1,     /* LSTM with no peephole connections*/
-    CUDNN_GRU = 2       /* Using h’ = tanh(r * Uh(t-1) + Wx) and h = (1 - z) * h' + z * h(t-1);*/
+    CUDNN_RNN_RELU = 0, /* Stock RNN with ReLu activation*/
+    CUDNN_RNN_TANH = 1, /* Stock RNN with tanh activation*/
+    CUDNN_LSTM = 2,     /* LSTM with no peephole connections*/
+    CUDNN_GRU = 3       /* Using h' = tanh(r * Uh(t-1) + Wx) and h = (1 - z) * h' + z * h(t-1);*/
   } cudnnRNNMode_t;
 
 typedef enum
@@ -1530,9 +1575,11 @@ cudnnStatus_t             cudnnActivationBackward_v4(
                                 const void                         *beta,
                                 const cudnnTensorDescriptor_t       dxDesc,
                                 void                               *dx );
-]]
 
-local libnames = {'libcudnn.so.5', 'libcudnn.5.dylib'}
+
+#if defined (__cplusplus)
+}
+#endif
 
 local ok = false
 for i=1,#libnames do
