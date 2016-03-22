@@ -228,7 +228,7 @@ function RNN:updateOutput(input)
    assert(input:dim() == 3, 'input must have 3 dimensions: seqLength, miniBatch, inputSize')
 
    -- Decide which descriptors/tensors need to be updated.
-   local resetRNN = not self.dropoutDesc or not self.RNNDesc
+   local resetRNN = not self.dropoutDesc or not self.rnnDesc
    local resetIO = not self.xDescs or not self.yDescs
    local resetHC = not self.hxDesc or not self.hyDesc or not self.cxDesc or not self.cyDesc
    local resetWeight = not self.wDesc
