@@ -1275,7 +1275,6 @@ for i=1,#libnames do
 end
 
 if not ok then
-   print(err)
    error([['libcudnn (R4) not found in library path.
 Please install CuDNN from https://developer.nvidia.com/cuDNN
 Then make sure files named as libcudnn.so.4 or libcudnn.4.dylib are placed in your library load path (for example /usr/local/lib , or manually add a path to LD_LIBRARY_PATH)
