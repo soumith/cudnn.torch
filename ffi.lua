@@ -1577,10 +1577,9 @@ cudnnStatus_t             cudnnActivationBackward_v4(
                                 void                               *dx );
 
 
-#if defined (__cplusplus)
-}
-#endif
+]]
 
+local libnames = {'libcudnn.so.5', 'libcudnn.5.dylib'}
 local ok = false
 for i=1,#libnames do
    ok = pcall(function () cudnn.C = ffi.load(libnames[i]) end)
