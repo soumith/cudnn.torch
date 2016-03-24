@@ -214,10 +214,10 @@ function cudnntest.SpatialFullConvolution_forward_batch()
    local kj = math.random(1,15)
    local si = math.random(1,ki)
    local sj = math.random(1,kj)
-   local outi = math.random(1,64)
-   local outj = math.random(1,64)
-   local ini = (outi-1)*si+ki
-   local inj = (outj-1)*sj+kj
+   local ini = math.random(1,64)
+   local inj = math.random(1,64)
+   local outi = (ini-1)*si+ki
+   local outj = (inj-1)*sj+kj
 
    local input = torch.randn(bs,from,inj,ini):cuda()
    local sconv = nn.SpatialFullConvolution(from,to,ki,kj,si,sj):cuda()
@@ -253,10 +253,10 @@ function cudnntest.SpatialFullConvolution_backward_batch()
    local kj = math.random(1,15)
    local si = math.random(1,ki)
    local sj = math.random(1,kj)
-   local outi = math.random(1,64)
-   local outj = math.random(1,64)
-   local ini = (outi-1)*si+ki
-   local inj = (outj-1)*sj+kj
+   local ini = math.random(1,64)
+   local inj = math.random(1,64)
+   local outi = (ini-1)*si+ki
+   local outj = (inj-1)*sj+kj
    local scale = math.random()
 
    local input = torch.randn(bs,from,inj,ini):cuda()
