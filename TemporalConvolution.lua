@@ -57,7 +57,7 @@ function TemporalConvolution:updateOutput(input)
    self.buffer = self.buffer or torch.CudaTensor()
    self._output = self._output or torch.CudaTensor()
    if self.output:storage() then self._output:set(self.output:storage()) else self._output = self.output end
-   if self.buffer:storage() then self.output:set(self.buffer:storage()) else self.output = self.buffer end
+   if self.buffer:storage() then self.output:set(self.buffer:storage(), 1, self.output:size()) else self.output = self.buffer end
    cudnn.SpatialConvolution.updateOutput(self,_input)
    self.buffer = self.output:view(self.oSize):transpose(2,3)
    self.output  = self._output:resize(self.buffer:size()):copy(self.buffer)
