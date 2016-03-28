@@ -30,6 +30,11 @@ local function destroy(handle)
 end
 ffi.gc(cudnn.handle, destroy)
 
+cudnn.typemap = {
+   ['torch.CudaTensor'] = 'CUDNN_DATA_FLOAT',
+   ['torch.CudaHalfTensor'] = 'CUDNN_DATA_HALF',
+}
+
 function cudnn.getHandle()
     local device = cutorch.getDevice()
     local stream = cutorch.getStream() -- starts from 0
@@ -61,7 +66,8 @@ end
 cudnn.errcheck = errcheck
 
 function cudnn.toDescriptor(t)
-   assert(torch.typename(t) == 'torch.CudaTensor')
+   local typename = torch.typename(t)
+   assert(cudnn.typemap[typename])
    local descriptor = ffi.new('struct cudnnTensorStruct*[1]')
    -- create descriptor
    errcheck('cudnnCreateTensorDescriptor', descriptor)
@@ -79,7 +85,8 @@ function cudnn.toDescriptor(t)
    -- set descriptor
    local size = torch.LongTensor(t:size()):int()
    local stride = torch.LongTensor(t:stride()):int()
-   errcheck('cudnnSetTensorNdDescriptor', descriptor[0], 'CUDNN_DATA_FLOAT',
+
+   errcheck('cudnnSetTensorNdDescriptor', descriptor[0], cudnn.typemap[typename],
             t:dim(), size:data(), stride:data())
    return descriptor
 end

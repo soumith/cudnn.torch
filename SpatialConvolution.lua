@@ -30,10 +30,8 @@ end
 
 -- if you change the configuration of the module manually, call this
 function SpatialConvolution:resetWeightDescriptors()
-    assert(torch.typename(self.weight) == 'torch.CudaTensor',
-           'Only Cuda supported duh!')
-    assert(torch.typename(self.bias) == 'torch.CudaTensor' or not self.bias,
-           'Only Cuda supported duh!')
+    assert(cudnn.typemap[torch.typename(self.weight)], 'Only Cuda supported duh!')
+    assert(cudnn.typemap[torch.typename(self.bias)] or not self.bias, 'Only Cuda supported duh!')
     -- for compatibility
     self.groups = self.groups or 1
     -- create filterDescriptor for weight
@@ -43,7 +41,7 @@ function SpatialConvolution:resetWeightDescriptors()
                               self.nInputPlane/self.groups,
                               self.kH, self.kW})
     errcheck('cudnnSetFilterNdDescriptor', self.weightDesc[0],
-             'CUDNN_DATA_FLOAT', 'CUDNN_TENSOR_NCHW', 4,
+             cudnn.typemap[torch.typename(self.weight)], 'CUDNN_TENSOR_NCHW', 4,
              desc:data());
     local function destroyWDesc(d)
         errcheck('cudnnDestroyFilterDescriptor', d[0]);
@@ -112,8 +110,8 @@ function SpatialConvolution:createIODescriptors(input)
                    ' x ' .. input:size(3) .. ' x ' .. input:size(4))
 
         -- create input descriptor
-        local input_slice = {{},{1,self.nInputPlane/self.groups},{},{}}
-        self.iDesc = cudnn.toDescriptor(input[input_slice])
+        local input_slice = input:narrow(2,1,self.nInputPlane/self.groups)
+        self.iDesc = cudnn.toDescriptor(input_slice)
 
         -- create conv descriptor
         self.convDesc = ffi.new('struct cudnnConvolutionStruct*[1]')
@@ -141,8 +139,8 @@ function SpatialConvolution:createIODescriptors(input)
         self.output:resize(oSize:long():storage())
 
         -- create descriptor for output
-        local output_slice = {{},{1,self.nOutputPlane/self.groups},{},{}}
-        self.oDesc = cudnn.toDescriptor(self.output[output_slice])
+        local output_slice = self.output:narrow(2,1,self.nOutputPlane/self.groups)
+        self.oDesc = cudnn.toDescriptor(output_slice)
         self.oDescForBias = cudnn.toDescriptor(self.output)
 
         -----------------------------------------------------------------------
@@ -158,8 +156,8 @@ function SpatialConvolution:createIODescriptors(input)
             return str
         end
         local autotunerHash = shape(self.weight) .. ';'
-            .. shape(input[input_slice]) .. ';'
-            .. shape(self.output[output_slice])
+            .. shape(input_slice) .. ';'
+            .. shape(output_slice)
 
         local maxBufSize = 0
 
@@ -195,8 +193,8 @@ function SpatialConvolution:createIODescriptors(input)
                                   .. " Weight: %15s Input: %15s Output: %15s",
                               perfResults[0].time, tonumber(perfResults[0].memory),
                               tonumber(perfResults[0].algo),
-                              shape(self.weight), shape(input[input_slice]),
-                              shape(self.output[output_slice])))
+                              shape(self.weight), shape(input_slice),
+                              shape(output_slice)))
                 end
             end
         else
@@ -247,8 +245,8 @@ function SpatialConvolution:createIODescriptors(input)
                                   .. " Weight: %15s Input: %15s Output: %15s",
                               perfResults[0].time, tonumber(perfResults[0].memory),
                               tonumber(perfResults[0].algo),
-                              shape(self.weight), shape(input[input_slice]),
-                              shape(self.output[output_slice])))
+                              shape(self.weight), shape(input_slice),
+                              shape(output_slice)))
                 end
             end
         else
@@ -298,8 +296,8 @@ function SpatialConvolution:createIODescriptors(input)
                                   .. " Weight: %15s Input: %15s Output: %15s\n",
                               perfResults[0].time, tonumber(perfResults[0].memory),
                               tonumber(perfResults[0].algo),
-                              shape(self.weight), shape(input[input_slice]),
-                              shape(self.output[output_slice])))
+                              shape(self.weight), shape(input_slice),
+                              shape(output_slice)))
                 end
             end
         else
