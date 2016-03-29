@@ -448,6 +448,29 @@ function cudnntest.TemporalConvolution_single()
    mytester:assertlt(berror:abs():max(), precision_backward, 'error on bias (backward) ')
 end
 
+function cudnntest.TemporalConvolution_reduceBatchSize()
+   local inputFrameSize = math.random(1,64)
+   local outputFrameSize = math.random(1,64)
+   local ki = math.random(1,15)
+   local si = math.random(1,ki)
+   local outi = math.random(1,15)
+   local ini = (outi-1)*si+ki
+   local batchSize = 128
+   local smallerBatchSize = batchSize/2
+
+   local input
+   input = torch.randn(batchSize,ini,inputFrameSize):cuda()
+   local conv = cudnn.TemporalConvolution(inputFrameSize,outputFrameSize,ki,si):cuda()
+   local o1 = conv:updateOutput(input)
+   mytester:asserteq(o1:size(1), batchSize, 'batch size didn\'t match')
+
+   input = torch.randn(smallerBatchSize,ini,inputFrameSize):cuda()
+   local o2 = conv:updateOutput(input)
+   mytester:asserteq(o2:size(1), smallerBatchSize, 'batch size didn\'t match')
+   -- do this again to check it doesn't crash
+   local o2 = conv:updateOutput(input)
+   mytester:asserteq(o2:size(1), smallerBatchSize, 'batch size didn\'t match')
+end
 
 
 function cudnntest.VolumetricConvolution_forward_single()
