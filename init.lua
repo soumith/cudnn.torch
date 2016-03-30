@@ -55,7 +55,7 @@ local errcheck = function(f, ...)
    local status = C[f](...)
    if status ~= ffi.C.CUDNN_STATUS_SUCCESS then
       local str = ffi.string(C.cudnnGetErrorString(status))
-      error('Error in CuDNN: ' .. str)
+      error('Error in CuDNN: ' .. str .. ' ('..f..')')
    end
 end
 cudnn.errcheck = errcheck
