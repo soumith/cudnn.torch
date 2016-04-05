@@ -19,6 +19,7 @@ function TemporalConvolution:__init(inputFrameSize, outputFrameSize,
     self.gradWeight = self.gradWeight:view(outputFrameSize, inputFrameSize*kH)
 --self.dW and self.kW now have different meaning than in nn.TemporalConvolution, because
 --W and H are switched in temporal and spatial
+    self.iSize = torch.LongStorage(4):fill(0)
 end
 
 function TemporalConvolution:createIODescriptors(input)
@@ -27,6 +28,7 @@ function TemporalConvolution:createIODescriptors(input)
         input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
     or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
        sizeChanged = true
+       self.iSize:copy(input:size())
     end
     cudnn.SpatialConvolution.createIODescriptors(self,input)
     if sizeChanged then

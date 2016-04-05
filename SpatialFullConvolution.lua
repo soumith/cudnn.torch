@@ -8,6 +8,11 @@ autotunerCache[1] = {} -- forward
 autotunerCache[2] = {} -- backwardFilter
 autotunerCache[3] = {} -- backwardData
 
+function SpatialFullConvolution:__init(...)
+    parent.__init(self, ...)
+    self.iSize = torch.LongStorage(4):fill(0)
+end
+
 -- if you change the configuration of the module manually, call this
 function SpatialFullConvolution:resetWeightDescriptors()
     assert(cudnn.typemap[torch.typename(self.weight)], 'Only Cuda supported duh!')
@@ -75,11 +80,10 @@ function SpatialFullConvolution:createIODescriptors(input)
         batch = false
     end
     assert(input:dim() == 4 and input:isContiguous());
-    self.iSize = self.iSize or torch.LongStorage(4):fill(0)
     if not self.iDesc or not self.oDesc or
         input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
     or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
-        self.iSize = input:size()
+        self.iSize:copy(input:size())
 
         assert(self.nInputPlane == input:size(2), 'input has to contain: '
                    .. self.nInputPlane

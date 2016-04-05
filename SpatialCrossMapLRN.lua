@@ -8,6 +8,7 @@ function LRN:__init(size, alpha, beta, k)
    self.alpha = alpha or 1e-4
    self.beta = beta or 0.75
    self.k = k or 1.0
+   self.iSize = torch.LongStorage(4):fill(0)
    assert(self.size >= 1 and self.size <= 16, "size has to be between 1 and 16")
    assert(self.k >= 1e-5, "k has to be greater than 1e-5")
    assert(self.beta >= 0.01, "Beta has to be > 0.01")
@@ -35,7 +36,8 @@ function LRN:createIODescriptors(input)
    if not self.iDesc or
       input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
    or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
-      self.iSize = input:size()
+      self.iSize:copy(input:size())
+      self.gradInput:resizeAs(input)
       self.output:resizeAs(input)
 
       -- create input/output descriptor
