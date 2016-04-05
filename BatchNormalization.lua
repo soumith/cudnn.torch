@@ -16,6 +16,7 @@ function BatchNormalization:__init(nFeature, eps, momentum, affine)
    self.eps = eps or 1e-5
    self.train = true
    self.momentum = momentum or 0.1
+   self.iSize = torch.LongStorage(self.nDim):fill(0)
 
    self.running_mean = torch.zeros(nFeature)
    self.running_std = torch.ones(nFeature)
@@ -45,7 +46,7 @@ function BatchNormalization:createIODescriptors(input)
           'Only CUDA tensors are supported for cudnn.BatchNormalization!')
    if not self.iDesc or not self.oDesc or not input:isSize(self.iSize) then
       local nFeature = self.running_mean:numel()
-      self.iSize = input:size()
+      self.iSize:copy(input:size())
       self.output:resizeAs(input)
       self.gradInput:resizeAs(input)
       self.iDesc = cudnn.toDescriptor(input)

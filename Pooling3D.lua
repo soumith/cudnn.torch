@@ -57,7 +57,7 @@ function Pooling:createIODescriptors(input)
       input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
    or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4]
    or input:size(5) ~= self.iSize[5] then
-      self.iSize = input:size()
+      self.iSize:copy(input:size())
       -- resize gradInput
       self.gradInput:resizeAs(input)
       -- resize output

@@ -8,6 +8,11 @@ autotunerCache[1] = {} -- forward
 autotunerCache[2] = {} -- backwardFilter
 autotunerCache[3] = {} -- backwardData
 
+function SpatialFullConvolution:__init(...)
+    parent.__init(self, ...)
+    self.iSize = torch.LongStorage(4):fill(0)
+end
+
 -- if you change the configuration of the module manually, call this
 function SpatialFullConvolution:resetWeightDescriptors()
     assert(torch.typename(self.weight) == 'torch.CudaTensor',
@@ -69,11 +74,10 @@ function SpatialFullConvolution:createIODescriptors(input)
         batch = false
     end
     assert(input:dim() == 4 and input:isContiguous());
-    self.iSize = self.iSize or torch.LongStorage(4):fill(0)
     if not self.iDesc or not self.oDesc or
         input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
     or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
-        self.iSize = input:size()
+        self.iSize:copy(input:size())
 
         -- resize gradInput
         if self.gradInput then self.gradInput:resizeAs(input); end
@@ -309,7 +313,7 @@ function SpatialFullConvolution:updateOutput(input)
     self:createIODescriptors(input)
 
     -- Because SpatialFullConvolution is performing the adjoint of the forward
-    -- convolution operator, we need to swap the forward and backward passes.  
+    -- convolution operator, we need to swap the forward and backward passes.
     errcheck('cudnnConvolutionBackwardData', cudnn.getHandle(),
              one:data(),
              self.weightDesc[0], self.weight:data(),
