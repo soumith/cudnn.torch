@@ -1415,6 +1415,7 @@ mytester:add(cudnntest)
 
 if torch.random(1,2) == 1 then
    cudnn.benchmark = true -- run manual auto-tuner
+--   cudnn.verbose = true
 end
 
 
