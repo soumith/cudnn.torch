@@ -55,7 +55,7 @@ local errcheck = function(f, ...)
    local status = C[f](...)
    if status ~= ffi.C.CUDNN_STATUS_SUCCESS then
       local str = ffi.string(C.cudnnGetErrorString(status))
-      error('Error in CuDNN: ' .. str)
+      error('Error in CuDNN: ' .. str .. ' ('..f..')')
    end
 end
 cudnn.errcheck = errcheck
@@ -101,6 +101,7 @@ end
 
 require('cudnn.SpatialConvolution')
 require('cudnn.VolumetricConvolution')
+require('cudnn.SpatialFullConvolution')
 require('cudnn.Pooling')
 require('cudnn.SpatialMaxPooling')
 require('cudnn.SpatialAveragePooling')
@@ -121,6 +122,7 @@ require('cudnn.SpatialBatchNormalization')
 require('cudnn.VolumetricBatchNormalization')
 require('cudnn.SpatialCrossEntropyCriterion')
 require('cudnn.TemporalConvolution')
+require('cudnn.RNN')
 require('cudnn.functional')
 require('cudnn.convert')
 

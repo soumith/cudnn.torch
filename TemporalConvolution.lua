@@ -13,7 +13,7 @@ function TemporalConvolution:__init(inputFrameSize, outputFrameSize,
     local nInputPlane = 1 -- single channel
     local nOutputPlane = outputFrameSize
     self.inputFrameSize = inputFrameSize
-    self.outputFrameSize = outputFramesize
+    self.outputFrameSize = outputFrameSize
     cudnn.SpatialConvolution.__init(self, nInputPlane, nOutputPlane, kW, kH, 1, dH,0,padH)
     self.weight = self.weight:view(nOutputPlane,inputFrameSize*kH)
     self.gradWeight = self.gradWeight:view(outputFrameSize, inputFrameSize*kH)
@@ -26,7 +26,7 @@ function TemporalConvolution:createIODescriptors(input)
     if not self.iDesc or not self.oDesc or
         input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
     or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
-	   sizeChanged = true
+       sizeChanged = true
     end
     cudnn.SpatialConvolution.createIODescriptors(self,input)
     if sizeChanged then
@@ -57,7 +57,7 @@ function TemporalConvolution:updateOutput(input)
    self.buffer = self.buffer or torch.CudaTensor()
    self._output = self._output or torch.CudaTensor()
    if self.output:storage() then self._output:set(self.output:storage()) else self._output = self.output end
-   if self.buffer:storage() then self.output:set(self.buffer:storage()) else self.output = self.buffer end
+   if self.buffer:storage() then self.output:set(self.buffer:storage(), 1, self.output:size()) else self.output = self.buffer end
    cudnn.SpatialConvolution.updateOutput(self,_input)
    self.buffer = self.output:view(self.oSize):transpose(2,3)
    self.output  = self._output:resize(self.buffer:size()):copy(self.buffer)
@@ -89,9 +89,9 @@ function TemporalConvolution:updateGradInput(input, gradOutput)
    local _input = inputview(input)
    self.gradInput = cudnn.SpatialConvolution.updateGradInput(self,_input, _gradOutput)
    if input:dim()==3 then
-      self.gradInput = self.gradInput:view(self.gradInput:size(1),self.gradInput:size(3),self.gradInput:size(4))
+      self.gradInput = self.gradInput:view(self.iSize[1],self.iSize[3],self.iSize[4])
    else
-      self.gradInput = self.gradInput:view(self.gradInput:size(3),self.gradInput:size(4))
+      self.gradInput = self.gradInput:view(self.iSize[3],self.iSize[4])
    end
    return self.gradInput
 end
@@ -106,7 +106,7 @@ end
 
 function TemporalConvolution:clearDesc()
   self.buffer = nil
-  self._ouptut = nil
+  self._output = nil
   self.oSize = nil
 end
 
@@ -122,5 +122,7 @@ end
 
 function TemporalConvolution:clearState()
    self:clearDesc()
+   self._gradOutput = nil
+   self._input = nil
    return parent.clearState(self)
 end

@@ -105,8 +105,6 @@ function SpatialConvolution:createIODescriptors(input)
     or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
         self.iSize = input:size()
 
-        -- resize gradInput
-        if self.gradInput then self.gradInput:resizeAs(input); end
         assert(self.nInputPlane == input:size(2), 'input has to contain: '
                    .. self.nInputPlane
                    .. ' feature maps, but received input of size: '
@@ -120,6 +118,7 @@ function SpatialConvolution:createIODescriptors(input)
         -- create conv descriptor
         self.convDesc = ffi.new('struct cudnnConvolutionStruct*[1]')
         errcheck('cudnnCreateConvolutionDescriptor', self.convDesc)
+        self.padH, self.padW = self.padH or 0, self.padW or 0
         local pad = torch.IntTensor({self.padH, self.padW})
         local stride = torch.IntTensor({self.dH, self.dW})
         local upscale = torch.IntTensor({1,1})
@@ -178,7 +177,7 @@ function SpatialConvolution:createIODescriptors(input)
             if autotunerCache[1][autotunerHash] then
                 algType[0] = autotunerCache[1][autotunerHash]
                 if cudnn.verbose then
-                    print('Using cached benchmark for: ', autotunerHash)
+                   print('Autotuning SC FW: using cached algo = ', algType[0], ' for: ', autotunerHash)
                 end
             else
                 local perfResults = ffi.new("cudnnConvolutionFwdAlgoPerf_t[?]", 1)
@@ -192,7 +191,7 @@ function SpatialConvolution:createIODescriptors(input)
                 autotunerCache[1][autotunerHash] = perfResults[0].algo
                 if cudnn.verbose then
                     print(string.format(
-                              "Autotuning        Forward: Time: %3.5f Memory: %8d Algorithm: %d"
+                              "\nAutotuning SC     Forward: Time: %3.5f Memory: %8d Algorithm: %d"
                                   .. " Weight: %15s Input: %15s Output: %15s",
                               perfResults[0].time, tonumber(perfResults[0].memory),
                               tonumber(perfResults[0].algo),
@@ -229,6 +228,9 @@ function SpatialConvolution:createIODescriptors(input)
         if cudnn.benchmark then -- the manual auto-tuner is run
             if autotunerCache[2][autotunerHash] then
                 algType[0] = autotunerCache[2][autotunerHash]
+                if cudnn.verbose then
+                   print('Autotuning SC BW: using cached algo = ', algType[0], ' for: ', autotunerHash)
+                end
             else
                 local perfResults = ffi.new("cudnnConvolutionBwdFilterAlgoPerf_t[?]", 1)
                 local intt = torch.IntTensor(1);
@@ -277,6 +279,9 @@ function SpatialConvolution:createIODescriptors(input)
         if cudnn.benchmark then -- the manual auto-tuner is run
             if autotunerCache[3][autotunerHash] then
                 algType[0] = autotunerCache[3][autotunerHash]
+                if cudnn.verbose then
+                   print('Autotuning SC BWD: using cached algo = ', algType[0], ' for: ', autotunerHash)
+                end
             else
                 local perfResults = ffi.new("cudnnConvolutionBwdDataAlgoPerf_t[?]", 1)
                 local intt = torch.IntTensor(1);
@@ -331,9 +336,6 @@ function SpatialConvolution:createIODescriptors(input)
         self.weight_offset = self.nInputPlane / self.groups * self.nOutputPlane / self.groups * kH * kW
 
         if not batch then
-            self.gradInput = self.gradInput:view(self.gradInput:size(2),
-                                                 self.gradInput:size(3),
-                                                 self.gradInput:size(4))
             self.output = self.output:view(self.output:size(2),
                                            self.output:size(3),
                                            self.output:size(4))
@@ -387,6 +389,7 @@ end
 function SpatialConvolution:updateGradInput(input, gradOutput)
     if not self.gradInput then return end
 
+    self.gradInput:resizeAs(input)
     input, gradOutput = makeContiguous(self, input, gradOutput)
     assert(gradOutput:dim() == 3 or gradOutput:dim() == 4, 'gradOutput has to be 3D or 4D');
     if not self.weightDesc then self:resetWeightDescriptors() end
@@ -469,5 +472,7 @@ end
 
 function SpatialConvolution:clearState()
    self:clearDesc()
+   self._input = nil
+   self._gradOutput = nil
    return nn.Module.clearState(self)
 end
