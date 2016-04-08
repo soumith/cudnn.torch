@@ -89,6 +89,5 @@ end
 function Pointwise:clearState()
    self:clearDesc()
    self._gradOutput = nil
-   nn.utils.clear(self, 'activDesc')
    return parent.clearState(self)
 end
