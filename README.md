@@ -46,13 +46,16 @@ require 'cudnn'
 cudnn.benchmark = true -- uses the inbuilt cudnn auto-tuner to find the fastest convolution algorithms.
                        -- If this is set to false, uses some in-built heuristics that might not always be fastest.
 ```
-by default `cudnn.benchmark` is set to `false`.
+by default `cudnn.benchmark` is set to `false`.  Setting to `true` will improve performance, at the expense of using more
+memory.  The input shape should be the same for each batch, otherwise autotune will re-run for each batch,
+causing a huge slow-down.
 
 ```lua
 cudnn.fastest = true -- this is like the :fastest() mode for the Convolution modules,
                      -- simply picks the fastest convolution algorithm, rather than tuning for workspace size
 ```
-by default, `cudnn.fastest` is set to `false`.
+by default, `cudnn.fastest` is set to `false`.  You should set to `true` if memory is not an issue, and you
+want the fastest performance
 
 
 ```lua
