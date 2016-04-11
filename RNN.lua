@@ -2,7 +2,7 @@ local RNN, parent = torch.class('cudnn.RNN', 'nn.Module')
 local ffi = require 'ffi'
 local errcheck = cudnn.errcheck
 
-function RNN:__init(inputSize, hiddenSize, numLayers)
+function RNN:__init(inputSize, hiddenSize, numLayers, batchFirst)
    parent.__init(self)
 
    self.datatype = 'CUDNN_DATA_FLOAT'
@@ -12,10 +12,12 @@ function RNN:__init(inputSize, hiddenSize, numLayers)
    self.miniBatch = 1
    self.numLayers = numLayers
    self.bidirectional = 'CUDNN_UNIDIRECTIONAL'
+   self.numDirections = 1 -- set to 2 for bi-directional.
    self.inputMode = 'CUDNN_LINEAR_INPUT'
    self.mode = 'CUDNN_RNN_RELU'
    self.dropout = 0
    self.seed = 0x01234567
+   self.batchFirst = batchFirst or false -- Set to true for batch x time x inputdim.
 
    self.gradInput = torch.CudaTensor()
    self.output = torch.CudaTensor()
@@ -50,7 +52,7 @@ function RNN:reset(stdv)
    self.gradWeight:resizeAs(self.weight):zero()
 end
 
-local function createDescriptors(count, descs_type, create_func, destroy_func)
+function RNN:createDescriptors(count, descs_type, create_func, destroy_func)
    local ds = ffi.new(descs_type, count)
    for i = 0, count - 1 do
       errcheck(create_func, ds + i)
@@ -64,29 +66,29 @@ local function createDescriptors(count, descs_type, create_func, destroy_func)
    return ds
 end
 
-local function createDropoutDescriptors(count)
-   return createDescriptors(count,
+function RNN:createDropoutDescriptors(count)
+   return self:createDescriptors(count,
                             'cudnnDropoutDescriptor_t[?]',
                             'cudnnCreateDropoutDescriptor',
                             'cudnnDestroyDropoutDescriptor')
 end
 
-local function createFilterDescriptors(count)
-   return createDescriptors(count,
+function RNN:createFilterDescriptors(count)
+   return self:createDescriptors(count,
                             'cudnnFilterDescriptor_t[?]',
                             'cudnnCreateFilterDescriptor',
                             'cudnnDestroyFilterDescriptor')
 end
 
-local function createRNNDescriptors(count)
-   return createDescriptors(count,
+function RNN:createRNNDescriptors(count)
+   return self:createDescriptors(count,
                             'cudnnRNNDescriptor_t[?]',
                             'cudnnCreateRNNDescriptor',
                             'cudnnDestroyRNNDescriptor')
 end
 
-local function createTensorDescriptors(count)
-   return createDescriptors(count,
+function RNN:createTensorDescriptors(count)
+   return self:createDescriptors(count,
                             'cudnnTensorDescriptor_t[?]',
                             'cudnnCreateTensorDescriptor',
                             'cudnnDestroyTensorDescriptor')
@@ -94,7 +96,7 @@ end
 
 function RNN:resetDropoutDescriptor()
    if not self.dropoutDesc then
-      self.dropoutDesc = createDropoutDescriptors(1)
+      self.dropoutDesc = self:createDropoutDescriptors(1)
    end
 
    self.dropoutStatesSize = torch.LongTensor(1)
@@ -113,7 +115,7 @@ end
 
 function RNN:resetRNNDescriptor()
    if not self.rnnDesc then
-      self.rnnDesc = createRNNDescriptors(1)
+      self.rnnDesc = self:createRNNDescriptors(1)
    end
 
    errcheck('cudnnSetRNNDescriptor',
@@ -130,7 +132,7 @@ end
 
 function RNN:resetWeightDescriptor()
    if not self.wDesc then
-      self.wDesc = createFilterDescriptors(1)
+      self.wDesc = self:createFilterDescriptors(1)
    end
 
    local dim = torch.IntTensor({self.weight:size(1), 1, 1})
@@ -144,8 +146,8 @@ function RNN:resetWeightDescriptor()
 end
 
 function RNN:resetIODescriptors()
-   self.xDescs = createTensorDescriptors(self.seqLength)
-   self.yDescs = createTensorDescriptors(self.seqLength)
+   self.xDescs = self:createTensorDescriptors(self.seqLength)
+   self.yDescs = self:createTensorDescriptors(self.seqLength)
 
    for i = 0, self.seqLength - 1 do
       local dim = torch.IntTensor({self.inputSize, self.miniBatch, self.seqLength})
@@ -157,7 +159,7 @@ function RNN:resetIODescriptors()
                dim:data(),
                stride:data())
 
-      local dim = torch.IntTensor({self.hiddenSize, self.miniBatch, self.seqLength})
+      local dim = torch.IntTensor({self.hiddenSize * self.numDirections, self.miniBatch, self.seqLength})
       local stride = torch.IntTensor({1, dim[1], dim[1] * dim[2]})
       errcheck('cudnnSetTensorNdDescriptor',
                self.yDescs[i],
@@ -169,8 +171,8 @@ function RNN:resetIODescriptors()
 end
 
 function RNN:resetHiddenDescriptors()
-   self.hxDesc = createTensorDescriptors(1)
-   self.hyDesc = createTensorDescriptors(1)
+   self.hxDesc = self:createTensorDescriptors(1)
+   self.hyDesc = self:createTensorDescriptors(1)
 
    local dim = torch.IntTensor({self.hiddenSize, self.miniBatch, self.numLayers})
    local stride = torch.IntTensor({1, dim[1], dim[1] * dim[2]})
@@ -190,8 +192,8 @@ function RNN:resetHiddenDescriptors()
 end
 
 function RNN:resetCellDescriptors()
-   self.cxDesc = createTensorDescriptors(1)
-   self.cyDesc = createTensorDescriptors(1)
+   self.cxDesc = self:createTensorDescriptors(1)
+   self.cyDesc = self:createTensorDescriptors(1)
 
    local dim = torch.IntTensor({self.hiddenSize, self.miniBatch, self.numLayers})
    local stride = torch.IntTensor({1, dim[1], dim[1] * dim[2]})
@@ -210,7 +212,7 @@ function RNN:resetCellDescriptors()
             stride:data())
 end
 
-local function makeContiguous(self, input, gradOutput)
+function RNN:makeContiguous(input, gradOutput)
    if not input:isContiguous() then
       self._input = self._input or input.new()
       self._input:typeAs(input):resizeAs(input):copy(input)
@@ -224,9 +226,19 @@ local function makeContiguous(self, input, gradOutput)
    return input, gradOutput
 end
 
-function RNN:updateOutput(input)
-   assert(input:dim() == 3, 'input must have 3 dimensions: seqLength, miniBatch, inputSize')
+function RNN:resizeOutput(tensor)
+    return tensor:resize(self.seqLength, self.miniBatch, self.hiddenSize * self.numDirections)
+end
 
+function RNN:resizeHidden(tensor)
+    return tensor:resize(self.numLayers * self.numDirections, self.miniBatch, self.hiddenSize)
+end
+
+function RNN:updateOutput(input)
+    if (self.batchFirst) then
+        input = input:transpose(1, 2)
+    end
+   assert(input:dim() == 3, 'input must have 3 dimensions: seqLength, miniBatch, inputSize')
    -- Decide which descriptors/tensors need to be updated.
    local resetRNN = not self.dropoutDesc or not self.rnnDesc
    local resetIO = not self.xDescs or not self.yDescs
@@ -263,11 +275,11 @@ function RNN:updateOutput(input)
       self:resetWeightDescriptor()
    end
 
-   local x = makeContiguous(self, input)
-   local y = self.output:resize(self.seqLength, self.miniBatch, self.hiddenSize)
+   local x = self:makeContiguous(input)
+   local y = self:resizeOutput(self.output)
    local w = self.weight
-   local hy = self.hiddenOutput:resize(self.numLayers, self.miniBatch, self.hiddenSize):zero()
-   local cy = self.cellOutput:resize(self.numLayers, self.miniBatch, self.hiddenSize):zero()
+   local hy = self:resizeHidden(self.hiddenOutput):zero()
+   local cy = self:resizeHidden(self.cellOutput):zero()
 
    -- Optionally use hiddenInput/cellInput parameters
    local hx = self.hiddenInput
@@ -275,14 +287,14 @@ function RNN:updateOutput(input)
 
    if hx then
       assert(hx:dim() == 3, 'hiddenInput must have 3 dimensions: numLayers, miniBatch, hiddenSize')
-      assert(hx:size(1) == self.numLayers, 'hiddenInput has incorrect number of layers!')
+      assert(hx:size(1) == self.numLayers * self.numDirections, 'hiddenInput has incorrect number of layers!')
       assert(hx:size(2) == self.miniBatch, 'hiddenInput has incorrect number of minibathes!')
       assert(hx:size(3) == self.hiddenSize, 'hiddenIinput has incorrect size!')
       assert(hx:isContiguous(), 'hiddenInput must be contiguous!') end
 
    if cx then
       assert(cx:dim() == 3, 'cellInput must have 3 dimensions: numLayers, miniBatch, hiddenSize')
-      assert(cx:size(1) == self.numLayers, 'cellInput has incorrect number of layers!')
+      assert(cx:size(1) == self.numLayers * self.numDirections, 'cellInput has incorrect number of layers!')
       assert(cx:size(2) == self.miniBatch, 'cellInput has incorrect number of minibathes!')
       assert(cx:size(3) == self.hiddenSize, 'cellInput has incorrect size!')
       assert(cx:isContiguous(), 'cellInput must be contiguous!')
@@ -338,11 +350,18 @@ function RNN:updateOutput(input)
                self.cyDesc[0], cy:data(),
                self.workspace:data(), self.workspace:size(1) * 4) -- sizeof(float)
    end
-
+    if (self.batchFirst) then
+        self.output = self.output:transpose(1, 2)
+    end
    return self.output
 end
 
 function RNN:updateGradInput(input, gradOutput)
+    if (self.batchFirst) then
+        input = input:transpose(1, 2)
+        gradOutput = gradOutput:transpose(1, 2)
+        self.output = self.output:transpose(1, 2)
+    end
    assert(input:dim() == 3, 'input should have 3 dimensions: seqLength, miniBatch, inputSize')
    assert(input:size(1) == self.seqLength, 'input has incorrect sequence length!')
    assert(input:size(2) == self.miniBatch, 'input has incorrect minibatch size!')
@@ -351,7 +370,7 @@ function RNN:updateGradInput(input, gradOutput)
    assert(gradOutput:isSameSizeAs(self.output), 'gradOutput has incorrect size!')
    assert(self.train, 'updateGradInput can only be called when training!')
 
-   local x, dy = makeContiguous(self, input, gradOutput)
+   local x, dy = self:makeContiguous(input, gradOutput)
    local y = self.output
    local w = self.weight
    local dx = self.gradInput:resizeAs(input)
@@ -359,13 +378,13 @@ function RNN:updateGradInput(input, gradOutput)
    local cx = self.cellInput
    local dhy = self.gradHiddenOutput
    local dcy = self.gradCellOutput
-   local dhx = self.gradHiddenInput:resize(self.numLayers, self.miniBatch, self.hiddenSize):zero()
-   local dcx = self.gradCellInput:resize(self.numLayers, self.miniBatch, self.hiddenSize):zero()
+   local dhx = self:resizeHidden(self.gradHiddenInput):zero()
+   local dcx = self:resizeHidden(self.gradCellInput):zero()
 
 
    if hx then
       assert(hx:dim() == 3, 'hiddenInput must have 3 dimensions: numLayers, miniBatch, hiddenSize')
-      assert(hx:size(1) == self.numLayers, 'hiddenInput has incorrect number of layers!')
+      assert(hx:size(1) == self.numLayers * self.numDirections, 'hiddenInput has incorrect number of layers!')
       assert(hx:size(2) == self.miniBatch, 'hiddenInput has incorrect minibatch size!')
       assert(hx:size(3) == self.hiddenSize, 'hiddenInput has incorrect size!')
       assert(hx:isContiguous(), 'hiddenInput must be contiguous!')
@@ -373,7 +392,7 @@ function RNN:updateGradInput(input, gradOutput)
 
    if cx then
       assert(cx:dim() == 3, 'cellInput must have 3 dimensions: numLayers, miniBatch, hiddenSize')
-      assert(cx:size(1) == self.numLayers, 'cellInput has incorrect number of layers!')
+      assert(cx:size(1) == self.numLayers * self.numDirections, 'cellInput has incorrect number of layers!')
       assert(cx:size(2) == self.miniBatch, 'cellInput has incorrect minibatch size!')
       assert(cx:size(3) == self.hiddenSize, 'cellInput has incorrect size!')
       assert(cx:isContiguous(), 'cellInput must be contiguous!')
@@ -382,7 +401,7 @@ function RNN:updateGradInput(input, gradOutput)
    if dhy then
       assert(dhy:dim() == 3, 'gradHiddenOutput must have 3 dimensions: ' ..
                              'numLayers, miniBatch, hiddenSize')
-      assert(dhy:size(1) == self.numLayers, 'gradHiddenOutput has incorrect number of layers!')
+      assert(dhy:size(1) == self.numLayers * self.numDirections, 'gradHiddenOutput has incorrect number of layers!')
       assert(dhy:size(2) == self.miniBatch, 'gradHiddenOutput has incorrect minibatch size!')
       assert(dhy:size(3) == self.hiddenSize, 'gradHiddenOutput has incorrect size!')
       assert(dhy:isContiguous(), 'gradHiddenOutput must be contiguous!')
@@ -391,7 +410,7 @@ function RNN:updateGradInput(input, gradOutput)
    if dcy then
       assert(dcy:dim() == 3, 'gradCellOutput must have 3 dimensions: ' ..
                              'numLayers, miniBatch, hiddenSize')
-      assert(dcy:size(1) == self.numLayers, 'gradCellOutput has incorrect number of layers!')
+      assert(dcy:size(1) == self.numLayers * self.numDirections, 'gradCellOutput has incorrect number of layers!')
       assert(dcy:size(2) == self.miniBatch, 'gradCellOutput has incorrect minibatch size!')
       assert(dcy:size(3) == self.hiddenSize, 'gradCellOutput has incorrect size!')
       assert(dcy:isContiguous(), 'gradCellOutput must be contiguous!')
@@ -412,11 +431,17 @@ function RNN:updateGradInput(input, gradOutput)
             self.cxDesc[0], dcx:data(),
             self.workspace:data(), self.workspace:size(1) * 4, -- sizeof(float)
             self.reserve:data(), self.reserve:size(1) * 4) -- sizeof(float)
-
+    if (self.batchFirst) then
+        self.gradInput = self.gradInput:transpose(1, 2)
+    end
    return self.gradInput
 end
 
 function RNN:accGradParameters(input, gradOutput, scale)
+    if (self.batchFirst) then
+        input = input:transpose(1, 2)
+        gradOutput = gradOutput:transpose(1, 2)
+    end
    scale = scale or 1
    if scale == 0 then return end
 
@@ -428,14 +453,14 @@ function RNN:accGradParameters(input, gradOutput, scale)
    assert(gradOutput:isSameSizeAs(self.output), 'gradOutput has incorrect size!')
    assert(self.train, 'accGradParameters can only be called when training!')
 
-   local x, dy = makeContiguous(self, input, gradOutput)
+   local x, dy = self:makeContiguous(input, gradOutput)
    local hx = self.hiddenInput
    local y = self.output
    local dw = self.gradWeight
 
    if hx then
       assert(hx:dim() == 3, 'hiddenInput must have 3 dimensions: numLayers, miniBatch, hiddenSize')
-      assert(hx:size(1) == self.numLayers, 'hiddenInput has incorrect number of layers!')
+      assert(hx:size(1) == self.numLayers * self.numDirections, 'hiddenInput has incorrect number of layers!')
       assert(hx:size(2) == self.miniBatch, 'hiddenInput has incorrect minibatch size!')
       assert(hx:size(3) == self.hiddenSize, 'hiddenIinput has incorrect size!')
       assert(hx:isContiguous(), 'hiddenInput must be contiguous!')
