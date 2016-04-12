@@ -42,6 +42,10 @@ function cudnn.convert(net, dst)
       if v == 'ReLU' then y = dst.ReLU() end -- because parameters
       for k,u in pairs(x) do y[k] = u end
       if src == cudnn and x.clearDesc then x:clearDesc() end
+      if v == 'SpatialConvolution' and y.bias == nil then
+        y.bias = torch.zeros(y.nOutputPlane):typeAs(y.weight)
+        y.gradBias = torch.Tensor():typeAs(y.bias):resizeAs(y.bias):zero()
+      end
       return y
     end
     local t = torch.typename(x)
