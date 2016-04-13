@@ -4,6 +4,7 @@ local errcheck = cudnn.errcheck
 
 BatchNormalization.mode = 'CUDNN_BATCHNORM_PER_ACTIVATION'
 BatchNormalization.nDim = 2
+BatchNormalization.__version = 2
 
 function BatchNormalization:__init(nFeature, eps, momentum, affine)
    parent.__init(self)
@@ -18,7 +19,7 @@ function BatchNormalization:__init(nFeature, eps, momentum, affine)
    self.momentum = momentum or 0.1
 
    self.running_mean = torch.zeros(nFeature)
-   self.running_std = torch.ones(nFeature)
+   self.running_var = torch.ones(nFeature)
    if self.affine then
       self.weight = torch.Tensor(nFeature)
       self.bias = torch.Tensor(nFeature)
@@ -36,7 +37,7 @@ function BatchNormalization:reset()
       self.bias:zero()
    end
    self.running_mean:zero()
-   self.running_std:fill(1)
+   self.running_var:fill(1)
 end
 
 function BatchNormalization:createIODescriptors(input)
@@ -66,20 +67,20 @@ function BatchNormalization:updateOutput(input)
    self.save_mean = self.save_mean or input.new()
    self.save_mean:resizeAs(self.running_mean)
    self.save_std = self.save_std or input.new()
-   self.save_std:resizeAs(self.running_std)
+   self.save_std:resizeAs(self.running_var)
 
    if self.train then
       errcheck('cudnnBatchNormalizationForwardTraining',
             cudnn.getHandle(), self.mode, one:data(), zero:data(),
             self.iDesc[0], input:data(), self.oDesc[0], self.output:data(),
             self.sDesc[0], self.weight:data(), self.bias:data(),
-            self.momentum, self.running_mean:data(), self.running_std:data(), self.eps, self.save_mean:data(), self.save_std:data());
+            self.momentum, self.running_mean:data(), self.running_var:data(), self.eps, self.save_mean:data(), self.save_std:data());
    else
       errcheck('cudnnBatchNormalizationForwardInference',
             cudnn.getHandle(), self.mode, one:data(), zero:data(),
             self.iDesc[0], input:data(), self.oDesc[0], self.output:data(),
             self.sDesc[0], self.weight:data(), self.bias:data(),
-            self.running_mean:data(), self.running_std:data(), self.eps);
+            self.running_mean:data(), self.running_var:data(), self.eps);
    end
    return self.output
 end
