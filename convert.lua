@@ -1,5 +1,7 @@
 -- modules that can be converted to nn seamlessly
 local layer_list = {
+  'BatchNormalization',
+  'SpatialBatchNormalization',
   'SpatialConvolution',
   'SpatialCrossMapLRN',
   'SpatialFullConvolution',
@@ -10,6 +12,7 @@ local layer_list = {
   'Sigmoid',
   'SoftMax',
   'LogSoftMax',
+  'VolumetricBatchNormalization',
   'VolumetricConvolution',
   'VolumetricMaxPooling',
   'VolumetricAveragePooling',
