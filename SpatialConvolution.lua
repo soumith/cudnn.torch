@@ -43,7 +43,7 @@ function SpatialConvolution:resetWeightDescriptors()
                               self.nInputPlane/self.groups,
                               self.kH, self.kW})
     errcheck('cudnnSetFilterNdDescriptor', self.weightDesc[0],
-             'CUDNN_DATA_FLOAT', 4,
+             'CUDNN_DATA_FLOAT', 'CUDNN_TENSOR_NCHW', 4,
              desc:data());
     local function destroyWDesc(d)
         errcheck('cudnnDestroyFilterDescriptor', d[0]);
@@ -122,7 +122,7 @@ function SpatialConvolution:createIODescriptors(input)
         local pad = torch.IntTensor({self.padH, self.padW})
         local stride = torch.IntTensor({self.dH, self.dW})
         local upscale = torch.IntTensor({1,1})
-        errcheck('cudnnSetConvolutionNdDescriptor_v3', self.convDesc[0],
+        errcheck('cudnnSetConvolutionNdDescriptor', self.convDesc[0],
                  2, pad:data(),
                  stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
                  'CUDNN_DATA_FLOAT');
@@ -177,7 +177,7 @@ function SpatialConvolution:createIODescriptors(input)
             if autotunerCache[1][autotunerHash] then
                 algType[0] = autotunerCache[1][autotunerHash]
                 if cudnn.verbose then
-                    print('Using cached benchmark for: ', autotunerHash)
+                   print('Autotuning SC FW: using cached algo = ', algType[0], ' for: ', autotunerHash)
                 end
             else
                 local perfResults = ffi.new("cudnnConvolutionFwdAlgoPerf_t[?]", 1)
@@ -191,7 +191,7 @@ function SpatialConvolution:createIODescriptors(input)
                 autotunerCache[1][autotunerHash] = perfResults[0].algo
                 if cudnn.verbose then
                     print(string.format(
-                              "Autotuning        Forward: Time: %3.5f Memory: %8d Algorithm: %d"
+                              "\nAutotuning SC     Forward: Time: %3.5f Memory: %8d Algorithm: %d"
                                   .. " Weight: %15s Input: %15s Output: %15s",
                               perfResults[0].time, tonumber(perfResults[0].memory),
                               tonumber(perfResults[0].algo),
@@ -228,6 +228,9 @@ function SpatialConvolution:createIODescriptors(input)
         if cudnn.benchmark then -- the manual auto-tuner is run
             if autotunerCache[2][autotunerHash] then
                 algType[0] = autotunerCache[2][autotunerHash]
+                if cudnn.verbose then
+                   print('Autotuning SC BW: using cached algo = ', algType[0], ' for: ', autotunerHash)
+                end
             else
                 local perfResults = ffi.new("cudnnConvolutionBwdFilterAlgoPerf_t[?]", 1)
                 local intt = torch.IntTensor(1);
@@ -276,6 +279,9 @@ function SpatialConvolution:createIODescriptors(input)
         if cudnn.benchmark then -- the manual auto-tuner is run
             if autotunerCache[3][autotunerHash] then
                 algType[0] = autotunerCache[3][autotunerHash]
+                if cudnn.verbose then
+                   print('Autotuning SC BWD: using cached algo = ', algType[0], ' for: ', autotunerHash)
+                end
             else
                 local perfResults = ffi.new("cudnnConvolutionBwdDataAlgoPerf_t[?]", 1)
                 local intt = torch.IntTensor(1);
@@ -390,7 +396,7 @@ function SpatialConvolution:updateGradInput(input, gradOutput)
     self:createIODescriptors(input)
 
     for g = 0,self.groups - 1 do
-        errcheck('cudnnConvolutionBackwardData_v3', cudnn.getHandle(),
+        errcheck('cudnnConvolutionBackwardData', cudnn.getHandle(),
                  one:data(),
                  self.weightDesc[0], self.weight:data() + g*self.weight_offset,
                  self.oDesc[0], gradOutput:data() + g*self.output_offset,
@@ -427,7 +433,7 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
 
     for g = 0, self.groups - 1 do
         -- gradWeight
-        errcheck('cudnnConvolutionBackwardFilter_v3', cudnn.getHandle(),
+        errcheck('cudnnConvolutionBackwardFilter', cudnn.getHandle(),
                  self.scaleT:data(),
                  self.iDesc[0], input:data() + g*self.input_offset,
                  self.oDesc[0], gradOutput:data() + g*self.output_offset,

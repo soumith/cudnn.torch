@@ -1,5 +1,7 @@
 local Pointwise, parent = torch.class('cudnn._Pointwise','nn.Module')
+
 local errcheck = cudnn.errcheck
+local ffi = require 'ffi'
 
 function Pointwise:__init(inplace)
    parent.__init(self)
@@ -13,11 +15,27 @@ function Pointwise:createIODescriptors(input)
        self.gradInput:resizeAs(input)
        self.output:resizeAs(input)
    end
+
+   if not self.activDesc then
+      self.activDesc = ffi.new('struct cudnnActivationStruct*[1]')
+      errcheck('cudnnCreateActivationDescriptor', self.activDesc)
+      errcheck('cudnnSetActivationDescriptor', self.activDesc[0], self.mode, 'CUDNN_PROPAGATE_NAN', 0.0);
+
+      local function destroyADesc(a)
+         if (a[0]) then
+            errcheck('cudnnDestroyActivationDescriptor', a[0]);
+            a[0] = nil
+         end
+      end
+      ffi.gc(self.activDesc, destroyADesc)
+   end
+
    local nElem = input:nElement()
    self.nElem = self.nElem or nElem -- this goes to the second branch only once
    if self.iDesc and nElem == self.nElem then return end
    self.nElem = nElem
    self.iDesc = cudnn.toDescriptor(input:view(1,1,1,nElem))
+
 end
 
 local one = torch.FloatTensor({1});
@@ -27,7 +45,7 @@ function Pointwise:updateOutput(input)
    self:createIODescriptors(input)
    if self.inplace then self.output:set(input) end
    errcheck('cudnnActivationForward',
-            cudnn.getHandle(), self.mode,
+            cudnn.getHandle(), self.activDesc[0],
             one:data(),
             self.iDesc[0], input:data(),
             zero:data(),
@@ -44,7 +62,7 @@ function Pointwise:updateGradInput(input, gradOutput)
    self:createIODescriptors(input)
    if self.inplace then self.output:set(input); self.gradInput:set(gradOutput) end
    errcheck('cudnnActivationBackward',
-            cudnn.getHandle(), self.mode,
+            cudnn.getHandle(), self.activDesc[0],
             one:data(),
             self.iDesc[0], self.output:data(),
             self.iDesc[0], gradOutput:data(),
@@ -56,6 +74,7 @@ end
 
 function Pointwise:clearDesc()
    self.iDesc = nil
+   self.activDesc = nil
 end
 
 function Pointwise:write(f)

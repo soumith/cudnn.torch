@@ -21,7 +21,7 @@ function SpatialFullConvolution:resetWeightDescriptors()
                                   self.nOutputPlane,
                                   self.kH, self.kW})
     errcheck('cudnnSetFilterNdDescriptor', self.weightDesc[0],
-             'CUDNN_DATA_FLOAT', 4,
+             'CUDNN_DATA_FLOAT', 'CUDNN_TENSOR_NCHW', 4,
              desc:data());
     local function destroyWDesc(d)
         errcheck('cudnnDestroyFilterDescriptor', d[0]);
@@ -93,7 +93,7 @@ function SpatialFullConvolution:createIODescriptors(input)
         local pad = torch.IntTensor({self.padH, self.padW})
         local stride = torch.IntTensor({self.dH, self.dW})
         local upscale = torch.IntTensor({1,1})
-        errcheck('cudnnSetConvolutionNdDescriptor_v3', self.convDesc[0],
+        errcheck('cudnnSetConvolutionNdDescriptor', self.convDesc[0],
                  2, pad:data(),
                  stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
                  'CUDNN_DATA_FLOAT');
@@ -147,7 +147,7 @@ function SpatialFullConvolution:createIODescriptors(input)
             if autotunerCache[1][autotunerHash] then
                 algType[0] = autotunerCache[1][autotunerHash]
                 if cudnn.verbose then
-                    print('Using cached benchmark for: ', autotunerHash)
+                   print('Autotuning SFC: using cached algo = ', algType[0], ' for: ', autotunerHash)
                 end
             else
                 local perfResults = ffi.new("cudnnConvolutionFwdAlgoPerf_t[?]", 1)
@@ -309,7 +309,7 @@ function SpatialFullConvolution:updateOutput(input)
     self:createIODescriptors(input)
 
     -- Because SpatialFullConvolution is performing the adjoint of the forward
-    -- convolution operator, we need to swap the forward and backward passes.  
+    -- convolution operator, we need to swap the forward and backward passes.
     errcheck('cudnnConvolutionBackwardData', cudnn.getHandle(),
              one:data(),
              self.weightDesc[0], self.weight:data(),
