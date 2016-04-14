@@ -3,3 +3,4 @@ local SpatialBatchNormalization, parent =
 
 SpatialBatchNormalization.mode = 'CUDNN_BATCHNORM_SPATIAL'
 SpatialBatchNormalization.nDim = 4
+SpatialBatchNormalization.__version = 2
