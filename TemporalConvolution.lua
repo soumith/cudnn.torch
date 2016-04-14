@@ -62,7 +62,7 @@ function TemporalConvolution:updateOutput(input)
    if self.buffer:storage() then self.output:set(self.buffer:storage(), 1, self.output:size()) else self.output = self.buffer end
    cudnn.SpatialConvolution.updateOutput(self,_input)
    self.buffer = self.output:view(self.oSize):transpose(2,3)
-   self.output  = self._output:resize(self.buffer:size()):copy(self.buffer)
+   self.output = self._output:resize(self.buffer:size()):copy(self.buffer)
    -- self.output here is always 4D, use input dimensions to properly view output
    if input:dim()==3 then
      self.output=self.output:view(self.oSize[1], self.oSize[3],self.oSize[2])

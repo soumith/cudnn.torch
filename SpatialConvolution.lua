@@ -330,9 +330,9 @@ function SpatialConvolution:createIODescriptors(input)
         self.weight_offset = self.nInputPlane / self.groups * self.nOutputPlane / self.groups * kH * kW
 
         if not batch then
-            self.output = self.output:view(self.output:size(2),
-                                           self.output:size(3),
-                                           self.output:size(4))
+            self.output:set(self.output:view(self.output:size(2),
+                                             self.output:size(3),
+                                             self.output:size(4)))
         end
     end
 end

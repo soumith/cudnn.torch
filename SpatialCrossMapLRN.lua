@@ -43,12 +43,12 @@ function LRN:createIODescriptors(input)
       -- create input/output descriptor
       self.iDesc = cudnn.toDescriptor(input)
       if not batch then
-         self.gradInput = self.gradInput:view(self.gradInput:size(2),
-                                              self.gradInput:size(3),
-                                              self.gradInput:size(4))
-         self.output = self.output:view(self.output:size(2),
-                                        self.output:size(3),
-                                        self.output:size(4))
+         self.gradInput:set(self.gradInput:view(self.gradInput:size(2),
+                                                self.gradInput:size(3),
+                                                self.gradInput:size(4)))
+         self.output:set(self.output:view(self.output:size(2),
+                                          self.output:size(3),
+                                          self.output:size(4)))
       end
    end
 end
