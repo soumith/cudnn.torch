@@ -118,6 +118,16 @@ function BatchNormalization:clearDesc()
    self.sDesc = nil
 end
 
+function BatchNormalization:read(file, version)
+   parent.read(self, file)
+   if version < 2 then
+      if self.running_std then
+         self.running_var = self.running_std:pow(-2):add(-self.eps)
+         self.running_std = nil
+      end
+   end
+end
+
 function BatchNormalization:write(f)
    self:clearDesc()
    local var = {}
