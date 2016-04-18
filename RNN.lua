@@ -261,7 +261,7 @@ function RNN:updateOutput(input)
 
    -- Update descriptors/tensors
    if resetRNN then
-      self:resetDropoutDescriptor()
+      if not self.dropoutDesc then self:resetDropoutDescriptor() end
       self:resetRNNDescriptor()
    end
    if resetIO then
