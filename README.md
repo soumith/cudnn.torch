@@ -37,6 +37,15 @@ cudnn.SpatialCrossEntropyCriterion()       -- A spatial version of LogSoftMax + 
 cudnn.VolumetricConvolution(nInputPlane, nOutputPlane, kT, kW, kH, dT, dW, dH, padT, padW, padH)
 cudnn.VolumetricMaxPooling(kT, kW, kH, dT, dW, dH, padT, padW, padH)
 cudnn.VolumetricAveragePooling(kT, kW, kH, dT, dW, dH, padT, padW, padH)
+
+-- Recurrent Modules
+
+-- All inputs have to be 3D. Accepts input of seqLength x batch x inputDim, or batch x seqLength x inputDim if batchFirst set to true.
+cudnn.RNNReLU(inputDim, outputDim, numberOfLayers, [batchFirst = false])
+cudnn.RNNTanh(inputDim, outputDim, numberOfLayers, [batchFirst = false])
+cudnn.LSTM(inputDim, outputDim, numberOfLayers, [batchFirst = false])
+cudnn.GRU(inputDim, outputDim, numberOfLayers, [batchFirst = false])
+cudnn.BLSTM(inputDim, outputDim, numberOfLayers, [batchFirst = false])
 ```
 
 ### Modes
@@ -90,6 +99,5 @@ For version CuDNN R1, checkout the branch **R1**
 For version CuDNN R2, checkout the branch **R2**
 For version CuDNN R3, checkout the branch **R3**
 For version CuDNN R4, checkout the branch **master**
-
 
 R5 Release Notes:
