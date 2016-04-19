@@ -42,6 +42,7 @@ function SpatialConvolution:resetWeightDescriptors()
     else
        assert(false, 'Only Cuda supported, duh!')
     end
+    self.weightType = typeName
     
     -- for compatibility
     self.groups = self.groups or 1
@@ -107,12 +108,15 @@ function SpatialConvolution:createIODescriptors(input)
         input = input:view(1, input:size(1), input:size(2), input:size(3))
         batch = false
     end
+
     assert(input:dim() == 4 and input:isContiguous())
     self.iSize = self.iSize or torch.LongStorage(4):fill(0)
-    if not self.iDesc or not self.oDesc or
-        input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
-    or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
+    self.iType = self.iType or input:type()
+    if not self.iDesc or not self.oDesc or input:type() ~= self.iType or
+       input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2] or
+       input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
         self.iSize = input:size()
+        self.iType = input:type()
 
         assert(self.nInputPlane == input:size(2), 'input has to contain: '
                    .. self.nInputPlane
@@ -370,7 +374,8 @@ local function makeContiguous(self, input, gradOutput)
 end
 
 function SpatialConvolution:updateOutput(input)
-    if not self.weightDesc then self:resetWeightDescriptors() end
+    if not self.weightDesc or 
+    not self.weightType or self:type() ~= self.weightType then self:resetWeightDescriptors() end
     input = makeContiguous(self, input)
     self:createIODescriptors(input)
 
