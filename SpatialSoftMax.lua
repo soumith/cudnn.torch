@@ -15,6 +15,7 @@ function SpatialSoftMax:createIODescriptors(input)
    -- after converting from nn use accurate
    self.algorithm = self.algorithm or 'CUDNN_SOFTMAX_ACCURATE'
    self.iSize = self.iSize or torch.LongStorage(4):fill(0)
+   self.iType = self.iType or input:type()
 
    local batch = true
    local singleDim = false
@@ -32,9 +33,12 @@ function SpatialSoftMax:createIODescriptors(input)
    assert(input:dim() == 4 and input:isContiguous());
 
    if not self.iDesc or not self.oDesc or
-      input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
-   or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
+      input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2] or
+      input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] or
+      input:type() ~= self.iType then
+
       self.iSize = input:size()
+      self.iType = input:type()
       self.gradInput:resizeAs(input)
       self.output:resizeAs(input)
       self.iDesc = cudnn.toDescriptor(input)
