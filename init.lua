@@ -61,7 +61,17 @@ end
 cudnn.errcheck = errcheck
 
 function cudnn.toDescriptor(t)
-   assert(torch.typename(t) == 'torch.CudaTensor')
+   
+   local typeName = torch.typename(t)
+   local cudnnDataType
+   if typeName == 'torch.CudaTensor' then
+      cudnnDataType = 'CUDNN_DATA_FLOAT'
+   elseif typeName == 'torch.CudaHalfTensor' then
+      cudnnDataType = 'CUDNN_DATA_HALF'
+   else
+      assert(false, 'Only Cuda supported, duh!')
+   end
+
    local descriptor = ffi.new('struct cudnnTensorStruct*[1]')
    -- create descriptor
    errcheck('cudnnCreateTensorDescriptor', descriptor)
@@ -79,7 +89,7 @@ function cudnn.toDescriptor(t)
    -- set descriptor
    local size = torch.LongTensor(t:size()):int()
    local stride = torch.LongTensor(t:stride()):int()
-   errcheck('cudnnSetTensorNdDescriptor', descriptor[0], 'CUDNN_DATA_FLOAT',
+   errcheck('cudnnSetTensorNdDescriptor', descriptor[0], cudnnDataType,
             t:dim(), size:data(), stride:data())
    return descriptor
 end

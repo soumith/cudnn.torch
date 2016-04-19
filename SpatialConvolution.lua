@@ -30,10 +30,19 @@ end
 
 -- if you change the configuration of the module manually, call this
 function SpatialConvolution:resetWeightDescriptors()
-    assert(torch.typename(self.weight) == 'torch.CudaTensor',
-           'Only Cuda supported duh!')
-    assert(torch.typename(self.bias) == 'torch.CudaTensor' or not self.bias,
-           'Only Cuda supported duh!')
+
+    local typeName = torch.typename(self.weight)
+    assert(typeName == torch.typename(self.bias) or not self.bias, 
+           'bias must be of same data type as weight')
+    local cudnnDataType
+    if typeName == 'torch.CudaTensor' then
+       cudnnDataType = 'CUDNN_DATA_FLOAT'
+    elseif typeName == 'torch.CudaHalfTensor' then
+       cudnnDataType = 'CUDNN_DATA_HALF'
+    else
+       assert(false, 'Only Cuda supported, duh!')
+    end
+    
     -- for compatibility
     self.groups = self.groups or 1
     -- create filterDescriptor for weight
@@ -43,10 +52,10 @@ function SpatialConvolution:resetWeightDescriptors()
                               self.nInputPlane/self.groups,
                               self.kH, self.kW})
     errcheck('cudnnSetFilterNdDescriptor', self.weightDesc[0],
-             'CUDNN_DATA_FLOAT', 'CUDNN_TENSOR_NCHW', 4,
-             desc:data());
+             cudnnDataType, 'CUDNN_TENSOR_NCHW', 4,
+             desc:data())
     local function destroyWDesc(d)
-        errcheck('cudnnDestroyFilterDescriptor', d[0]);
+        errcheck('cudnnDestroyFilterDescriptor', d[0])
     end
     ffi.gc(self.weightDesc, destroyWDesc)
 
@@ -98,7 +107,7 @@ function SpatialConvolution:createIODescriptors(input)
         input = input:view(1, input:size(1), input:size(2), input:size(3))
         batch = false
     end
-    assert(input:dim() == 4 and input:isContiguous());
+    assert(input:dim() == 4 and input:isContiguous())
     self.iSize = self.iSize or torch.LongStorage(4):fill(0)
     if not self.iDesc or not self.oDesc or
         input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
@@ -112,8 +121,8 @@ function SpatialConvolution:createIODescriptors(input)
                    ' x ' .. input:size(3) .. ' x ' .. input:size(4))
 
         -- create input descriptor
-        local input_slice = {{},{1,self.nInputPlane/self.groups},{},{}}
-        self.iDesc = cudnn.toDescriptor(input[input_slice])
+        local input_slice = input:narrow(2,1,self.nInputPlane/self.groups)
+        self.iDesc = cudnn.toDescriptor(input_slice)
 
         -- create conv descriptor
         self.convDesc = ffi.new('struct cudnnConvolutionStruct*[1]')
@@ -125,9 +134,9 @@ function SpatialConvolution:createIODescriptors(input)
         errcheck('cudnnSetConvolutionNdDescriptor', self.convDesc[0],
                  2, pad:data(),
                  stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
-                 'CUDNN_DATA_FLOAT');
+                 'CUDNN_DATA_FLOAT') -- leave for now; half-prec comp. only on Pascal arch.
         local function destroyConvDesc(d)
-            errcheck('cudnnDestroyConvolutionDescriptor', d[0]);
+            errcheck('cudnnDestroyConvolutionDescriptor', d[0])
         end
         ffi.gc(self.convDesc, destroyConvDesc)
 
@@ -141,8 +150,8 @@ function SpatialConvolution:createIODescriptors(input)
         self.output:resize(oSize:long():storage())
 
         -- create descriptor for output
-        local output_slice = {{},{1,self.nOutputPlane/self.groups},{},{}}
-        self.oDesc = cudnn.toDescriptor(self.output[output_slice])
+        local output_slice = self.output:narrow(2,1,self.nOutputPlane/self.groups)
+        self.oDesc = cudnn.toDescriptor(output_slice)
         self.oDescForBias = cudnn.toDescriptor(self.output)
 
         -----------------------------------------------------------------------
@@ -158,8 +167,8 @@ function SpatialConvolution:createIODescriptors(input)
             return str
         end
         local autotunerHash = shape(self.weight) .. ';'
-            .. shape(input[input_slice]) .. ';'
-            .. shape(self.output[output_slice])
+            .. shape(input_slice) .. ';'
+            .. shape(output_slice)
 
         local maxBufSize = 0
 
@@ -181,7 +190,7 @@ function SpatialConvolution:createIODescriptors(input)
                 end
             else
                 local perfResults = ffi.new("cudnnConvolutionFwdAlgoPerf_t[?]", 1)
-                local intt = torch.IntTensor(1);
+                local intt = torch.IntTensor(1)
                 errcheck('cudnnFindConvolutionForwardAlgorithm',
                          cudnn.getHandle(),
                          self.iDesc[0], self.weightDesc[0],
@@ -233,7 +242,7 @@ function SpatialConvolution:createIODescriptors(input)
                 end
             else
                 local perfResults = ffi.new("cudnnConvolutionBwdFilterAlgoPerf_t[?]", 1)
-                local intt = torch.IntTensor(1);
+                local intt = torch.IntTensor(1)
                 errcheck('cudnnFindConvolutionBackwardFilterAlgorithm',
                          cudnn.getHandle(),
                          self.iDesc[0], self.oDesc[0],
@@ -284,7 +293,7 @@ function SpatialConvolution:createIODescriptors(input)
                 end
             else
                 local perfResults = ffi.new("cudnnConvolutionBwdDataAlgoPerf_t[?]", 1)
-                local intt = torch.IntTensor(1);
+                local intt = torch.IntTensor(1)
                 errcheck('cudnnFindConvolutionBackwardDataAlgorithm',
                          cudnn.getHandle(),
                          self.weightDesc[0], self.oDesc[0],
@@ -343,8 +352,8 @@ function SpatialConvolution:createIODescriptors(input)
     end
 end
 
-local one = torch.FloatTensor({1});
-local zero = torch.FloatTensor({0});
+local one = torch.FloatTensor({1})
+local zero = torch.FloatTensor({0})
 
 local function makeContiguous(self, input, gradOutput)
    if not input:isContiguous() then
@@ -373,7 +382,7 @@ function SpatialConvolution:updateOutput(input)
                  self.convDesc[0], self.fwdAlgType[0],
                  self.extraBuffer:data(), self.extraBufferSizeInBytes,
                  zero:data(),
-                 self.oDesc[0], self.output:data() + g*self.output_offset);
+                 self.oDesc[0], self.output:data() + g*self.output_offset)
     end
 
     -- add bias
@@ -391,7 +400,7 @@ function SpatialConvolution:updateGradInput(input, gradOutput)
 
     self.gradInput:resizeAs(input)
     input, gradOutput = makeContiguous(self, input, gradOutput)
-    assert(gradOutput:dim() == 3 or gradOutput:dim() == 4, 'gradOutput has to be 3D or 4D');
+    assert(gradOutput:dim() == 3 or gradOutput:dim() == 4, 'gradOutput has to be 3D or 4D')
     if not self.weightDesc then self:resetWeightDescriptors() end
     self:createIODescriptors(input)
 
@@ -404,7 +413,7 @@ function SpatialConvolution:updateGradInput(input, gradOutput)
                  self.bwdDataAlgType[0],
                  self.extraBuffer:data(), self.extraBufferSizeInBytes,
                  zero:data(),
-                 self.iDesc[0], self.gradInput:data() + g*self.input_offset);
+                 self.iDesc[0], self.gradInput:data() + g*self.input_offset)
     end
     return self.gradInput
 end
@@ -418,7 +427,7 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
 
     input, gradOutput = makeContiguous(self, input, gradOutput)
 
-    assert(gradOutput:dim() == 3 or gradOutput:dim() == 4, 'gradOutput has to be 3D or 4D');
+    assert(gradOutput:dim() == 3 or gradOutput:dim() == 4, 'gradOutput has to be 3D or 4D')
     if not self.weightDesc then self:resetWeightDescriptors() end
     self:createIODescriptors(input)
 
@@ -441,7 +450,7 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
                  self.bwdFilterAlgType[0],
                  self.extraBuffer:data(), self.extraBufferSizeInBytes,
                  one:data(),
-                 self.weightDesc[0], self.gradWeight:data() + g*self.weight_offset);
+                 self.weightDesc[0], self.gradWeight:data() + g*self.weight_offset)
     end
 end
 
