@@ -26,6 +26,13 @@ function SpatialConvolution:__init(nInputPlane, nOutputPlane,
     self:reset()
     -- should nil for serialization, the reset will still work
     self.reset = nil
+
+    self._halfPrecision = false
+    devProps = cutorch.getDeviceProperties(cutorch.getDevice())
+    -- half-precision computing (not i/o only) needs HW support (Tegra X1 or Pascal)
+    if devProps.major >= 6 or (devProps.major == 5 and devProps.minor == 3) then
+       self._halfPrecision = true 
+    end
 end
 
 -- if you change the configuration of the module manually, call this
@@ -135,10 +142,12 @@ function SpatialConvolution:createIODescriptors(input)
         local pad = torch.IntTensor({self.padH, self.padW})
         local stride = torch.IntTensor({self.dH, self.dW})
         local upscale = torch.IntTensor({1,1})
+        local cudnnComputeType = 'CUDNN_DATA_FLOAT'
+        if self._halfPrecision then cudnnComputeType = 'CUDNN_DATA_HALF' end
         errcheck('cudnnSetConvolutionNdDescriptor', self.convDesc[0],
                  2, pad:data(),
                  stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
-                 'CUDNN_DATA_FLOAT') -- leave for now; half-prec comp. only on Pascal arch.
+                 cudnnComputeType)
         local function destroyConvDesc(d)
             errcheck('cudnnDestroyConvolutionDescriptor', d[0])
         end
@@ -407,7 +416,7 @@ function SpatialConvolution:updateGradInput(input, gradOutput)
     self.gradInput:resizeAs(input)
     input, gradOutput = makeContiguous(self, input, gradOutput)
     assert(gradOutput:dim() == 3 or gradOutput:dim() == 4, 'gradOutput has to be 3D or 4D')
-    if not self.weightDesc then self:resetWeightDescriptors() end
+    if not self.weightDesc or not self.weightType or self:type() ~= self.weightType then self:resetWeightDescriptors() end
     self:createIODescriptors(input)
 
     for g = 0,self.groups - 1 do
@@ -434,7 +443,7 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
     input, gradOutput = makeContiguous(self, input, gradOutput)
 
     assert(gradOutput:dim() == 3 or gradOutput:dim() == 4, 'gradOutput has to be 3D or 4D')
-    if not self.weightDesc then self:resetWeightDescriptors() end
+    if not self.weightDesc or not self.weightType or self:type() ~= self.weightType then self:resetWeightDescriptors() end
     self:createIODescriptors(input)
 
     -- gradBias

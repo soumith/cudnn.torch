@@ -83,3 +83,29 @@ function fwdSoftMax(x, datatype)
 end
 eval(torch.randn(1,3,25,27), fwdSoftMax)
 
+
+-- benchmarking SpatialConvolution
+h = 60
+w = 80
+nInputC = 64
+nOutputC = 256
+k = 7
+numRuns = 5000
+numOps = 2*nOutputC*nInputC*k*k*(h-k+1)*(w-k+1)
+datatype = 'torch.CudaTensor'
+datatype = 'torch.CudaHalfTensor'
+--cutorch.setDevice(2)
+
+i1 = torch.randn(1,nInputC,h,w):type(datatype)
+m1 = cudnn.SpatialConvolution(nInputC,nOutputC, k,k):fastest():type(datatype)
+for i = 1,200 do
+   o1 = m1:forward(i1)
+end
+cutorch.synchronize()
+t1 = torch.Timer()
+for i = 1,numRuns do
+   o1 = m1:forward(i1)
+end
+cutorch.synchronize()
+timePerPass = t1:time().real/numRuns
+print(datatype .. ': ', nInputC, nOutputC, kH, kW, iH, iW, nBatch, timePerPass, numOps/1e9/timePerPass)
