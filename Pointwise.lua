@@ -31,11 +31,14 @@ function Pointwise:createIODescriptors(input)
    end
 
    local nElem = input:nElement()
-   self.nElem = self.nElem or nElem -- this goes to the second branch only once
-   if self.iDesc and nElem == self.nElem then return end
-   self.nElem = nElem
-   self.iDesc = cudnn.toDescriptor(input:view(1,1,1,nElem))
-
+   self.nElem = self.nElem or nElem
+   if self.iDesc and nElem == self.nElem and
+      self.iType and input:type() == self.iType then
+      return
+   else
+      self.nElem = nElem
+      self.iDesc = cudnn.toDescriptor(input:view(1,1,1,nElem))
+   end
 end
 
 local one = torch.FloatTensor({1});

@@ -374,8 +374,9 @@ local function makeContiguous(self, input, gradOutput)
 end
 
 function SpatialConvolution:updateOutput(input)
-    if not self.weightDesc or 
-    not self.weightType or self:type() ~= self.weightType then self:resetWeightDescriptors() end
+    if not self.weightDesc or not self.weightType or self:type() ~= self.weightType then 
+       self:resetWeightDescriptors() 
+    end
     input = makeContiguous(self, input)
     self:createIODescriptors(input)
 
