@@ -447,13 +447,8 @@ function RNN:accGradParameters(input, gradOutput, scale)
    assert(input:size(1) == self.seqLength, 'input has incorrect sequence length!')
    assert(input:size(2) == self.miniBatch, 'input has incorrect minibatch size!')
    assert(input:size(3) == self.inputSize, 'input has incorrect size!')
-
-    if (self.batchFirst) then
-        assert(gradOutput:isSameSizeAs(self.output:transpose(1, 2)), 'gradOutput has incorrect size!')
-
-    else
-        assert(gradOutput:isSameSizeAs(self.output), 'gradOutput has incorrect size!')
-    end
+   local expectedSize = torch.LongStorage {self.seqLength, self.miniBatch, self.hiddenSize * self.numDirections}
+   assert(gradOutput:isSize(expectedSize), 'gradOutput has incorrect size!')
    assert(self.train, 'accGradParameters can only be called when training!')
 
    local x, dy = self:makeContiguous(input, gradOutput)
