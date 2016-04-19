@@ -213,7 +213,7 @@ function RNN:resetCellDescriptors()
 end
 
 function RNN:makeContiguous(input, gradOutput)
-   if not input:isContiguous() then
+   if input and not input:isContiguous() then
       self._input = self._input or input.new()
       self._input:typeAs(input):resizeAs(input):copy(input)
       input = self._input
@@ -368,7 +368,7 @@ function RNN:updateGradInput(input, gradOutput)
    assert(self.train, 'updateGradInput can only be called when training!')
    local expectedSize = torch.LongStorage {self.seqLength, self.miniBatch, self.hiddenSize * self.numDirections}
    assert(gradOutput:isSize(expectedSize), 'gradOutput has incorrect size!')
-   local x, dy = self:makeContiguous(input, gradOutput)
+   local x, dy = self:makeContiguous(nil, gradOutput) -- No need to calculate x.
    local y = self.output
    local w = self.weight
    local dx = self.gradInput:resizeAs(input)
