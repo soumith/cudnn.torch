@@ -59,12 +59,27 @@ print('========== MaxPool ===========')
 print('==============================')
 print('')
 
-m = cudnn.SpatialMaxPooling
+m = cudnn.SpatialMaxPooling(2,2)
 
-function fwdReLU(x, datatype)
+function fwdMaxPool(x, datatype)
    x = x:clone():type(datatype)
    m = m:type(datatype)
    return m:forward(x):clone()
 end
-eval(torch.randn(1,3,25,27), fwdReLU)
+eval(torch.randn(1,3,25,27), fwdMaxPool)
+
+
+print('==============================')
+print('========== SoftMax ===========')
+print('==============================')
+print('')
+
+m = cudnn.SpatialSoftMax()
+
+function fwdSoftMax(x, datatype)
+   x = x:clone():type(datatype)
+   m = m:type(datatype)
+   return m:forward(x):clone()
+end
+eval(torch.randn(1,3,25,27), fwdSoftMax)
 
