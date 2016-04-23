@@ -44,8 +44,9 @@ function RNN:reset(stdv)
    errcheck('cudnnGetRNNParamsSize',
             cudnn.getHandle(),
             self.rnnDesc[0],
-            self.xDescs,
-            weightSize:data())
+            self.xDescs[0],	    
+            weightSize:data(),
+	    self.datatype)
    weightSize[1] = (weightSize[1] + 3) / 4 -- sizeof(float)
    self.weight:resize(weightSize[1])
    self.weight:uniform(-stdv, stdv)
@@ -116,12 +117,10 @@ end
 function RNN:resetRNNDescriptor()
    if not self.rnnDesc then
       self.rnnDesc = self:createRNNDescriptors(1)
-   end
-
+   end   
    errcheck('cudnnSetRNNDescriptor',
             self.rnnDesc[0],
             self.hiddenSize,
-            self.seqLength,
             self.numLayers,
             self.dropoutDesc[0],
             self.inputMode,
@@ -150,8 +149,8 @@ function RNN:resetIODescriptors()
    self.yDescs = self:createTensorDescriptors(self.seqLength)
 
    for i = 0, self.seqLength - 1 do
-      local dim = torch.IntTensor({self.inputSize, self.miniBatch, self.seqLength})
-      local stride = torch.IntTensor({1, dim[1], dim[1] * dim[2]})
+      local dim = torch.IntTensor({ self.miniBatch,self.inputSize, 1})
+      local stride = torch.IntTensor({dim[3] * dim[2], dim[3],1})
       errcheck('cudnnSetTensorNdDescriptor',
                self.xDescs[i],
                self.datatype,
@@ -159,8 +158,8 @@ function RNN:resetIODescriptors()
                dim:data(),
                stride:data())
 
-      local dim = torch.IntTensor({self.hiddenSize * self.numDirections, self.miniBatch, self.seqLength})
-      local stride = torch.IntTensor({1, dim[1], dim[1] * dim[2]})
+      local dim = torch.IntTensor({self.miniBatch, self.hiddenSize * self.numDirections, 1})
+      local stride = torch.IntTensor({dim[3] * dim[2], dim[3],1})
       errcheck('cudnnSetTensorNdDescriptor',
                self.yDescs[i],
                self.datatype,
@@ -173,9 +172,8 @@ end
 function RNN:resetHiddenDescriptors()
    self.hxDesc = self:createTensorDescriptors(1)
    self.hyDesc = self:createTensorDescriptors(1)
-
-   local dim = torch.IntTensor({self.hiddenSize, self.miniBatch, self.numLayers})
-   local stride = torch.IntTensor({1, dim[1], dim[1] * dim[2]})
+   local dim = torch.IntTensor({self.numLayers*self.numDirections, self.miniBatch, self.hiddenSize })
+   local stride = torch.IntTensor({dim[3] * dim[2], dim[3],1})
 
    errcheck('cudnnSetTensorNdDescriptor',
             self.hxDesc[0],
@@ -194,9 +192,8 @@ end
 function RNN:resetCellDescriptors()
    self.cxDesc = self:createTensorDescriptors(1)
    self.cyDesc = self:createTensorDescriptors(1)
-
-   local dim = torch.IntTensor({self.hiddenSize, self.miniBatch, self.numLayers})
-   local stride = torch.IntTensor({1, dim[1], dim[1] * dim[2]})
+   local dim = torch.IntTensor({self.numLayers*self.numDirections, self.miniBatch, self.hiddenSize })
+   local stride = torch.IntTensor({dim[3] * dim[2], dim[3],1})
 
    errcheck('cudnnSetTensorNdDescriptor',
             self.cxDesc[0],
@@ -305,6 +302,7 @@ function RNN:updateOutput(input)
    errcheck('cudnnGetRNNWorkspaceSize',
             cudnn.getHandle(),
             self.rnnDesc[0],
+	    self.seqLength,
             self.xDescs,
             workspaceSize:data())
    workspaceSize[1] = (workspaceSize[1] + 3) / 4 -- sizeof(float)
@@ -317,6 +315,7 @@ function RNN:updateOutput(input)
       errcheck('cudnnGetRNNTrainingReserveSize',
                cudnn.getHandle(),
                self.rnnDesc[0],
+	       self.seqLength,
                self.xDescs,
                reserveSize:data())
       reserveSize[1] = (reserveSize[1] + 3) / 4 -- sizeof(float)
@@ -328,6 +327,7 @@ function RNN:updateOutput(input)
       errcheck('cudnnRNNForwardTraining',
                cudnn.getHandle(),
                self.rnnDesc[0],
+	       self.seqLength,
                self.xDescs, x:data(),
                self.hxDesc[0], hx and hx:data() or nil,
                self.cxDesc[0], cx and cx:data() or nil,
@@ -341,6 +341,7 @@ function RNN:updateOutput(input)
       errcheck('cudnnRNNForwardInference',
                cudnn.getHandle(),
                self.rnnDesc[0],
+	       self.seqLength,
                self.xDescs, x:data(),
                self.hxDesc[0], hx and hx:data() or nil,
                self.cxDesc[0], cx and cx:data() or nil,
@@ -419,6 +420,7 @@ function RNN:updateGradInput(input, gradOutput)
    errcheck('cudnnRNNBackwardData',
             cudnn.getHandle(),
             self.rnnDesc[0],
+	    self.seqLength,
             self.yDescs, y:data(),
             self.yDescs, dy:data(),
             self.hyDesc[0], dhy and dhy:data() or nil,
@@ -482,6 +484,7 @@ function RNN:accGradParameters(input, gradOutput, scale)
    errcheck('cudnnRNNBackwardWeights',
             cudnn.getHandle(),
             self.rnnDesc[0],
+	    self.seqLength,
             self.xDescs, x:data(),
             self.hxDesc[0], hx and hx:data() or nil,
             self.yDescs, y:data(),
