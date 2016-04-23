@@ -36,15 +36,11 @@ function LRN:createIODescriptors(input)
       input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
    or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
       self.iSize = input:size()
-      self.gradInput:resizeAs(input)
       self.output:resizeAs(input)
 
       -- create input/output descriptor
       self.iDesc = cudnn.toDescriptor(input)
       if not batch then
-         self.gradInput = self.gradInput:view(self.gradInput:size(2),
-                                              self.gradInput:size(3),
-                                              self.gradInput:size(4))
          self.output = self.output:view(self.output:size(2),
                                         self.output:size(3),
                                         self.output:size(4))
@@ -70,6 +66,9 @@ function LRN:updateOutput(input)
 end
 
 function LRN:updateGradInput(input, gradOutput)
+   if not self.gradInput then return end
+   self.gradInput:resizeAs(input)
+
    assert(gradOutput:dim() == 3 or gradOutput:dim() == 4);
    if not gradOutput:isContiguous() then
       self._gradOutput = self._gradOutput or gradOutput.new()

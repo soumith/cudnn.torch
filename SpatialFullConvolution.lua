@@ -75,8 +75,6 @@ function SpatialFullConvolution:createIODescriptors(input)
     or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
         self.iSize = input:size()
 
-        -- resize gradInput
-        if self.gradInput then self.gradInput:resizeAs(input); end
         assert(self.nInputPlane == input:size(2), 'input has to contain: '
                    .. self.nInputPlane
                    .. ' feature maps, but received input of size: '
@@ -291,9 +289,6 @@ function SpatialFullConvolution:createIODescriptors(input)
         end
 
         if not batch then
-            self.gradInput = self.gradInput:view(self.gradInput:size(2),
-                                                 self.gradInput:size(3),
-                                                 self.gradInput:size(4))
             self.output = self.output:view(self.output:size(2),
                                            self.output:size(3),
                                            self.output:size(4))
@@ -329,6 +324,7 @@ end
 
 function SpatialFullConvolution:updateGradInput(input, gradOutput)
     if not self.gradInput then return end
+    self.gradInput:resizeAs(input)
 
     assert(gradOutput:dim() == 3 or gradOutput:dim() == 4, 'gradOutput has to be 3D or 4D');
     assert(gradOutput:isContiguous(), 'gradOutput has to be contiguous')

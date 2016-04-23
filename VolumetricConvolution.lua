@@ -76,8 +76,6 @@ function VolumetricConvolution:createIODescriptors(input)
    or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4]
    or input:size(5) ~= self.iSize[5] then
          self.iSize = input:size()
-         -- resize gradInput
-         if self.gradInput then self.gradInput:resizeAs(input); end
          -- create input descriptor
          self.iDesc = cudnn.toDescriptor(input)
          -- create conv descriptor
@@ -287,10 +285,6 @@ function VolumetricConvolution:createIODescriptors(input)
         -----------------------------------------------------------------------
 
          if not batch then
-            self.gradInput = self.gradInput:view(self.gradInput:size(2),
-                                                 self.gradInput:size(3),
-                                                 self.gradInput:size(4),
-                                                 self.gradInput:size(5))
             self.output = self.output:view(self.output:size(2),
                                            self.output:size(3),
                                            self.output:size(4),
@@ -337,6 +331,8 @@ end
 
 function VolumetricConvolution:updateGradInput(input, gradOutput)
    if not self.gradInput then return end
+   self.gradInput:resizeAs(input)
+
    input, gradOutput = makeContiguous(self, input, gradOutput)
    assert(gradOutput:dim() == 4 or gradOutput:dim() == 5,
           'gradOutput has to be a 4D or 5D tensor');

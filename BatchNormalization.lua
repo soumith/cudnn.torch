@@ -48,7 +48,6 @@ function BatchNormalization:createIODescriptors(input)
       local nFeature = self.running_mean:numel()
       self.iSize = input:size()
       self.output:resizeAs(input)
-      self.gradInput:resizeAs(input)
       self.iDesc = cudnn.toDescriptor(input)
       self.oDesc = cudnn.toDescriptor(self.output)
       local biasSize = torch.ones(self.nDim):totable()
@@ -88,6 +87,7 @@ end
 local function backward(self,input,gradOutput, scale)
    assert(gradOutput:isContiguous())
    self:createIODescriptors(input)
+   self.gradInput:resizeAs(input)
    scale = scale or 1
    scaleTens:fill(scale)
    errcheck('cudnnBatchNormalizationBackward',

@@ -388,8 +388,8 @@ end
 
 function SpatialConvolution:updateGradInput(input, gradOutput)
     if not self.gradInput then return end
-
     self.gradInput:resizeAs(input)
+
     input, gradOutput = makeContiguous(self, input, gradOutput)
     assert(gradOutput:dim() == 3 or gradOutput:dim() == 4, 'gradOutput has to be 3D or 4D');
     if not self.weightDesc then self:resetWeightDescriptors() end

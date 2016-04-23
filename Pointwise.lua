@@ -12,7 +12,6 @@ function Pointwise:createIODescriptors(input)
    assert(self.mode, 'mode is not set. (trying to use base class?)');
    assert(input:isContiguous(), 'Non-contiguous inputs not supported yet');
    if not self.inplace then
-       self.gradInput:resizeAs(input)
        self.output:resizeAs(input)
    end
 
@@ -60,7 +59,12 @@ function Pointwise:updateGradInput(input, gradOutput)
       gradOutput = self._gradOutput
    end
    self:createIODescriptors(input)
-   if self.inplace then self.output:set(input); self.gradInput:set(gradOutput) end
+   if self.inplace then
+      self.output:set(input);
+      self.gradInput:set(gradOutput)
+   else
+      self.gradInput:resizeAs(input)
+   end
    errcheck('cudnnActivationBackward',
             cudnn.getHandle(), self.activDesc[0],
             one:data(),

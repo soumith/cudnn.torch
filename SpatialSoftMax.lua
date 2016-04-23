@@ -35,22 +35,16 @@ function SpatialSoftMax:createIODescriptors(input)
       input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
    or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
       self.iSize = input:size()
-      self.gradInput:resizeAs(input)
       self.output:resizeAs(input)
       self.iDesc = cudnn.toDescriptor(input)
       self.oDesc = cudnn.toDescriptor(self.output)
       if not singleDim and not batch then
-         self.gradInput = self.gradInput:view(self.gradInput:size(2),
-                                              self.gradInput:size(3),
-                                              self.gradInput:size(4))
          self.output = self.output:view(self.output:size(2),
                                         self.output:size(3),
                                         self.output:size(4))
       elseif singleDim and not batch then
-         self.gradInput = self.gradInput:view(self.gradInput:size(2))
          self.output = self.output:view(self.output:size(2))
       elseif singleDim and batch then
-         self.gradInput = self.gradInput:view(self.gradInput:size(1), self.gradInput:size(2))
          self.output = self.output:view(self.output:size(1), self.output:size(2))
       end
    end
@@ -72,6 +66,7 @@ function SpatialSoftMax:updateOutput(input)
 end
 
 function SpatialSoftMax:updateGradInput(input, gradOutput)
+   self.gradInput:resizeAs(input)
    if not gradOutput:isContiguous() then
       self._gradOutput = self._gradOutput or gradOutput.new()
       self._gradOutput:resizeAs(gradOutput):copy(gradOutput)
