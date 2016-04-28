@@ -2,6 +2,12 @@ local RNN, parent = torch.class('cudnn.RNN', 'nn.Module')
 local ffi = require 'ffi'
 local errcheck = cudnn.errcheck
 
+RNN.linearLayers = {} -- Sizes of linear layers for weights/bias look up.
+RNN.linearLayers['CUDNN_LSTM'] = 8
+RNN.linearLayers['CUDNN_GRU'] = 6
+RNN.linearLayers['CUDNN_RNN_RELU'] = 2
+RNN.linearLayers['CUDNN_RNN_TANH'] = 2
+
 function RNN:__init(inputSize, hiddenSize, numLayers, batchFirst)
    parent.__init(self)
 
@@ -495,6 +501,62 @@ function RNN:accGradParameters(input, gradOutput, scale)
                self.dw:data(),
                scaleTensor:data())
    end
+end
+
+local function numberOfLinearLayers(self)
+    return RNN.linearLayers[self.mode]
+end
+
+-- Function gets either the matrix or bias param depending on cuDNN method given, at each layer and linear layerId.
+local function retrieveLinearParams(self, cuDNNMethod)
+    local linearParams = {}
+    local numberOfLinearLayers = numberOfLinearLayers(self)
+
+    for layer = 0, self.numLayers - 1 do
+        local layerInfo = {}
+        for layerId = 0, numberOfLinearLayers - 1 do
+            local linLayerMatDesc = self:createFilterDescriptors(1)
+            local pointer = ffi.new("float*[1]")
+            errcheck(cuDNNMethod,
+                cudnn.getHandle(),
+                self.rnnDesc[0],
+                layer,
+                self.xDescs,
+                self.wDesc[0],
+                self.weight:data(),
+                layerId,
+                linLayerMatDesc[0],
+                ffi.cast("void**", pointer))
+
+            local dataType = 'CUDNN_DATA_FLOAT'
+            local format = 'CUDNN_TENSOR_NCHW'
+            local nbDims = torch.IntTensor(1)
+
+            local minDim = 3
+            local filterDimA = torch.ones(minDim):int()
+            errcheck('cudnnGetFilterNdDescriptor',
+                linLayerMatDesc[0],
+                minDim,
+                ffi.cast("cudnnDataType_t*", dataType),
+                ffi.cast("cudnnTensorFormat_t*", format),
+                nbDims:data(),
+                filterDimA:data())
+
+            local offset = pointer[0] - self.weight:data()
+            local params = torch.CudaTensor(self.weight:storage(), offset + 1, filterDimA:prod())
+            table.insert(layerInfo, params)
+        end
+        table.insert(linearParams, layerInfo)
+    end
+    return linearParams
+end
+
+function RNN:weights()
+    return retrieveLinearParams(self, 'cudnnGetRNNLinLayerMatrixParams')
+end
+
+function RNN:biases()
+    return retrieveLinearParams(self, 'cudnnGetRNNLinLayerBiasParams')
 end
 
 function RNN:clearDesc()
