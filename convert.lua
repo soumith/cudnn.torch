@@ -30,7 +30,7 @@ end
 
 -- goes over a given net and converts all layers to dst backend
 -- for example: net = cudnn.convert(net, cudnn)
-function cudnn.convert(net, dst)
+function cudnn.convert(net, dst, exclusion_fn)
   return replace(net, function(x)
     local y = 0
     local src = dst == nn and cudnn or nn
@@ -48,6 +48,10 @@ function cudnn.convert(net, dst)
         y.count_include_pad = v.mode == 'CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING'
       end
       return y
+    end
+
+    if exclusion_fn and exclusion_fn(x) then
+      return x
     end
     local t = torch.typename(x)
     if t == 'nn.SpatialConvolutionMM' then
