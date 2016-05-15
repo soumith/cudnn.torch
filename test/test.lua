@@ -1234,6 +1234,23 @@ function cudnntest.SpatialLogSoftMax()
     mytester:assertlt(err, precision_backward, 'error in difference between central difference and :backward')
 end
 
+function cudnntest.Dropout()
+   local p = 0.2 --prob of droping out a neuron
+   local input = torch.Tensor(1000):fill((1-p)):cuda()
+   local module = cudnn.Dropout(p):cuda()
+   -- version 2
+   local output = module:forward(input)
+   mytester:assert(math.abs(output:mean() - (1-p)) < 0.05, 'dropout output')
+   local gradInput = module:backward(input, input)
+   mytester:assert(math.abs(gradInput:mean() - (1-p)) < 0.05, 'dropout gradInput')
+   -- test inplace version
+   local module = cudnn.Dropout(p,nil,true):cuda()
+   local output = module:forward(input:clone())
+   mytester:assert(math.abs(output:mean() - (1-p)) < 0.05, 'dropout output')
+   local gradInput = module:backward(input:clone(), input:clone())
+   mytester:assert(math.abs(gradInput:mean() - (1-p)) < 0.05, 'dropout gradInput')
+end
+
 local function testBatchNormalization(moduleName, inputSize)
    local input = torch.randn(table.unpack(inputSize)):cuda()
    local gradOutput = torch.randn(table.unpack(inputSize)):cuda()
