@@ -1595,8 +1595,8 @@ Then make sure files named as libcudnn.so.5 or libcudnn.5.dylib are placed in yo
 end
 
 cudnn.version = tonumber(cudnn.C.cudnnGetVersion())
-if cudnn.version < 5002 then
-  error('These bindings are for version 5002 or above, '
+if cudnn.version < 5005 then
+  error('These bindings are for version 5005 or above, '
         .. 'while the loaded CuDNN is version: ' .. cudnn.version
            .. '  \nAre you using an older version of CuDNN?')
 end
