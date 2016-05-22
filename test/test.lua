@@ -820,6 +820,8 @@ function cudnntest.SpatialAveragePooling_single()
    local sconv = nn.SpatialAveragePooling(ki,kj,si,sj):cuda()
    local gconv = cudnn.SpatialAveragePooling(ki,kj,si,sj):cuda()
 
+   mytester:assert(cudnn.C.CUDNN_POOLING_AVERAGE ~= nil, 'back-compat broken')
+
    local function test(sconv, gconv)
       local groundtruth = sconv:forward(input):clone()
       local groundgrad = sconv:backward(input, gradOutput)

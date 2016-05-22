@@ -724,7 +724,8 @@ typedef enum
 {
     CUDNN_POOLING_MAX     = 0,
     CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING = 1, /* count for average includes padded values*/
-    CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING = 2 /* count for average does not include padded values*/
+    CUDNN_POOLING_AVERAGE_COUNT_EXCLUDE_PADDING = 2, /* count for average does not include padded values*/
+    CUDNN_POOLING_AVERAGE = CUDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING // for backward compatibility
 } cudnnPoolingMode_t;
 
 /* Create an instance of pooling descriptor */
@@ -1583,7 +1584,6 @@ cudnnStatus_t             cudnnActivationBackward_v4(
                                 const void                         *beta,
                                 const cudnnTensorDescriptor_t       dxDesc,
                                 void                               *dx );
-
 
 ]]
 
