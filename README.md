@@ -76,12 +76,23 @@ by default, `cudnn.verbose` is set to `false`.
 
 Conversion is done by `cudnn.convert` function which takes a network and backend arguments and goes over
 network modules recursively substituting equivalents. No memory copy is done, just metatables are swapped.
+If you don't want to convert all modules you can pass a function as the third argument to `cudnn.convert`.
+It will be called at each step, with a module that is currently converted.  It is meant to exclude
+modules i.e. if it returns `true`, they will be left untouched, otherwise they will be subject to conversion.
 
 ```lua
 net = nn.Sequential()
 net:add(nn.SpatialConvolution(3,96,11,11,3,3))
 net:add(nn.ReLU())
 cudnn.convert(net, cudnn)
+print(net)
+
+net = nn.Sequential()
+net:add(nn.SpatialConvolution(3,96,11,11,3,3))
+net:add(nn.ReLU())
+cudnn.convert(net, cudnn, function(module)
+   return torch.type(module):find('ReLU')
+end)
 print(net)
 ```
 
@@ -91,6 +102,11 @@ nn.Sequential {
   [input -> (1) -> (2) -> output]
   (1): cudnn.SpatialConvolution(3 -> 96, 11x11, 3,3)
   (2): cudnn.ReLU
+}
+nn.Sequential {
+  [input -> (1) -> (2) -> output]
+  (1): cudnn.SpatialConvolution(3 -> 96, 11x11, 3,3)
+  (2): nn.ReLU
 }
 ```
 
