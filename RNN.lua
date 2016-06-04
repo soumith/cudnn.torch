@@ -210,7 +210,7 @@ function RNN:resetCellDescriptors()
 end
 
 function RNN:makeContiguous(input, gradOutput)
-   if not input:isContiguous() then
+   if input and not input:isContiguous() then
       self._input = self._input or input.new()
       self._input:typeAs(input):resizeAs(input):copy(input)
       input = self._input
@@ -361,17 +361,15 @@ function RNN:updateGradInput(input, gradOutput)
     if (self.batchFirst) then
         input = input:transpose(1, 2)
         gradOutput = gradOutput:transpose(1, 2)
-        self.output = self.output:transpose(1, 2)
     end
    assert(input:dim() == 3, 'input should have 3 dimensions: seqLength, miniBatch, inputSize')
    assert(input:size(1) == self.seqLength, 'input has incorrect sequence length!')
    assert(input:size(2) == self.miniBatch, 'input has incorrect minibatch size!')
    assert(input:size(3) == self.inputSize, 'input has incorrect size!')
-
-   assert(gradOutput:isSameSizeAs(self.output), 'gradOutput has incorrect size!')
    assert(self.train, 'updateGradInput can only be called when training!')
-
-   local x, dy = self:makeContiguous(input, gradOutput)
+   local expectedSize = torch.LongStorage {self.seqLength, self.miniBatch, self.hiddenSize * self.numDirections}
+   assert(gradOutput:isSize(expectedSize), 'gradOutput has incorrect size!')
+   local x, dy = self:makeContiguous(nil, gradOutput) -- No need to calculate x.
    local y = self.output
    local w = self.weight
    local dx = self.gradInput:resizeAs(input)
@@ -451,8 +449,8 @@ function RNN:accGradParameters(input, gradOutput, scale)
    assert(input:size(1) == self.seqLength, 'input has incorrect sequence length!')
    assert(input:size(2) == self.miniBatch, 'input has incorrect minibatch size!')
    assert(input:size(3) == self.inputSize, 'input has incorrect size!')
-
-   assert(gradOutput:isSameSizeAs(self.output), 'gradOutput has incorrect size!')
+   local expectedSize = torch.LongStorage {self.seqLength, self.miniBatch, self.hiddenSize * self.numDirections}
+   assert(gradOutput:isSize(expectedSize), 'gradOutput has incorrect size!')
    assert(self.train, 'accGradParameters can only be called when training!')
 
    local x, dy = self:makeContiguous(input, gradOutput)
