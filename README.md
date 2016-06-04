@@ -33,6 +33,11 @@ cudnn.SpatialLogSoftMax()                  -- LogSoftMax across feature-maps (pe
 
 cudnn.SpatialCrossEntropyCriterion()       -- A spatial version of LogSoftMax + ClassNLLCriterion in one shot
 
+-- Batch Normalization
+cudnn.BatchNormalization(nFeature, eps, momentum, affine) -- same arguments as https://github.com/torch/nn/blob/master/doc/simple.md#nn.BatchNormalization
+cudnn.SpatialBatchNormalization(nFeature, eps, momentum, affine)
+
+
 -- Volumetric inputs (4D or 5D batched mode)
 cudnn.VolumetricConvolution(nInputPlane, nOutputPlane, kT, kW, kH, dT, dW, dH, padT, padW, padH)
 cudnn.VolumetricMaxPooling(kT, kW, kH, dT, dW, dH, padT, padW, padH)
