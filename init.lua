@@ -128,6 +128,7 @@ require('cudnn.RNNReLU')
 require('cudnn.BLSTM')
 require('cudnn.LSTM')
 require('cudnn.GRU')
+require('cudnn.Dropout')
 require('cudnn.functional')
 require('cudnn.convert')
 
