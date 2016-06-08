@@ -1291,7 +1291,7 @@ end
 
 function cudnntest.BatchNormalization()
    local size = {
-      math.random(1, 32),
+      math.random(2, 32),
       math.random(16, 256),
    }
    testBatchNormalization('BatchNormalization', size)
