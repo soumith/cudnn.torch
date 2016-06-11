@@ -18,7 +18,7 @@ function Pointwise:createIODescriptors(input)
    if not self.activDesc then
       self.activDesc = ffi.new('struct cudnnActivationStruct*[1]')
       errcheck('cudnnCreateActivationDescriptor', self.activDesc)
-      errcheck('cudnnSetActivationDescriptor', self.activDesc[0], self.mode, 'CUDNN_PROPAGATE_NAN', 0.0);
+      errcheck('cudnnSetActivationDescriptor', self.activDesc[0], self.mode, 'CUDNN_PROPAGATE_NAN', self.ceiling or 0.0);
 
       local function destroyADesc(a)
          if (a[0]) then
