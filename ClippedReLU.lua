@@ -1,10 +1,10 @@
 local ClippedReLU, parent = torch.class('cudnn.ClippedReLU','cudnn._Pointwise')
 
-function ClippedReLU:__init(inplace, ceiling)
+function ClippedReLU:__init(ceiling, inplace)
     parent.__init(self)
-    self.inplace = inplace
     assert(ceiling, "No ceiling was given to ClippedReLU")
     self.ceiling = ceiling
+    self.inplace = inplace or false
 end
 
 function ClippedReLU:updateOutput(input)

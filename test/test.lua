@@ -965,10 +965,11 @@ end
 function cudnntest.ClippedReLU_single()
     local input = torch.randn(1, 32):cuda()
     local ceiling = 0.1
-    local module = cudnn.ClippedReLU(true, ceiling):cuda()
+    local module = cudnn.ClippedReLU(ceiling):cuda()
     local output = module:forward(input)
     local expectedOutput = input:clone()
     expectedOutput[expectedOutput:ge(ceiling)] = ceiling
+    expectedOutput[expectedOutput:le(0)] = 0
     mytester:assertTensorEq(output, expectedOutput)
 end
 

@@ -22,6 +22,7 @@ cudnn.SpatialAveragePooling(kW, kH, dW, dH, padW, padH)
 
 -- the pointwise functions take an additional optional argument. if inplace=true then they do operations in-place without using any extra memory for themselves
 cudnn.ReLU(inplace[=false])
+cudnn.ClippedReLU(ceiling, inplace[=false])
 cudnn.Tanh(inplace[=false])
 cudnn.Sigmoid(inplace[=false])
 
