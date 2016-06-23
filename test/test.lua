@@ -1296,7 +1296,6 @@ function cudnntest.SpatialLogSoftMax()
 end
 
 local function testBatchNormalization(moduleName, inputSize)
-   if testparams.test_type == 'torch.CudaHalfTensor' then return end
    local input = torch.randn(table.unpack(inputSize)):cuda()
    local gradOutput = torch.randn(table.unpack(inputSize)):cuda()
    local cbn = cast(cudnn[moduleName](inputSize[2], 1e-3))
@@ -1331,7 +1330,7 @@ local function testBatchNormalization(moduleName, inputSize)
    local function testFWD(cbn, gbn)
       cbn:evaluate()
       gbn:evaluate()
-      local rescuda = cbn:forward(input:type(cbn:type()))
+      local rescuda = cbn:forward(cast(input))
       local groundtruth = gbn:forward(input)
 
       local error = rescuda:float() - groundtruth:float()
