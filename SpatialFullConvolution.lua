@@ -12,7 +12,7 @@ autotunerCache[3] = {} -- backwardData
 function SpatialFullConvolution:resetWeightDescriptors()
     assert(torch.typename(self.weight) == 'torch.CudaTensor',
            'Only Cuda supported duh!')
-    assert(torch.typename(self.bias) == 'torch.CudaTensor',
+    assert(torch.typename(self.bias) == 'torch.CudaTensor' or not self.bias,
            'Only Cuda supported duh!')
     -- create filterDescriptor for weight
     self.weightDesc = ffi.new('struct cudnnFilterStruct*[1]')
@@ -29,7 +29,9 @@ function SpatialFullConvolution:resetWeightDescriptors()
     ffi.gc(self.weightDesc, destroyWDesc)
 
     -- create descriptor for bias
-    self.biasDesc = cudnn.toDescriptor(self.bias:view(1, self.nOutputPlane,1,1))
+    if self.bias then
+        self.biasDesc = cudnn.toDescriptor(self.bias:view(1, self.nOutputPlane,1,1))
+    end
 end
 
 function SpatialFullConvolution:fastest(mode)
@@ -60,6 +62,12 @@ function SpatialFullConvolution:resetMode()
     self.bdmode = nil
     self.bwmode = nil
     return self
+end
+
+function SpatialFullConvolution:noBias()
+   self.bias = nil
+   self.gradBias = nil
+   return self
 end
 
 function SpatialFullConvolution:createIODescriptors(input)
@@ -315,9 +323,11 @@ function SpatialFullConvolution:updateOutput(input)
              self.oDesc[0], self.output:data())
 
     -- add bias
-    errcheck('cudnnAddTensor', cudnn.getHandle(),
-             one:data(), self.biasDesc[0], self.bias:data(),
-             one:data(), self.oDescForBias[0], self.output:data())
+    if self.bias then
+        errcheck('cudnnAddTensor', cudnn.getHandle(),
+                 one:data(), self.biasDesc[0], self.bias:data(),
+                 one:data(), self.oDescForBias[0], self.output:data())
+    end
 
     return self.output
 end
@@ -356,11 +366,13 @@ function SpatialFullConvolution:accGradParameters(input, gradOutput, scale)
     self:createIODescriptors(input)
 
     -- gradBias
-    errcheck('cudnnConvolutionBackwardBias', cudnn.getHandle(),
-             self.scaleT:data(),
-             self.oDescForBias[0], gradOutput:data(),
-             one:data(),
-             self.biasDesc[0], self.gradBias:data())
+    if self.bias then
+        errcheck('cudnnConvolutionBackwardBias', cudnn.getHandle(),
+                 self.scaleT:data(),
+                 self.oDescForBias[0], gradOutput:data(),
+                 one:data(),
+                 self.biasDesc[0], self.gradBias:data())
+    end
 
     -- gradWeight
     errcheck('cudnnConvolutionBackwardFilter', cudnn.getHandle(),
