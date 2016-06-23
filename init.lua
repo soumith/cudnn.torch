@@ -31,8 +31,17 @@ end
 ffi.gc(cudnn.handle, destroy)
 
 cudnn.typemap = {
-   ['torch.CudaTensor'] = 'CUDNN_DATA_FLOAT',
-   ['torch.CudaHalfTensor'] = 'CUDNN_DATA_HALF',
+   ['torch.CudaHalfTensor']   = 'CUDNN_DATA_HALF',
+   ['torch.CudaTensor']       = 'CUDNN_DATA_FLOAT',
+   ['torch.CudaDoubleTensor'] = 'CUDNN_DATA_DOUBLE',
+}
+
+-- TODO: determine if device supports true half and use true half on it
+-- so far use float for half and float, double for double
+cudnn.configmap = {
+   ['torch.CudaHalfTensor']   = 'CUDNN_DATA_FLOAT',
+   ['torch.CudaTensor']       = 'CUDNN_DATA_FLOAT',
+   ['torch.CudaDoubleTensor'] = 'CUDNN_DATA_DOUBLE',
 }
 
 function cudnn.getHandle()

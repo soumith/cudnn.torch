@@ -10,10 +10,8 @@ autotunerCache[3] = {} -- backwardData
 
 -- if you change the configuration of the module manually, call this
 function SpatialFullConvolution:resetWeightDescriptors()
-    assert(torch.typename(self.weight) == 'torch.CudaTensor',
-           'Only Cuda supported duh!')
-    assert(torch.typename(self.bias) == 'torch.CudaTensor' or not self.bias,
-           'Only Cuda supported duh!')
+    assert(cudnn.typemap[torch.typename(self.weight)], 'Only Cuda supported duh!')
+    assert(cudnn.typemap[torch.typename(self.bias)] or not self.bias, 'Only Cuda supported duh!')
     -- create filterDescriptor for weight
     self.weightDesc = ffi.new('struct cudnnFilterStruct*[1]')
     errcheck('cudnnCreateFilterDescriptor', self.weightDesc)
@@ -21,7 +19,7 @@ function SpatialFullConvolution:resetWeightDescriptors()
                                   self.nOutputPlane,
                                   self.kH, self.kW})
     errcheck('cudnnSetFilterNdDescriptor', self.weightDesc[0],
-             'CUDNN_DATA_FLOAT', 'CUDNN_TENSOR_NCHW', 4,
+             cudnn.typemap[torch.typename(self.weight)], 'CUDNN_TENSOR_NCHW', 4,
              desc:data());
     local function destroyWDesc(d)
         errcheck('cudnnDestroyFilterDescriptor', d[0]);
@@ -102,7 +100,7 @@ function SpatialFullConvolution:createIODescriptors(input)
         errcheck('cudnnSetConvolutionNdDescriptor', self.convDesc[0],
                  2, pad:data(),
                  stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
-                 'CUDNN_DATA_FLOAT');
+                 cudnn.configmap[torch.type(self.weight)]);
         local function destroyConvDesc(d)
             errcheck('cudnnDestroyConvolutionDescriptor', d[0]);
         end

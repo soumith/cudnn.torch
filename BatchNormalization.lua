@@ -42,8 +42,8 @@ end
 
 function BatchNormalization:createIODescriptors(input)
    assert(input:dim() == self.nDim)
-   assert(torch.typename(self.weight) == 'torch.CudaTensor' and torch.typename(self.bias) == 'torch.CudaTensor',
-          'Only CUDA tensors are supported for cudnn.BatchNormalization!')
+   assert(cudnn.typemap[torch.typename(self.weight)], 'Only Cuda supported duh!')
+   assert(cudnn.typemap[torch.typename(self.bias)] or not self.bias, 'Only Cuda supported duh!')
    if not self.iDesc or not self.oDesc or not input:isSize(self.iSize) then
       local nFeature = self.running_mean:numel()
       self.iSize = input:size()
