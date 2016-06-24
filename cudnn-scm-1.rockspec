@@ -2,13 +2,13 @@ package = "cudnn"
 version = "scm-1"
 
 source = {
-   url = "git://github.com/soumith/cudnn.torch.git",
+   url = "git://github.com/jpuigcerver/cudnn.torch.git",
 }
 
 description = {
    summary = "Torch7 FFI bindings for NVIDIA CuDNN kernels!",
    detailed = [[
-   All CuDNN modules exposed as nn.Module derivatives so 
+   All CuDNN modules exposed as nn.Module derivatives so
    that they can be used with torch's neural network package
    ]],
    homepage = "https://github.com/soumith/cudnn.torch",
