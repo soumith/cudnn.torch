@@ -2,6 +2,8 @@ local RNN, parent = torch.class('cudnn.RNN', 'nn.Module')
 local ffi = require 'ffi'
 local errcheck = cudnn.errcheck
 
+local DESCS = {'rnnDesc', 'dropoutDesc', 'wDesc', 'xDescs', 'yDescs', 'hxDesc', 'hyDesc', 'cxDesc', 'cyDesc'}
+
 function RNN:__init(inputSize, hiddenSize, numLayers, batchFirst)
    parent.__init(self)
 
@@ -512,25 +514,28 @@ function RNN:accGradParameters(input, gradOutput, scale)
 end
 
 function RNN:clearDesc()
-   self.dropoutDesc = nil
-   self.rnnDesc = nil
-   self.dropoutDesc = nil
-   self.wDesc = nil
-   self.xDescs = nil
-   self.yDescs = nil
-   self.hxDesc = nil
-   self.hyDesc = nil
-   self.cxDesc = nil
-   self.cyDesc = nil
+   for _, desc in pairs(DESCS) do
+      self[desc] = nil
+   end
 end
 
 function RNN:write(f)
+   local pushDescs = {}
+   for _, desc in pairs(DESCS) do
+      pushDescs[desc] = self[desc]
+   end
+
    self:clearDesc()
+
    local var = {}
    for k,v in pairs(self) do
       var[k] = v
    end
    f:writeObject(var)
+
+   for desc, v in pairs(pushDescs) do
+      self[desc] = v
+   end
 end
 
 function RNN:clearState()
