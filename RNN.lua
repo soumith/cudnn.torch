@@ -276,7 +276,13 @@ function RNN:updateOutput(input)
    end
 
    local x = self:makeContiguous(input)
-   local y = self:resizeOutput(self.output)
+   local oSize = torch.LongStorage({self.seqLength, self.miniBatch, self.hiddenSize * self.numDirections})
+   if not self.output:isContiguous() then
+       self.output = self.output:transpose(1,2)
+       assert(self.output:isContiguous())
+   end 
+   self.output:resize(oSize)
+   local y = self.output 
    local w = self.weight
    local hy = self:resizeHidden(self.hiddenOutput):zero()
    local cy = self:resizeHidden(self.cellOutput):zero()
