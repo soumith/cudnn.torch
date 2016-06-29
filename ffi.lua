@@ -1,3 +1,4 @@
+require 'cutorch'
 local ffi = require 'ffi'
 
 ffi.cdef[[
@@ -1602,9 +1603,18 @@ Then make sure files named as libcudnn.so.5 or libcudnn.5.dylib are placed in yo
 ]])
 end
 
+-- check cuDNN version
 cudnn.version = tonumber(cudnn.C.cudnnGetVersion())
 if cudnn.version < 5005 then
   error('These bindings are for version 5005 or above, '
         .. 'while the loaded CuDNN is version: ' .. cudnn.version
            .. '  \nAre you using an older version of CuDNN?')
+end
+
+-- cechk GPU driver version
+local props = cutorch.getDeviceProperties(cutorch.getDevice())
+if not(cutorch.driverVersion >= 7050 -- desktop GPUs
+       or (props.major == 5 and props.minor == 3 and cutorch.driverVersion >= 7000) ) -- Tegra X1
+then
+  error('Insufficient GPU driver version.')
 end
