@@ -1613,7 +1613,8 @@ end
 
 -- cechk GPU driver version
 local props = cutorch.getDeviceProperties(cutorch.getDevice())
-if not(cutorch.driverVersion >= 7050 -- desktop GPUs
+if cutorch.driverVersion and -- for backward compatiblity
+     not(cutorch.driverVersion >= 7050 -- desktop GPUs
        or (props.major == 5 and props.minor == 3 and cutorch.driverVersion >= 7000) ) -- Tegra X1
 then
   error('Insufficient GPU driver version.')
