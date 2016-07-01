@@ -2,6 +2,8 @@ local RNN, parent = torch.class('cudnn.RNN', 'nn.Module')
 local ffi = require 'ffi'
 local errcheck = cudnn.errcheck
 
+local DESCS = {'rnnDesc', 'dropoutDesc', 'wDesc', 'xDescs', 'yDescs', 'hxDesc', 'hyDesc', 'cxDesc', 'cyDesc'}
+
 function RNN:__init(inputSize, hiddenSize, numLayers, batchFirst)
    parent.__init(self)
 
@@ -236,7 +238,7 @@ function RNN:updateOutput(input)
         input = input:transpose(1, 2)
     end
    assert(input:dim() == 3, 'input must have 3 dimensions: seqLength, miniBatch, inputSize')
-   -- assert(self.dropout == 0, 'dropout currently not supported')
+   assert(self.dropout == 0 or cudnn.version >= 5103, 'dropout supported only in cudnn v5.1 and above')
    -- Decide which descriptors/tensors need to be updated.
    local resetRNN = not self.dropoutDesc or not self.rnnDesc
    local resetIO = not self.xDescs or not self.yDescs
@@ -274,7 +276,10 @@ function RNN:updateOutput(input)
    end
 
    local x = self:makeContiguous(input)
-   local y = self:resizeOutput(self.output)
+   local oSize = torch.LongStorage({self.seqLength, self.miniBatch, self.hiddenSize * self.numDirections})
+   local oStride = torch.LongStorage({self.miniBatch * self.hiddenSize * self.numDirections, self.hiddenSize * self.numDirections, 1})
+   self.output:resize(oSize, oStride)
+   local y = self.output 
    local w = self.weight
    local hy = self:resizeHidden(self.hiddenOutput):zero()
    local cy = self:resizeHidden(self.cellOutput):zero()
@@ -364,7 +369,7 @@ function RNN:updateGradInput(input, gradOutput)
         gradOutput = gradOutput:transpose(1, 2)
         self.output = self.output:transpose(1, 2)
     end
-   -- assert(self.dropout == 0, 'dropout currently not supported')
+   assert(self.dropout == 0 or cudnn.version >= 5103, 'dropout supported only in cudnn v 5.1 and above')
    assert(input:dim() == 3, 'input should have 3 dimensions: seqLength, miniBatch, inputSize')
    assert(input:size(1) == self.seqLength, 'input has incorrect sequence length!')
    assert(input:size(2) == self.miniBatch, 'input has incorrect minibatch size!')
@@ -437,6 +442,7 @@ function RNN:updateGradInput(input, gradOutput)
             self.reserve:data(), self.reserve:size(1) * 4) -- sizeof(float)
     if (self.batchFirst) then
         self.gradInput = self.gradInput:transpose(1, 2)
+        self.output = self.output:transpose(1, 2)
     end
    return self.gradInput
 end
@@ -445,10 +451,11 @@ function RNN:accGradParameters(input, gradOutput, scale)
     if (self.batchFirst) then
         input = input:transpose(1, 2)
         gradOutput = gradOutput:transpose(1, 2)
+        self.output = self.output:transpose(1, 2)
     end
    scale = scale or 1
    if scale == 0 then return end
-   -- assert(self.dropout == 0, 'dropout currently not supported')
+   assert(self.dropout == 0 or cudnn.version >= 5103, 'dropout supported only in cudnn 5.1 and above')
    assert(input:dim() == 3, 'input should have 3 dimensions: seqLength, miniBatch, inputSize')
    assert(input:size(1) == self.seqLength, 'input has incorrect sequence length!')
    assert(input:size(2) == self.miniBatch, 'input has incorrect minibatch size!')
@@ -502,28 +509,36 @@ function RNN:accGradParameters(input, gradOutput, scale)
                self.dw:data(),
                scaleTensor:data())
    end
+
+    if (self.batchFirst) then
+        gradOutput = gradOutput:transpose(1, 2)
+        self.output = self.output:transpose(1, 2)
+    end
 end
 
 function RNN:clearDesc()
-   self.dropoutDesc = nil
-   self.rnnDesc = nil
-   self.dropoutDesc = nil
-   self.wDesc = nil
-   self.xDescs = nil
-   self.yDescs = nil
-   self.hxDesc = nil
-   self.hyDesc = nil
-   self.cxDesc = nil
-   self.cyDesc = nil
+   for _, desc in pairs(DESCS) do
+      self[desc] = nil
+   end
 end
 
 function RNN:write(f)
+   local pushDescs = {}
+   for _, desc in pairs(DESCS) do
+      pushDescs[desc] = self[desc]
+   end
+
    self:clearDesc()
+
    local var = {}
    for k,v in pairs(self) do
       var[k] = v
    end
    f:writeObject(var)
+
+   for desc, v in pairs(pushDescs) do
+      self[desc] = v
+   end
 end
 
 function RNN:clearState()
