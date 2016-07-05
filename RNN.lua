@@ -4,7 +4,7 @@ local errcheck = cudnn.errcheck
 
 local DESCS = {'rnnDesc', 'dropoutDesc', 'wDesc', 'xDescs', 'yDescs', 'hxDesc', 'hyDesc', 'cxDesc', 'cyDesc'}
 
-function RNN:__init(inputSize, hiddenSize, numLayers, batchFirst)
+function RNN:__init(inputSize, hiddenSize, numLayers, batchFirst, dropout)
    parent.__init(self)
 
    self.datatype = 'CUDNN_DATA_FLOAT'
@@ -17,7 +17,7 @@ function RNN:__init(inputSize, hiddenSize, numLayers, batchFirst)
    self.numDirections = 1 -- set to 2 for bi-directional.
    self.inputMode = 'CUDNN_LINEAR_INPUT'
    self.mode = 'CUDNN_RNN_RELU'
-   self.dropout = 0
+   self.dropout = dropout or 0
    self.seed = 0x01234567
    self.batchFirst = batchFirst or false -- Set to true for batch x time x inputdim.
 
@@ -46,7 +46,7 @@ function RNN:reset(stdv)
    errcheck('cudnnGetRNNParamsSize',
             cudnn.getHandle(),
             self.rnnDesc[0],
-            self.xDescs[0],	    
+            self.xDescs[0],
             weightSize:data(),
 	    self.datatype)
    weightSize[1] = (weightSize[1] + 3) / 4 -- sizeof(float)
@@ -119,7 +119,7 @@ end
 function RNN:resetRNNDescriptor()
    if not self.rnnDesc then
       self.rnnDesc = self:createRNNDescriptors(1)
-   end   
+   end
    errcheck('cudnnSetRNNDescriptor',
             self.rnnDesc[0],
             self.hiddenSize,
@@ -279,7 +279,7 @@ function RNN:updateOutput(input)
    local oSize = torch.LongStorage({self.seqLength, self.miniBatch, self.hiddenSize * self.numDirections})
    local oStride = torch.LongStorage({self.miniBatch * self.hiddenSize * self.numDirections, self.hiddenSize * self.numDirections, 1})
    self.output:resize(oSize, oStride)
-   local y = self.output 
+   local y = self.output
    local w = self.weight
    local hy = self:resizeHidden(self.hiddenOutput):zero()
    local cy = self:resizeHidden(self.cellOutput):zero()
