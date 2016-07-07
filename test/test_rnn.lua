@@ -204,71 +204,18 @@ function getRNNCheckSums(miniBatch, seqLength, hiddenSize, numberOfLayers, numbe
     else
         input = torch.CudaTensor(seqLength, miniBatch, hiddenSize):fill(1) -- Input initialised to 1s.
     end
-    if (biDirectionalScale == 2) then
-        rnn.weight:fill(1 / rnn.weight:size(1))
-    else
-        -- Matrices are initialised to 1 / matrixSize, biases to 1.
-        for layer = 0, numberOfLayers - 1 do
-            for layerId = 0, numberOfLinearLayers - 1 do
-                local linLayerMatDesc = rnn:createFilterDescriptors(1)
-                local matrixPointer = ffi.new("float*[1]")
-                errcheck('cudnnGetRNNLinLayerMatrixParams',
-                    cudnn.getHandle(),
-                    rnn.rnnDesc[0],
-                    layer,
-                    rnn.xDescs[0],
-                    rnn.wDesc[0],
-                    rnn.weight:data(),
-                    layerId,
-                    linLayerMatDesc[0],
-                    ffi.cast("void**", matrixPointer))
+    local weights = rnn:weights()
+    local biases = rnn:biases()
+    -- Matrices are initialised to 1 / matrixSize, biases to 1 unless bi-directional.
+    for layer = 1, numberOfLayers do
+        for layerId = 1, numberOfLinearLayers do
+            if (biDirectionalScale == 2) then
+                rnn.weight:fill(1 / rnn.weight:size(1))
+            else
+                local weightTensor = weights[layer][layerId]
+                weightTensor:fill(1.0 / weightTensor:size(1))
 
-                local dataType = 'CUDNN_DATA_FLOAT'
-                local format = 'CUDNN_TENSOR_NCHW'
-                local nbDims = torch.IntTensor(1)
-
-                local minDim = 3
-                local filterDimA = torch.ones(minDim):int()
-                errcheck('cudnnGetFilterNdDescriptor',
-                    linLayerMatDesc[0],
-                    minDim,
-                    ffi.cast("cudnnDataType_t*", dataType),
-                    ffi.cast("cudnnDataType_t*", format),
-                    nbDims:data(),
-                    filterDimA:data())
-
-                local offset = matrixPointer[0] - rnn.weight:data()
-                local weightTensor = torch.CudaTensor(rnn.weight:storage(), offset + 1, filterDimA:prod())
-                weightTensor:fill(1.0 / filterDimA:prod())
-
-                local linLayerBiasDesc = rnn:createFilterDescriptors(1)
-                local biasPointer = ffi.new("float*[1]")
-                errcheck('cudnnGetRNNLinLayerBiasParams',
-                    cudnn.getHandle(),
-                    rnn.rnnDesc[0],
-                    layer,
-                    rnn.xDescs[0],
-                    rnn.wDesc[0],
-                    rnn.weight:data(),
-                    layerId,
-                    linLayerBiasDesc[0],
-                    ffi.cast("void**", biasPointer))
-
-                local dataType = 'CUDNN_DATA_FLOAT'
-                local format = 'CUDNN_TENSOR_NCHW'
-                local nbDims = torch.IntTensor(1)
-                local filterDimA = torch.ones(minDim):int()
-
-                errcheck('cudnnGetFilterNdDescriptor',
-                    linLayerBiasDesc[0],
-                    minDim,
-                    ffi.cast("cudnnDataType_t*", dataType),
-                    ffi.cast("cudnnDataType_t*", format),
-                    nbDims:data(),
-                    filterDimA:data())
-
-                local offset = biasPointer[0] - rnn.weight:data()
-                local biasTensor = torch.CudaTensor(rnn.weight:storage(), offset + 1, filterDimA:prod())
+                local biasTensor = biases[layer][layerId]
                 biasTensor:fill(1)
             end
         end
