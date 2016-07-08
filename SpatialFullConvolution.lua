@@ -100,7 +100,7 @@ function SpatialFullConvolution:createIODescriptors(input)
         errcheck('cudnnSetConvolutionNdDescriptor', self.convDesc[0],
                  2, pad:data(),
                  stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
-                 cudnn.configmap[torch.type(self.weight)]);
+                 cudnn.configmap(torch.type(self.weight)));
         local function destroyConvDesc(d)
             errcheck('cudnnDestroyConvolutionDescriptor', d[0]);
         end
