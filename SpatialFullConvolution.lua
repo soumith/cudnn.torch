@@ -409,3 +409,8 @@ function SpatialFullConvolution:write(f)
     end
     f:writeObject(var)
 end
+
+function SpatialFullConvolution:clearState()
+   self:clearDesc()
+   return nn.Module.clearState(self)
+end
