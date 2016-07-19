@@ -11,7 +11,7 @@ RNN.linearLayers = {
     CUDNN_RNN_TANH = 2
 }
 
-function RNN:__init(inputSize, hiddenSize, numLayers, batchFirst, dropout)
+function RNN:__init(inputSize, hiddenSize, numLayers, batchFirst, dropout, rememberStates)
    parent.__init(self)
 
    self.datatype = 'CUDNN_DATA_FLOAT'
@@ -27,6 +27,7 @@ function RNN:__init(inputSize, hiddenSize, numLayers, batchFirst, dropout)
    self.dropout = dropout or 0
    self.seed = 0x01234567
    self.batchFirst = batchFirst or false -- Set to true for batch x time x inputdim.
+   self.rememberStates = rememberStates or false
 
    self.gradInput = torch.CudaTensor()
    self.output = torch.CudaTensor()
@@ -240,6 +241,18 @@ function RNN:resizeHidden(tensor)
     return tensor:resize(self.numLayers * self.numDirections, self.miniBatch, self.hiddenSize)
 end
 
+function RNN:resetStates()
+   if self.hiddenInput then
+      self.hiddenInput = nil
+   end
+   if self.cellInput then
+      self.cellInput = nil
+   end
+end
+
+
+
+
 function RNN:updateOutput(input)
     if (self.batchFirst) then
         input = input:transpose(1, 2)
@@ -265,6 +278,7 @@ function RNN:updateOutput(input)
    end
 
    assert(input:size(3) == self.inputSize, 'Incorrect input size!')
+
 
    -- Update descriptors/tensors
    if resetRNN then
@@ -364,9 +378,15 @@ function RNN:updateOutput(input)
                self.cyDesc[0], cy:data(),
                self.workspace:data(), self.workspace:size(1) * 4) -- sizeof(float)
    end
-    if (self.batchFirst) then
-        self.output = self.output:transpose(1, 2)
-    end
+   if self.rememberStates then
+	self.hiddenInput = self.hiddenOutput:clone()
+	if self.cellOutput then
+	   self.cellInput = self.cellOutput:clone()
+        end
+   end    
+   if (self.batchFirst) then
+      self.output = self.output:transpose(1, 2)
+   end
    return self.output
 end
 
