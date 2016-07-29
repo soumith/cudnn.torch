@@ -42,8 +42,8 @@ end
 
 function BatchNormalization:createIODescriptors(input)
    assert(input:dim() == self.nDim)
-   assert(torch.typename(self.weight) == 'torch.CudaTensor' and torch.typename(self.bias) == 'torch.CudaTensor',
-          'Only CUDA tensors are supported for cudnn.BatchNormalization!')
+   assert(cudnn.typemap[torch.typename(self.weight)], 'Only Cuda supported duh!')
+   assert(cudnn.typemap[torch.typename(self.bias)] or not self.bias, 'Only Cuda supported duh!')
    if not self.iDesc or not self.oDesc or not input:isSize(self.iSize) then
       local nFeature = self.running_mean:numel()
       self.iSize = input:size()
@@ -63,9 +63,9 @@ local scaleTens = torch.FloatTensor(1);
 function BatchNormalization:updateOutput(input)
    self:createIODescriptors(input)
 
-   self.save_mean = self.save_mean or input.new()
+   self.save_mean = self.save_mean or self.running_mean.new()
    self.save_mean:resizeAs(self.running_mean)
-   self.save_std = self.save_std or input.new()
+   self.save_std = self.save_std or self.running_mean.new()
    self.save_std:resizeAs(self.running_var)
 
    if self.train then
@@ -135,6 +135,14 @@ function BatchNormalization:write(f)
       var[k] = v
    end
    f:writeObject(var)
+end
+
+function BatchNormalization:type(type, tensorCache)
+   local _type = type == 'torch.CudaHalfTensor' and 'torch.CudaTensor' or type
+   parent.type(self, _type, tensorCache) 
+   self.output = self.output:type(type)
+   self.gradInput = self.gradInput:type(type)
+   return self
 end
 
 function BatchNormalization:clearState()

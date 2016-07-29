@@ -30,6 +30,36 @@ local function destroy(handle)
 end
 ffi.gc(cudnn.handle, destroy)
 
+cudnn.typemap = {
+   ['torch.CudaHalfTensor']   = 'CUDNN_DATA_HALF',
+   ['torch.CudaTensor']       = 'CUDNN_DATA_FLOAT',
+   ['torch.CudaDoubleTensor'] = 'CUDNN_DATA_DOUBLE',
+}
+
+-- TODO: determine if device supports true half and use true half on it
+-- so far use float for half and float, double for double
+local function determineHalfCapability(dev)
+   local prop = cutorch.getDeviceProperties(dev)
+   if prop.major >= 6 or prop.name:find'X1' then
+      return 'CUDNN_DATA_HALF'
+   else
+      return 'CUDNN_DATA_FLOAT'
+   end
+end
+
+local configmaps = {}
+for i=1,cutorch.getDeviceCount() do
+   configmaps[i] = {
+      ['torch.CudaHalfTensor']   = determineHalfCapability(i),
+      ['torch.CudaTensor']       = 'CUDNN_DATA_FLOAT',
+      ['torch.CudaDoubleTensor'] = 'CUDNN_DATA_DOUBLE',
+   }
+end
+
+cudnn.configmap = function(tensortype)
+   return configmaps[cutorch.getDevice()][tensortype]
+end
+
 function cudnn.getHandle()
     local device = cutorch.getDevice()
     local stream = cutorch.getStream() -- starts from 0
@@ -61,7 +91,8 @@ end
 cudnn.errcheck = errcheck
 
 function cudnn.toDescriptor(t)
-   assert(torch.typename(t) == 'torch.CudaTensor')
+   local typename = torch.typename(t)
+   assert(cudnn.typemap[typename])
    local descriptor = ffi.new('struct cudnnTensorStruct*[1]')
    -- create descriptor
    errcheck('cudnnCreateTensorDescriptor', descriptor)
@@ -79,7 +110,8 @@ function cudnn.toDescriptor(t)
    -- set descriptor
    local size = torch.LongTensor(t:size()):int()
    local stride = torch.LongTensor(t:stride()):int()
-   errcheck('cudnnSetTensorNdDescriptor', descriptor[0], 'CUDNN_DATA_FLOAT',
+
+   errcheck('cudnnSetTensorNdDescriptor', descriptor[0], cudnn.typemap[typename],
             t:dim(), size:data(), stride:data())
    return descriptor
 end

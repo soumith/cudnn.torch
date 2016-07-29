@@ -54,8 +54,8 @@ end
 function TemporalConvolution:updateOutput(input)
    local _input = inputview(input)
    assert(_input:size(4) == self.inputFrameSize,'invalid input frame size')
-   self.buffer = self.buffer or torch.CudaTensor()
-   self._output = self._output or torch.CudaTensor()
+   self.buffer = self.buffer or input.new()
+   self._output = self._output or input.new()
    if self.output:storage() then self._output:set(self.output:storage()) else self._output = self.output end
    if self.buffer:storage() then self.output:set(self.buffer:storage(), 1, self.output:size()) else self.output = self.buffer end
    cudnn.SpatialConvolution.updateOutput(self,_input)
