@@ -11,7 +11,7 @@ local errcheck = cudnn.errcheck
 local cudnntest = torch.TestSuite()
 local mytester
 
-local tolerance = 300
+local tolerance = 1000
 
 function cudnntest.testRNNRELU()
     local miniBatch = 64
