@@ -105,7 +105,7 @@ cudnn.functional.Convolution2D_updateOutput = function(handle, input, weight, ou
    local algSearchMode = 'CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT'
    local algWorkspaceLimit = 0
    if workspace then
-       algWorkspaceLimit = workspace:nElement() * 4 -- 4 = sizeof float
+       algWorkspaceLimit = workspace:nElement() * workspace:elementSize()
    end
    errcheck('cudnnGetConvolutionForwardAlgorithm',
             handle,

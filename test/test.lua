@@ -33,6 +33,14 @@ local testparams_double = {
    precision_io = 1e-5,
 }
 
+local testparams_double = {
+   test_type = 'torch.CudaDoubleTensor',
+   precision_forward = 1e-4,
+   precision_backward = 2e-2,
+   precision_jac = 1e-3,
+   precision_io = 1e-5,
+}
+
 local testparams = testparams_half
 
 local function cast(input)
@@ -1043,7 +1051,7 @@ function cudnntest.SpatialCrossMapLRN_batch()
    local size = math.random(1,3)*2+1
    local nbfeatures = math.random(3,8)
    local alpha = math.random(1,100)/100
-   local beta  = math.random(0,100)/100
+   local beta  = math.random(1,100)/100
    local k = math.random(1,3)
 
    local tm = {}
@@ -1507,10 +1515,10 @@ math.randomseed(os.time())
 mytester = torch.Tester()
 mytester:add(cudnntest)
 
-if torch.random(1,2) == 1 then
-   cudnn.benchmark = true -- run manual auto-tuner
---   cudnn.verbose = true
-end
+-- if torch.random(1,2) == 1 then
+--   cudnn.benchmark = true -- run manual auto-tuner
+   cudnn.verbose = true
+--end
 
 
 for i=1,cutorch.getDeviceCount() do
@@ -1520,18 +1528,21 @@ for i=1,cutorch.getDeviceCount() do
 
    cutorch.setDevice(i)
 
-   print'Testing torch.CudaHalfTensor'
-   testparams = testparams_half
-   mytester:run()
+
+--   double tensor may be broken
+
+--   print'Testing torch.CudaDoubleTensor'
+--   torch.setdefaulttensortype('torch.DoubleTensor')
+--   testparams = testparams_double
+--   mytester:run()
 
    print'Testing torch.CudaTensor'
    testparams = testparams_float
    mytester:run()
 
---   double tensor may be broken at some places, gets NaNs.
---   print'Testing torch.CudaDoubleTensor'
---   testparams = testparams_double
---   mytester:run()
+   print'Testing torch.CudaHalfTensor'
+   testparams = testparams_half
+   mytester:run()
 
 end
 

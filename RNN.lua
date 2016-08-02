@@ -383,7 +383,7 @@ function RNN:updateOutput(input)
 	if self.cellOutput then
 	   self.cellInput = self.cellOutput:clone()
         end
-   end    
+   end
    if (self.batchFirst) then
       self.output = self.output:transpose(1, 2)
    end
