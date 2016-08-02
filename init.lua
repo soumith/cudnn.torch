@@ -36,6 +36,16 @@ cudnn.typemap = {
    ['torch.CudaDoubleTensor'] = 'CUDNN_DATA_DOUBLE',
 }
 
+local sizeofmap = {
+   ['torch.CudaHalfTensor']   = ffi.sizeof('half'),
+   ['torch.CudaTensor']       = ffi.sizeof('float'),
+   ['torch.CudaDoubleTensor'] = ffi.sizeof('double'),
+}
+
+function cudnn.sizeof(t)
+   return sizeofmap[torch.type(t)]
+end
+
 -- TODO: determine if device supports true half and use true half on it
 -- so far use float for half and float, double for double
 local function determineHalfCapability(dev)
