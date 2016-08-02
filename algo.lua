@@ -15,7 +15,7 @@ local function setupAlgo(self, algo_t, perf_t, findAPI, getAPI, wsAPI, algSearch
         self.extraBufferSizeInBytes = self.extraBuffer:nElement() * self.extraBuffer.elementSize()
 
         local algWorkspaceLimit = self.workspace_limit
-           or (self.nInputPlane * self.kH * self.kW * self.extraBuffer.elementSize())
+           or (self.nInputPlane * self.kH * self.kW * self.weight.elementSize())
 
 
         if cudnn.benchmark then -- the manual auto-tuner is run
