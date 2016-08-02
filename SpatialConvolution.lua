@@ -1,7 +1,7 @@
 local SpatialConvolution, parent =
     torch.class('cudnn.SpatialConvolution', 'nn.SpatialConvolution')
 local ffi = require 'ffi'
-local algo = require 'algo'
+local algo = require 'cudnn.algo'
 local errcheck = cudnn.errcheck
 
 function SpatialConvolution:__init(nInputPlane, nOutputPlane,
