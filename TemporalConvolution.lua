@@ -39,6 +39,11 @@ function TemporalConvolution:fastest(mode)
     return self
 end
 
+function TemporalConvolution:setMode(fmode, bdmode, bwmode)
+    self = cudnn.SpatialConvolution.setMode(self,fmode, bdmode, bwmode)
+    return self
+end
+
 function TemporalConvolution:resetWeightDescriptors()
     cudnn.SpatialConvolution.resetWeightDescriptors(self)
 end
