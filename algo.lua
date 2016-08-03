@@ -8,17 +8,10 @@ autotunerCache[2] = {} -- backwardFilter
 autotunerCache[3] = {} -- backwardData
 
 local function setupAlgo(self, algo_t, perf_t, findAPI, getAPI, wsAPI, algSearchMode, params)
-        -- create forwardAlgorithm descriptors
+
         local algType = ffi.new(algo_t, 1)
 
-        self.extraBuffer = self.extraBuffer or cudnn.getSharedWorkspace()
-        self.extraBufferSizeInBytes = self.extraBuffer:nElement() * self.extraBuffer.elementSize()
-
-        local algWorkspaceLimit = self.workspace_limit
-           or (self.nInputPlane * self.kH * self.kW * self.weight.elementSize())
-
-
-        if cudnn.benchmark then -- the manual auto-tuner is run
+        if cudnn.benchmark or cudnn.fastest then -- the manual auto-tuner is run
             if autotunerCache[1][self.autotunerHash] then
                 algType[0] = autotunerCache[1][self.autotunerHash]
                 if cudnn.verbose then
@@ -43,6 +36,10 @@ local function setupAlgo(self, algo_t, perf_t, findAPI, getAPI, wsAPI, algSearch
                 end
             end
         else
+
+           local algWorkspaceLimit = self.workspace_limit
+              or (self.nInputPlane * self.kH * self.kW * self.weight.elementSize())
+
             errcheck(getAPI,
                      cudnn.getHandle(),
                      params[1], params[2], params[3], params[4],
@@ -53,14 +50,17 @@ local function setupAlgo(self, algo_t, perf_t, findAPI, getAPI, wsAPI, algSearch
                  cudnn.getHandle(),
                  params[1], params[2], params[3], params[4],
                  algType[0], bufSize:data())
-        if self.extraBufferSizeInBytes < bufSize[1] then
+
+        self.extraBuffer = self.extraBuffer or cudnn.getSharedWorkspace()
+        local extraBufferSizeInBytes = self.extraBuffer:nElement() * self.extraBuffer.elementSize()
+
+        if extraBufferSizeInBytes < bufSize[1] then
            self.extraBuffer:resize(math.ceil(bufSize[1]/self.extraBuffer.elementSize()))
-           self.extraBufferSizeInBytes = bufSize[1]
         end
-        return algType
+        return algType[0]
 end
 
-function algo.setupForwardAlgorithm(self, input_slice, output_slice)
+function algo.prepareHash(self, input_slice, output_slice)
    local function shape(x)
       local sz = x:size()
       local str = ''
@@ -77,46 +77,49 @@ function algo.setupForwardAlgorithm(self, input_slice, output_slice)
       .. shape(input_slice) .. ';'
       .. shape(output_slice)
 
-   local algSearchMode = 'CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT'
-   if self.fastest_mode  or cudnn.fastest == true then
-      algSearchMode = 'CUDNN_CONVOLUTION_FWD_PREFER_FASTEST'
-   end
-
-   local params = { self.iDesc[0], self.weightDesc[0], self.convDesc[0], self.oDesc[0] }
-   local algType = setupAlgo(self,"cudnnConvolutionFwdAlgo_t[?]", "cudnnConvolutionFwdAlgoPerf_t[?]",
-                             'cudnnFindConvolutionForwardAlgorithm', 'cudnnGetConvolutionForwardAlgorithm',
-                             'cudnnGetConvolutionForwardWorkspaceSize', algSearchMode, params)
-   algType[0] = self.fmode or algType[0]
-   self.fwdAlgType = algType
+   self.fwdAlgType = nil
    self.bwdDataAlgType = nil
    self.bwdFilterAlgType = nil
 end
 
-function algo.setupBackwardFilterAlgorithm(self)
+function algo.setupForwardAlgorithm(self, params)
+   local algSearchMode
+   if self.fastest_mode  or cudnn.benchmark == true or cudnn.fastest == true then
+      algSearchMode = 'CUDNN_CONVOLUTION_FWD_PREFER_FASTEST'
+   else
+      algSearchMode = 'CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT'
+   end
+
+   params = params or { self.iDesc[0], self.weightDesc[0], self.convDesc[0], self.oDesc[0] }
+   self.fwdAlgType = self.fmode or
+      setupAlgo(self,"cudnnConvolutionFwdAlgo_t[?]", "cudnnConvolutionFwdAlgoPerf_t[?]",
+                'cudnnFindConvolutionForwardAlgorithm', 'cudnnGetConvolutionForwardAlgorithm',
+                'cudnnGetConvolutionForwardWorkspaceSize', algSearchMode, params)
+end
+
+function algo.setupBackwardFilterAlgorithm(self, params)
    local algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_NO_WORKSPACE'
    if self.fastest_mode  or cudnn.fastest == true then
       algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST'
    end
-   local params = { self.iDesc[0], self.oDesc[0], self.convDesc[0], self.weightDesc[0] }
-   local algType = setupAlgo(self,"cudnnConvolutionBwdFilterAlgo_t[?]", "cudnnConvolutionBwdFilterAlgoPerf_t[?]",
-                                     'cudnnFindConvolutionBackwardFilterAlgorithm', 'cudnnGetConvolutionBackwardFilterAlgorithm',
-                                     'cudnnGetConvolutionBackwardFilterWorkspaceSize', algSearchMode,
-                                     params)
-   algType[0] = self.bwmode or algType[0]
-   self.bwdFilterAlgType = algType
+   params = params or { self.iDesc[0], self.oDesc[0], self.convDesc[0], self.weightDesc[0] }
+   self.bwdFilterAlgType = self.bwmode or
+      setupAlgo(self,"cudnnConvolutionBwdFilterAlgo_t[?]", "cudnnConvolutionBwdFilterAlgoPerf_t[?]",
+                'cudnnFindConvolutionBackwardFilterAlgorithm', 'cudnnGetConvolutionBackwardFilterAlgorithm',
+                'cudnnGetConvolutionBackwardFilterWorkspaceSize', algSearchMode,
+                params)
 end
 
-function algo.setupBackwardDataAlgorithm(self)
+function algo.setupBackwardDataAlgorithm(self, params)
    local algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_NO_WORKSPACE'
    if self.fastest_mode  or cudnn.fastest == true then
       algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST'
    end
-   local params =  { self.weightDesc[0], self.oDesc[0], self.convDesc[0], self.iDesc[0] }
-   local algType = setupAlgo(self,"cudnnConvolutionBwdDataAlgo_t[?]", "cudnnConvolutionBwdDataAlgoPerf_t[?]",
-                             'cudnnFindConvolutionBackwardDataAlgorithm', 'cudnnGetConvolutionBackwardDataAlgorithm',
-                             'cudnnGetConvolutionBackwardDataWorkspaceSize', algSearchMode, params)
-   algType[0] = self.bdmode or algType[0]
-   self.bwdDataAlgType = algType
+   params =  params or { self.weightDesc[0], self.oDesc[0], self.convDesc[0], self.iDesc[0] }
+   self.bwdDataAlgType = self.bdmode or
+      setupAlgo(self,"cudnnConvolutionBwdDataAlgo_t[?]", "cudnnConvolutionBwdDataAlgoPerf_t[?]",
+                'cudnnFindConvolutionBackwardDataAlgorithm', 'cudnnGetConvolutionBackwardDataAlgorithm',
+                'cudnnGetConvolutionBackwardDataWorkspaceSize', algSearchMode, params)
 end
 
 return algo

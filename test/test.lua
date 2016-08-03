@@ -1516,7 +1516,7 @@ mytester = torch.Tester()
 mytester:add(cudnntest)
 
 -- if torch.random(1,2) == 1 then
---   cudnn.benchmark = true -- run manual auto-tuner
+   cudnn.fastest = true -- run manual auto-tuner
    cudnn.verbose = true
 --end
 
@@ -1529,21 +1529,22 @@ for i=1,cutorch.getDeviceCount() do
    cutorch.setDevice(i)
 
 
---   double tensor may be broken
 
---   print'Testing torch.CudaDoubleTensor'
---   torch.setdefaulttensortype('torch.DoubleTensor')
---   testparams = testparams_double
---   mytester:run()
 
    print'Testing torch.CudaTensor'
    testparams = testparams_float
    mytester:run()
 
+--   double tensor may be broken
+--   print'Testing torch.CudaDoubleTensor'
+--   torch.setdefaulttensortype('torch.DoubleTensor')
+--   testparams = testparams_double
+--   mytester:run()
+
+--   half tensor is broken on Pascal
    print'Testing torch.CudaHalfTensor'
    testparams = testparams_half
    mytester:run()
-
 end
 
 os.execute('rm -f modelTemp.t7')
