@@ -61,6 +61,7 @@ function Pooling:createIODescriptors(input)
          oW = math.floor((input:size(4)+self.padW*2 - self.kW)/self.dW + 1)
          oH = math.floor((input:size(3)+self.padH*2 - self.kH)/self.dH + 1)
       end
+      assert(oW > 0 and oH > 0, 'input image smaller than kernel')
       self.output:resize(input:size(1), input:size(2), oH, oW)
 
       -- create input/output descriptor

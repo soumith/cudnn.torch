@@ -15,7 +15,7 @@ local function setupAlgo(self, algo_t, perf_t, findAPI, getAPI, wsAPI, algSearch
             if autotunerCache[1][self.autotunerHash] then
                 algType[0] = autotunerCache[1][self.autotunerHash]
                 if cudnn.verbose then
-                   print('\nAutotuning ', algo_t, ' using cached algo = ' , algType[0] , ' for: ', self.autotunerHash)
+                   print('\n', findAPI, ' using cached algo = ' , algType[0] , ' for: ', self.autotunerHash)
                 end
             else
                 local perfResults = ffi.new(perf_t, 1)
@@ -28,8 +28,8 @@ local function setupAlgo(self, algo_t, perf_t, findAPI, getAPI, wsAPI, algSearch
                 autotunerCache[1][self.autotunerHash] = perfResults[0].algo
                 if cudnn.verbose then
                     print(string.format(
-                              "\nAutotuning " .. algo_t .. " Time: %3.5f Memory: %8d Algorithm: %d"
-                                  .. " hash: %45s\n",
+                              "\n" .. findAPI .. " Time: %3.5f Memory: %8d Algorithm: %d"
+                                  .. " hash: %45s",
                               perfResults[0].time, tonumber(perfResults[0].memory),
                               tonumber(perfResults[0].algo), self.autotunerHash ))
 
@@ -44,6 +44,12 @@ local function setupAlgo(self, algo_t, perf_t, findAPI, getAPI, wsAPI, algSearch
                      cudnn.getHandle(),
                      params[1], params[2], params[3], params[4],
                      algSearchMode, algWorkspaceLimit, algType)
+                if cudnn.verbose then
+                   print(string.format(
+                     "\n" .. getAPI .. " Limit: %d Algorithm: %d",
+                     tonumber(algWorkspaceLimit),
+                     tonumber(algType[0])))
+                end
         end
         local bufSize = torch.LongTensor(1)
         errcheck(wsAPI,
@@ -53,6 +59,12 @@ local function setupAlgo(self, algo_t, perf_t, findAPI, getAPI, wsAPI, algSearch
 
         self.extraBuffer = self.extraBuffer or cudnn.getSharedWorkspace()
         local extraBufferSizeInBytes = self.extraBuffer:nElement() * self.extraBuffer.elementSize()
+
+       if cudnn.verbose then
+           print(string.format(
+                    "\n" .. wsAPI .. " returned bufSize: %d, current extraBufferSizeInBytes: %d, %d elements",
+                    tonumber(bufSize[1]), tonumber(extraBufferSizeInBytes), tonumber(self.extraBuffer:nElement())))
+        end
 
         if extraBufferSizeInBytes < bufSize[1] then
            self.extraBuffer:resize(math.ceil(bufSize[1]/self.extraBuffer.elementSize()))
