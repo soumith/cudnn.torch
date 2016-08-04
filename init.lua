@@ -140,7 +140,7 @@ function cudnn.getSharedWorkspace()
     local device = cutorch.getDevice()
     local stream = cutorch.getStream() -- starts from 0
     if not sharedBuffer[device][stream] then
-        sharedBuffer[device][stream] = torch.CudaDoubleTensor(1024)
+        sharedBuffer[device][stream] = torch.CudaDoubleTensor(256)
     end
     return sharedBuffer[device][stream]
 end

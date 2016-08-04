@@ -3,17 +3,18 @@ local errcheck = cudnn.errcheck
 
 local algo = {}
 local autotunerCache = {}
-autotunerCache[1] = {} -- forward
-autotunerCache[2] = {} -- backwardFilter
-autotunerCache[3] = {} -- backwardData
+autotunerCache['cudnnFindConvolutionForwardAlgorithm'] = {}
+autotunerCache['cudnnFindConvolutionBackwardFilterAlgorithm'] = {}
+autotunerCache['cudnnFindConvolutionBackwardDataAlgorithm'] = {}
 
 local function setupAlgo(self, algo_t, perf_t, findAPI, getAPI, wsAPI, algSearchMode, params)
 
         local algType = ffi.new(algo_t, 1)
 
         if cudnn.benchmark or cudnn.fastest then -- the manual auto-tuner is run
-            if autotunerCache[1][self.autotunerHash] then
-                algType[0] = autotunerCache[1][self.autotunerHash]
+           local cachedAlgo = autotunerCache[findAPI][self.autotunerHash];
+            if cachedAlgo then
+               algType[0] = cachedAlgo
                 if cudnn.verbose then
                    print('\n', findAPI, ' using cached algo = ' , algType[0] , ' for: ', self.autotunerHash)
                 end
@@ -25,7 +26,7 @@ local function setupAlgo(self, algo_t, perf_t, findAPI, getAPI, wsAPI, algSearch
                          params[1], params[2], params[3], params[4],
                          1, intt:data(), perfResults)
                 algType[0] = perfResults[0].algo
-                autotunerCache[1][self.autotunerHash] = perfResults[0].algo
+                autotunerCache[findAPI][self.autotunerHash] = perfResults[0].algo
                 if cudnn.verbose then
                     print(string.format(
                               "\n" .. findAPI .. " Time: %3.5f Memory: %8d Algorithm: %d"
@@ -74,17 +75,8 @@ end
 
 function algo.prepareHash(self, input_slice, output_slice)
    local function shape(x)
-      local sz = x:size()
-      local str = ''
-      for i=1,sz:size() do
-         str = str .. sz[i] .. 'x'
-      end
-      if #str > 0 then
-         str = str:sub(1, #str-1)
-      end
-      return str
+      return table.concat(x:size():totable(),'x')
    end
-
    self.autotunerHash = shape(self.weight) .. ';'
       .. shape(input_slice) .. ';'
       .. shape(output_slice)
