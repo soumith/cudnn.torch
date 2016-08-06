@@ -56,10 +56,6 @@ function BatchNormalization:createIODescriptors(input)
    end
 end
 
-local one = torch.FloatTensor({1});
-local zero = torch.FloatTensor({0});
-local scaleTens = torch.FloatTensor(1);
-
 function BatchNormalization:updateOutput(input)
    self:createIODescriptors(input)
 
@@ -70,13 +66,13 @@ function BatchNormalization:updateOutput(input)
 
    if self.train then
       errcheck('cudnnBatchNormalizationForwardTraining',
-            cudnn.getHandle(), self.mode, one:data(), zero:data(),
+            cudnn.getHandle(), self.mode, cudnn.scalar(input, 1), cudnn.scalar(input, 0),
             self.iDesc[0], input:data(), self.oDesc[0], self.output:data(),
             self.sDesc[0], self.weight:data(), self.bias:data(),
             self.momentum, self.running_mean:data(), self.running_var:data(), self.eps, self.save_mean:data(), self.save_std:data());
    else
       errcheck('cudnnBatchNormalizationForwardInference',
-            cudnn.getHandle(), self.mode, one:data(), zero:data(),
+            cudnn.getHandle(), self.mode, cudnn.scalar(input, 1), cudnn.scalar(input, 0),
             self.iDesc[0], input:data(), self.oDesc[0], self.output:data(),
             self.sDesc[0], self.weight:data(), self.bias:data(),
             self.running_mean:data(), self.running_var:data(), self.eps);
@@ -85,17 +81,26 @@ function BatchNormalization:updateOutput(input)
 end
 
 local function backward(self,input,gradOutput, scale)
+    self.scaleT = self.scaleT or self.weight.new(1)
+    -- this line forces this member to always be on CPU (needed for cudnn)
+    self.scaleT = torch.type(self.weight) == 'torch.CudaDoubleTensor'
+       and self.scaleT:double() or self.scaleT:float()
+    scale = scale or 1.0
+    self.scaleT[1] = scale
+
    assert(gradOutput:isContiguous())
    self:createIODescriptors(input)
    self.gradInput:resizeAs(input)
-   scale = scale or 1
-   scaleTens:fill(scale)
    errcheck('cudnnBatchNormalizationBackward',
-      cudnn.getHandle(), self.mode, one:data(), zero:data(), scaleTens:data(), one:data(),
-      self.iDesc[0], input:data(), self.iDesc[0], gradOutput:data(), self.iDesc[0], self.gradInput:data(),
-                     -- input is bottom, gradOutput is topDiff, self.gradInput is resultBottomDiff
-      self.sDesc[0], self.weight:data(), self.gradWeight:data(), self.gradBias:data(),
-      self.eps, self.save_mean:data(), self.save_std:data());
+            cudnn.getHandle(), self.mode, cudnn.scalar(input, 1),
+            cudnn.scalar(input, 0), self.scaleT:data(), cudnn.scalar(input, 1),
+            self.iDesc[0], input:data(), self.iDesc[0],
+            gradOutput:data(), self.iDesc[0], self.gradInput:data(),
+            -- input is bottom, gradOutput is topDiff,
+            -- self.gradInput is resultBottomDiff
+            self.sDesc[0], self.weight:data(), self.gradWeight:data(),
+            self.gradBias:data(), self.eps, self.save_mean:data(),
+            self.save_std:data());
    return self.gradInput
 end
 
@@ -139,7 +144,7 @@ end
 
 function BatchNormalization:type(type, tensorCache)
    local _type = type == 'torch.CudaHalfTensor' and 'torch.CudaTensor' or type
-   parent.type(self, _type, tensorCache) 
+   parent.type(self, _type, tensorCache)
    self.output = self.output:type(type)
    self.gradInput = self.gradInput:type(type)
    return self

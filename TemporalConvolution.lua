@@ -102,9 +102,9 @@ function TemporalConvolution:updateGradInput(input, gradOutput)
 end
 
 function TemporalConvolution:accGradParameters(input,gradOutput,scale)
---2d (4d) view of input
-    local _input = inputview(input)
--- transpose gradOutput (it will likely be transposed twice, hopefully, no big deal
+   --2d (4d) view of input
+   local _input = inputview(input)
+   -- transpose gradOutput (it will likely be transposed twice, hopefully, no big deal
     local _gradOutput = transposeGradOutput(gradOutput,self.buffer)
     cudnn.SpatialConvolution.accGradParameters(self,_input,_gradOutput,scale)
 end

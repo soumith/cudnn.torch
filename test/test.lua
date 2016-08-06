@@ -43,6 +43,7 @@ end
 function torch.CudaHalfTensor:__sub(b)
    return self:cuda() - b:cuda()
 end
+
 function torch.CudaHalfTensor:abs()
    return self:cuda():abs():cudaHalf()
 end
@@ -53,6 +54,10 @@ end
 
 function torch.CudaHalfTensor:mean()
    return self:cuda():mean()
+end
+
+function torch.CudaDoubleTensor:__sub(b)
+   return self:cuda() - b:cuda()
 end
 
 function torch.CudaDoubleTensor:mean()
@@ -98,20 +103,23 @@ local function testLayer(nnlayer, cudnnlayer, input, gradOutput, scale,
          precision = testparams.precision_backward
       end
       mytester:assertlt(error, precision, 'error on ' .. name
-                           .. ' batchMode = ' .. tostring(batchMode)
-                           .. ' ' .. description)
+                           .. ', batchMode = ' .. tostring(batchMode)
+                           .. ', type = ' .. torch.type(res[name])
+                           .. ', ' .. description)
    end
 
    -- IO
    local ferr,berr = jac.testIO(cudnnlayer, cast(input))
    mytester:assertlt(ferr, testparams.precision_io,
                      torch.typename(cudnnlayer) .. ' - i/o forward err '
-                        .. ' batchMode = ' .. tostring(batchMode)
-                        .. ' ' .. description)
+                        .. ', batchMode = ' .. tostring(batchMode)
+                        .. ', type = ' .. torch.type(res[name])
+                        .. ', ' .. description)
    mytester:assertlt(berr, testparams.precision_io,
                      torch.typename(cudnnlayer) .. ' - i/o backward err '
-                        .. ' batchMode = ' .. tostring(batchMode)
-                        .. ' ' .. description)
+                        .. ', batchMode = ' .. tostring(batchMode)
+                        .. ', type = ' .. torch.type(res[name])
+                        .. ', ' .. description)
 end
 
 function cudnntest.SpatialConvolution()
@@ -779,21 +787,21 @@ for i = 1, 1 do -- cutorch.getDeviceCount() do
       testparams = testparams_float
       mytester:run()
 
-      print(
-[[Half and Double Tensor tests are disabled due to missing functionality.
-They will be enabled once fully fixed and functional.
-See https://github.com/soumith/cudnn.torch/issues/226 and https://github.com/soumith/cudnn.torch/issues/225 for progress
-]])
+      --   double tensor may be broken at some places, gets NaNs.
+      print'Testing torch.CudaDoubleTensor'
+      testparams = testparams_double
+      mytester:run()
 
+      print(
+         [[Half Tensor tests are disabled due to missing functionality.
+They will be enabled once fully fixed and functional.
+See https://github.com/soumith/cudnn.torch/issues/225 for progress
+]])
       -- Developers, do not commit uncommented regions until bindings fixed
       -- print'Testing torch.CudaHalfTensor'
       -- testparams = testparams_half
       -- mytester:run()
 
-      --   double tensor may be broken at some places, gets NaNs.
-      --   print'Testing torch.CudaDoubleTensor'
-      --   testparams = testparams_double
-      --   mytester:run()
    end
 end
 

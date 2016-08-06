@@ -48,8 +48,8 @@ function LRN:createIODescriptors(input)
    end
 end
 
-local one = torch.FloatTensor({1});
-local zero = torch.FloatTensor({0});
+
+
 
 function LRN:updateOutput(input)
    if self.K then self.k, self.K = self.K, nil end
@@ -58,9 +58,9 @@ function LRN:updateOutput(input)
    errcheck('cudnnLRNCrossChannelForward', cudnn.getHandle(),
             self.LRNDesc[0],
             'CUDNN_LRN_CROSS_CHANNEL_DIM1',
-            one:data(),
+            cudnn.scalar(input, 1),
             self.iDesc[0], input:data(),
-            zero:data(),
+            cudnn.scalar(input, 0),
             self.iDesc[0], self.output:data());
    return self.output
 end
@@ -80,11 +80,11 @@ function LRN:updateGradInput(input, gradOutput)
    errcheck('cudnnLRNCrossChannelBackward',
             cudnn.getHandle(), self.LRNDesc[0],
             'CUDNN_LRN_CROSS_CHANNEL_DIM1',
-            one:data(),
+            cudnn.scalar(input, 1),
             self.iDesc[0], self.output:data(),
             self.iDesc[0], gradOutput:data(),
             self.iDesc[0], input:data(),
-            zero:data(),
+            cudnn.scalar(input, 0),
             self.iDesc[0], self.gradInput:data());
    return self.gradInput
 end

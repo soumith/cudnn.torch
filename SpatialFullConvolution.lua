@@ -302,8 +302,8 @@ function SpatialFullConvolution:createIODescriptors(input)
     end
 end
 
-local one = torch.FloatTensor({1});
-local zero = torch.FloatTensor({0});
+
+
 
 function SpatialFullConvolution:updateOutput(input)
     if not self.weightDesc then self:resetWeightDescriptors() end
@@ -312,19 +312,19 @@ function SpatialFullConvolution:updateOutput(input)
     -- Because SpatialFullConvolution is performing the adjoint of the forward
     -- convolution operator, we need to swap the forward and backward passes.
     errcheck('cudnnConvolutionBackwardData', cudnn.getHandle(),
-             one:data(),
+             cudnn.scalar(input, 1),
              self.weightDesc[0], self.weight:data(),
              self.iDesc[0], input:data(),
              self.convDesc[0], self.bwdDataAlgType[0],
              self.extraBuffer:data(), self.extraBufferSizeInBytes,
-             zero:data(),
+             cudnn.scalar(input, 0),
              self.oDesc[0], self.output:data())
 
     -- add bias
     if self.bias then
         errcheck('cudnnAddTensor', cudnn.getHandle(),
-                 one:data(), self.biasDesc[0], self.bias:data(),
-                 one:data(), self.oDescForBias[0], self.output:data())
+                 cudnn.scalar(input, 1), self.biasDesc[0], self.bias:data(),
+                 cudnn.scalar(input, 1), self.oDescForBias[0], self.output:data())
     end
 
     return self.output
@@ -340,25 +340,27 @@ function SpatialFullConvolution:updateGradInput(input, gradOutput)
     self:createIODescriptors(input)
 
     errcheck('cudnnConvolutionForward', cudnn.getHandle(),
-             one:data(),
+             cudnn.scalar(input, 1),
              self.oDesc[0], gradOutput:data(),
              self.weightDesc[0], self.weight:data(),
              self.convDesc[0],
              self.fwdAlgType[0],
              self.extraBuffer:data(), self.extraBufferSizeInBytes,
-             zero:data(),
+             cudnn.scalar(input, 0),
              self.iDesc[0], self.gradInput:data());
     return self.gradInput
 end
 
 function SpatialFullConvolution:accGradParameters(input, gradOutput, scale)
-    self.scaleT = self.scaleT or torch.FloatTensor(1):fill(1.0)
+    self.scaleT = self.scaleT or self.weight.new(1)
     -- this line forces this member to always be on CPU (needed for cudnn)
-    self.scaleT = self.scaleT:float()
+    self.scaleT = torch.type(self.weight) == 'torch.CudaDoubleTensor'
+       and self.scaleT:double() or self.scaleT:float()
     scale = scale or 1.0
     self.scaleT[1] = scale
 
-    assert(gradOutput:dim() == 3 or gradOutput:dim() == 4, 'gradOutput has to be 3D or 4D');
+    assert(gradOutput:dim() == 3 or gradOutput:dim() == 4,
+           'gradOutput has to be 3D or 4D');
     assert(gradOutput:isContiguous(), 'gradOutput has to be contiguous')
     if not self.weightDesc then self:resetWeightDescriptors() end
     self:createIODescriptors(input)
@@ -368,7 +370,7 @@ function SpatialFullConvolution:accGradParameters(input, gradOutput, scale)
         errcheck('cudnnConvolutionBackwardBias', cudnn.getHandle(),
                  self.scaleT:data(),
                  self.oDescForBias[0], gradOutput:data(),
-                 one:data(),
+                 cudnn.scalar(input, 1),
                  self.biasDesc[0], self.gradBias:data())
     end
 
@@ -380,7 +382,7 @@ function SpatialFullConvolution:accGradParameters(input, gradOutput, scale)
              self.convDesc[0],
              self.bwdFilterAlgType[0],
              self.extraBuffer:data(), self.extraBufferSizeInBytes,
-             one:data(),
+             cudnn.scalar(input, 1),
              self.weightDesc[0], self.gradWeight:data())
 end
 
