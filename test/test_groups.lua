@@ -34,6 +34,6 @@ ccn2_gradWeight = ccn2_conv.gradWeight:t()
 
 assert((cudnn_output - ccn2_output):abs():max() < 1e-4)
 assert((cudnn_gradInput - ccn2_gradInput):abs():max() < 1e-4)
-assert((cudnn_gradWeight - ccn2_gradWeight):abs():max() < 1e-1)
+assert((cudnn_gradWeight - ccn2_gradWeight):abs():max() < 5e-2)
 
 print 'no assertions'

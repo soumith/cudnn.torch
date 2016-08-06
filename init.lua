@@ -116,20 +116,6 @@ function cudnn.toDescriptor(t)
    return descriptor
 end
 
-function cudnn.createDescriptors(count, descs_type, create_func, destroy_func)
-   local ds = ffi.new(descs_type, count)
-   for i = 0, count - 1 do
-      errcheck(create_func, ds + i)
-   end
-   local function destroyDescriptors(ds)
-      for i = 0, count - 1 do
-         errcheck(destroy_func, ds[i])
-      end
-   end
-   ffi.gc(ds, destroyDescriptors)
-   return ds
-end
-
 
 local sharedBuffer = {}
 for i=1,numDevices do
@@ -140,7 +126,7 @@ function cudnn.getSharedWorkspace()
     local device = cutorch.getDevice()
     local stream = cutorch.getStream() -- starts from 0
     if not sharedBuffer[device][stream] then
-        sharedBuffer[device][stream] = torch.CudaDoubleTensor(256)
+        sharedBuffer[device][stream] = torch.CudaTensor(1)
     end
     return sharedBuffer[device][stream]
 end
@@ -178,5 +164,6 @@ require('cudnn.BGRU')
 require('cudnn.GRU')
 require('cudnn.functional')
 require('cudnn.convert')
+
 
 return cudnn
