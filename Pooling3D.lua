@@ -29,7 +29,7 @@ end
 
 function Pooling:resetPoolDescriptors()
    -- create pooling descriptor
-    self.padT = self.padT or 0
+   self.padT = self.padT or 0
    self.padW = self.padW or 0
    self.padH = self.padH or 0
    self.poolDesc = ffi.new('struct cudnnPoolingStruct*[1]')
@@ -83,17 +83,14 @@ function Pooling:createIODescriptors(input)
    end
 end
 
-local one = torch.FloatTensor({1});
-local zero = torch.FloatTensor({0});
-
 function Pooling:updateOutput(input)
    if not self.poolDesc then self:resetPoolDescriptors() end
    self:createIODescriptors(input)
    errcheck('cudnnPoolingForward', cudnn.getHandle(),
             self.poolDesc[0],
-            one:data(),
+            cudnn.scalar(input, 1),
             self.iDesc[0], input:data(),
-            zero:data(),
+            cudnn.scalar(input, 0),
             self.oDesc[0], self.output:data());
    return self.output
 end
@@ -112,11 +109,11 @@ function Pooling:updateGradInput(input, gradOutput)
    self:createIODescriptors(input)
    errcheck('cudnnPoolingBackward',
             cudnn.getHandle(), self.poolDesc[0],
-            one:data(),
+            cudnn.scalar(input, 1),
             self.oDesc[0], self.output:data(),
             self.oDesc[0], gradOutput:data(),
             self.iDesc[0], input:data(),
-            zero:data(),
+            cudnn.scalar(input, 0),
             self.iDesc[0], self.gradInput:data());
    return self.gradInput
 end

@@ -13,8 +13,8 @@ end
 
 cudnn.functional = {}
 
-local one = torch.FloatTensor({1});
-local zero = torch.FloatTensor({0});
+
+
 
 local function Batch2D(t)
     return t:view(1, t:size(1), t:size(2), t:size(3))
@@ -28,8 +28,8 @@ cudnn.functional.bias2D_updateOutput = function(handle, bias, output)
     local biasDesc = cudnn.toDescriptor(bias:view(1, bias:nElement(),1,1))
     local oDesc = cudnn.toDescriptor(output)
     errcheck('cudnnAddTensor', handle,
-             one:data(), biasDesc[0], bias:data(),
-             one:data(), oDesc[0], output:data())
+             cudnn.scalar(output, 1), biasDesc[0], bias:data(),
+             cudnn.scalar(output, 1), oDesc[0], output:data())
 end
 
 -- accumulates the gradients into gradBias.
@@ -43,7 +43,7 @@ cudnn.functional.bias2D_accGradParameters = function(handle, gradOutput, gradBia
     errcheck('cudnnConvolutionBackwardBias', handle,
              scaleT:data(),
              oDesc[0], gradOutput:data(),
-             one:data(),
+             cudnn.scalar(gradOutput, 1),
              biasDesc[0], gradBias:data())
 end
 
@@ -115,12 +115,12 @@ cudnn.functional.Convolution2D_updateOutput = function(handle, input, weight, ou
 
    -- do convolution
    errcheck('cudnnConvolutionForward', handle,
-            one:data(),
+            cudnn.scalar(input, 1),
             iDesc[0], input:data(),
             weightDesc[0], weight:data(),
             convDesc[0], algType[0],
             workspace and workspace:data() or nil, algWorkspaceLimit,
-            zero:data(),
+            cudnn.scalar(input, 0),
             oDesc[0], output:data());
 end
 
@@ -176,13 +176,13 @@ cudnn.functional.Convolution2D_updateGradInput = function(handle, input, weight,
 
    -- do convolution
    errcheck('cudnnConvolutionBackwardData', handle,
-               one:data(),
+               cudnn.scalar(input, 1),
                weightDesc[0], weight:data(),
                oDesc[0], gradOutput:data(),
                convDesc[0],
                algType[0],
                NULL, 0,
-               zero:data(),
+               cudnn.scalar(input, 0),
                iDesc[0], gradInput:data());
 
 
@@ -249,7 +249,7 @@ cudnn.functional.Convolution2D_accGradParameters = function(handle, input, gradW
              convDesc[0],
              algType[0],
              NULL, 0,
-             one:data(),
+             cudnn.scalar(input, 1),
              weightDesc[0], gradWeight:data());
 end
 
@@ -298,9 +298,9 @@ cudnn.functional.Pooling_updateOutput = function(handle, mode, input, output,
     -- pool
     errcheck('cudnnPoolingForward', handle,
              poolDesc[0],
-             one:data(),
+             cudnn.scalar(input, 1),
              iDesc[0], input:data(),
-             zero:data(),
+             cudnn.scalar(input, 0),
              oDesc[0], output:data());
 end
 
@@ -361,11 +361,11 @@ cudnn.functional.Pooling_updateGradInput = function(handle, mode, input, output,
     -- pool
     errcheck('cudnnPoolingBackward',
              handle, poolDesc[0],
-             one:data(),
+             cudnn.scalar(input, 1),
              oDesc[0], output:data(),
              oDesc[0], gradOutput:data(),
              iDesc[0], input:data(),
-             zero:data(),
+             cudnn.scalar(input, 0),
              iDesc[0], gradInput:data());
 end
 

@@ -37,17 +37,14 @@ function Pointwise:createIODescriptors(input)
 
 end
 
-local one = torch.FloatTensor({1});
-local zero = torch.FloatTensor({0});
-
 function Pointwise:updateOutput(input)
    self:createIODescriptors(input)
    if self.inplace then self.output:set(input) end
    errcheck('cudnnActivationForward',
             cudnn.getHandle(), self.activDesc[0],
-            one:data(),
+            cudnn.scalar(input, 1),
             self.iDesc[0], input:data(),
-            zero:data(),
+            cudnn.scalar(input, 0),
             self.iDesc[0], self.output:data());
    return self.output
 end
@@ -67,11 +64,11 @@ function Pointwise:updateGradInput(input, gradOutput)
    end
    errcheck('cudnnActivationBackward',
             cudnn.getHandle(), self.activDesc[0],
-            one:data(),
+            cudnn.scalar(input, 1),
             self.iDesc[0], self.output:data(),
             self.iDesc[0], gradOutput:data(),
             self.iDesc[0], input:data(),
-            zero:data(),
+            cudnn.scalar(input, 0),
             self.iDesc[0], self.gradInput:data());
    return self.gradInput
 end

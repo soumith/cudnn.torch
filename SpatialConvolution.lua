@@ -165,7 +165,7 @@ function SpatialConvolution:createIODescriptors(input)
         local algType = ffi.new("cudnnConvolutionFwdAlgo_t[?]", 1)
         local algSearchMode = 'CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT'
         local algWorkspaceLimit = self.workspace_limit
-            or (self.nInputPlane * self.kH * self.kW * 4) -- 4 = sizeof int/float.
+           or (self.nInputPlane * self.kH * self.kW * cudnn.sizeof(self.weight))
 
         if self.fastest_mode or cudnn.fastest == true then
             algSearchMode = 'CUDNN_CONVOLUTION_FWD_PREFER_FASTEST'
@@ -218,7 +218,7 @@ function SpatialConvolution:createIODescriptors(input)
         local algType = ffi.new("cudnnConvolutionBwdFilterAlgo_t[?]", 1)
         local algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_NO_WORKSPACE'
         local algWorkspaceLimit = self.workspace_limit
-            or (self.nInputPlane * self.kH * self.kW * 4) -- 4 = sizeof int/float.
+           or (self.nInputPlane * self.kH * self.kW * cudnn.sizeof(self.weight))
         if self.fastest_mode  or cudnn.fastest == true then
             algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST'
         end
@@ -270,7 +270,7 @@ function SpatialConvolution:createIODescriptors(input)
         local algType = ffi.new("cudnnConvolutionBwdDataAlgo_t[?]", 1)
         local algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_NO_WORKSPACE'
         local algWorkspaceLimit = self.workspace_limit
-            or (self.nInputPlane * self.kH * self.kW * 4) -- 4 = sizeof int/float.
+           or (self.nInputPlane * self.kH * self.kW * cudnn.sizeof(self.weight))
         if self.fastest_mode or cudnn.fastest == true then
             algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST'
         end
@@ -318,10 +318,12 @@ function SpatialConvolution:createIODescriptors(input)
         maxBufSize = math.max(maxBufSize, bufSize[1])
 
         self.extraBuffer = self.extraBuffer or cudnn.getSharedWorkspace()
-        self.extraBufferSizeInBytes = self.extraBuffer:nElement() * 4 -- float
+        self.extraBuffer = self.extraBuffer:cuda() -- always force float
+        self.extraBufferSizeInBytes =
+           self.extraBuffer:nElement() * 4 -- extraBuffer is always float
         if maxBufSize > self.extraBufferSizeInBytes then
-            self.extraBuffer:resize(math.ceil(maxBufSize/4))
-            self.extraBufferSizeInBytes = maxBufSize
+           self.extraBuffer:resize(math.ceil(maxBufSize / 4))
+           self.extraBufferSizeInBytes = maxBufSize
         end
 
         -----------------------------------------------------------------------
@@ -341,8 +343,8 @@ function SpatialConvolution:createIODescriptors(input)
     end
 end
 
-local one = torch.FloatTensor({1});
-local zero = torch.FloatTensor({0});
+
+
 
 local function makeContiguous(self, input, gradOutput)
    if not input:isContiguous() then
@@ -365,20 +367,20 @@ function SpatialConvolution:updateOutput(input)
 
     for g = 0, self.groups - 1 do
         errcheck('cudnnConvolutionForward', cudnn.getHandle(),
-                 one:data(),
+                 cudnn.scalar(input, 1),
                  self.iDesc[0], input:data() + g*self.input_offset,
                  self.weightDesc[0], self.weight:data() + g*self.weight_offset,
                  self.convDesc[0], self.fwdAlgType[0],
                  self.extraBuffer:data(), self.extraBufferSizeInBytes,
-                 zero:data(),
+                 cudnn.scalar(input, 0),
                  self.oDesc[0], self.output:data() + g*self.output_offset);
     end
 
     -- add bias
     if self.bias then
         errcheck('cudnnAddTensor', cudnn.getHandle(),
-                 one:data(), self.biasDesc[0], self.bias:data(),
-                 one:data(), self.oDescForBias[0], self.output:data())
+                 cudnn.scalar(input, 1), self.biasDesc[0], self.bias:data(),
+                 cudnn.scalar(input, 1), self.oDescForBias[0], self.output:data())
     end
 
     return self.output
@@ -395,22 +397,23 @@ function SpatialConvolution:updateGradInput(input, gradOutput)
 
     for g = 0,self.groups - 1 do
         errcheck('cudnnConvolutionBackwardData', cudnn.getHandle(),
-                 one:data(),
+                 cudnn.scalar(input, 1),
                  self.weightDesc[0], self.weight:data() + g*self.weight_offset,
                  self.oDesc[0], gradOutput:data() + g*self.output_offset,
                  self.convDesc[0],
                  self.bwdDataAlgType[0],
                  self.extraBuffer:data(), self.extraBufferSizeInBytes,
-                 zero:data(),
+                 cudnn.scalar(input, 0),
                  self.iDesc[0], self.gradInput:data() + g*self.input_offset);
     end
     return self.gradInput
 end
 
 function SpatialConvolution:accGradParameters(input, gradOutput, scale)
-    self.scaleT = self.scaleT or torch.FloatTensor(1):fill(1.0)
+    self.scaleT = self.scaleT or self.weight.new(1)
     -- this line forces this member to always be on CPU (needed for cudnn)
-    self.scaleT = self.scaleT:float()
+    self.scaleT = torch.type(self.weight) == 'torch.CudaDoubleTensor'
+       and self.scaleT:double() or self.scaleT:float()
     scale = scale or 1.0
     self.scaleT[1] = scale
 
@@ -425,7 +428,7 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
         errcheck('cudnnConvolutionBackwardBias', cudnn.getHandle(),
                  self.scaleT:data(),
                  self.oDescForBias[0], gradOutput:data(),
-                 one:data(),
+                 cudnn.scalar(input, 1),
                  self.biasDesc[0], self.gradBias:data())
     end
 
@@ -438,7 +441,7 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
                  self.convDesc[0],
                  self.bwdFilterAlgType[0],
                  self.extraBuffer:data(), self.extraBufferSizeInBytes,
-                 one:data(),
+                 cudnn.scalar(input, 1),
                  self.weightDesc[0], self.gradWeight:data() + g*self.weight_offset);
     end
 end

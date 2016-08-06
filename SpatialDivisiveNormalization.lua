@@ -52,8 +52,8 @@ function DivisiveNorm:createIODescriptors(input)
    end
 end
 
-local one = torch.FloatTensor({1});
-local zero = torch.FloatTensor({0});
+
+
 
 function DivisiveNorm:updateOutput(input)
    if not self.DivisiveNormDesc then self:resetPoolDescriptors() end
@@ -61,9 +61,9 @@ function DivisiveNorm:updateOutput(input)
    errcheck('cudnnDivisiveNormCrossChannelForward', cudnn.getHandle(),
             self.DivisiveNormDesc[0],
             'CUDNN_DivisiveNorm_CROSS_CHANNEL_DIM1',
-            one:data(),
+            cudnn.scalar(input, 1),
             self.iDesc[0], input:data(),
-            zero:data(),
+            cudnn.scalar(input, 0),
             self.iDesc[0], self.output:data());
    return self.output
 end
@@ -80,11 +80,11 @@ function DivisiveNorm:updateGradInput(input, gradOutput)
    errcheck('cudnnDivisiveNormCrossChannelBackward',
             cudnn.getHandle(), self.DivisiveNormDesc[0],
             'CUDNN_DivisiveNorm_CROSS_CHANNEL_DIM1',
-            one:data(),
+            cudnn.scalar(input, 1),
             self.iDesc[0], self.output:data(),
             self.iDesc[0], gradOutput:data(),
             self.iDesc[0], input:data(),
-            zero:data(),
+            cudnn.scalar(input, 0),
             self.iDesc[0], self.gradInput:data());
    return self.gradInput
 end

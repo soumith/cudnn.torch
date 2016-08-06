@@ -36,6 +36,42 @@ cudnn.typemap = {
    ['torch.CudaDoubleTensor'] = 'CUDNN_DATA_DOUBLE',
 }
 
+cudnn.typemap = {
+   ['torch.CudaHalfTensor']   = 'CUDNN_DATA_HALF',
+   ['torch.CudaTensor']       = 'CUDNN_DATA_FLOAT',
+   ['torch.CudaDoubleTensor'] = 'CUDNN_DATA_DOUBLE',
+}
+
+local sizeofmap = {
+   ['torch.CudaHalfTensor']   = ffi.sizeof('half'),
+   ['torch.CudaTensor']       = ffi.sizeof('float'),
+   ['torch.CudaDoubleTensor'] = ffi.sizeof('double'),
+}
+
+function cudnn.sizeof(t)
+   return sizeofmap[torch.type(t)]
+end
+
+local onemap = {
+   ['torch.CudaHalfTensor']   = torch.FloatTensor({1}),
+   ['torch.CudaTensor']       = torch.FloatTensor({1}),
+   ['torch.CudaDoubleTensor'] = torch.DoubleTensor({1}),
+}
+local zeromap = {
+   ['torch.CudaHalfTensor']   = torch.FloatTensor({0}),
+   ['torch.CudaTensor']       = torch.FloatTensor({0}),
+   ['torch.CudaDoubleTensor'] = torch.DoubleTensor({0}),
+}
+function cudnn.scalar(t, val)
+   if val == 1 then
+      return onemap[torch.type(t)]:data()
+   elseif val == 0 then
+      return zeromap[torch.type(t)]:data()
+   else
+      error('unknown scalar')
+   end
+end
+
 -- TODO: determine if device supports true half and use true half on it
 -- so far use float for half and float, double for double
 local function determineHalfCapability(dev)
@@ -126,7 +162,7 @@ function cudnn.getSharedWorkspace()
     local device = cutorch.getDevice()
     local stream = cutorch.getStream() -- starts from 0
     if not sharedBuffer[device][stream] then
-        sharedBuffer[device][stream] = torch.CudaTensor(1)
+       sharedBuffer[device][stream] = torch.CudaTensor(1)
     end
     return sharedBuffer[device][stream]
 end
