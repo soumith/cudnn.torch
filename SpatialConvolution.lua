@@ -165,7 +165,7 @@ function SpatialConvolution:createIODescriptors(input)
         local algType = ffi.new("cudnnConvolutionFwdAlgo_t[?]", 1)
         local algSearchMode = 'CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT'
         local algWorkspaceLimit = self.workspace_limit
-            or (self.nInputPlane * self.kH * self.kW * 4) -- 4 = sizeof int/float.
+            or (self.nInputPlane * self.kH * self.kW * cudnn.sizeof(self.weight))
 
         if self.fastest_mode or cudnn.fastest == true then
             algSearchMode = 'CUDNN_CONVOLUTION_FWD_PREFER_FASTEST'
@@ -218,7 +218,7 @@ function SpatialConvolution:createIODescriptors(input)
         local algType = ffi.new("cudnnConvolutionBwdFilterAlgo_t[?]", 1)
         local algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_NO_WORKSPACE'
         local algWorkspaceLimit = self.workspace_limit
-            or (self.nInputPlane * self.kH * self.kW * 4) -- 4 = sizeof int/float.
+            or (self.nInputPlane * self.kH * self.kW * cudnn.sizeof(self.weight))
         if self.fastest_mode  or cudnn.fastest == true then
             algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST'
         end
@@ -270,7 +270,7 @@ function SpatialConvolution:createIODescriptors(input)
         local algType = ffi.new("cudnnConvolutionBwdDataAlgo_t[?]", 1)
         local algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_NO_WORKSPACE'
         local algWorkspaceLimit = self.workspace_limit
-            or (self.nInputPlane * self.kH * self.kW * 4) -- 4 = sizeof int/float.
+            or (self.nInputPlane * self.kH * self.kW * cudnn.sizeof(self.weight))
         if self.fastest_mode or cudnn.fastest == true then
             algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST'
         end
@@ -318,9 +318,9 @@ function SpatialConvolution:createIODescriptors(input)
         maxBufSize = math.max(maxBufSize, bufSize[1])
 
         self.extraBuffer = self.extraBuffer or cudnn.getSharedWorkspace()
-        self.extraBufferSizeInBytes = self.extraBuffer:nElement() * 4 -- float
+        self.extraBufferSizeInBytes = self.extraBuffer:nElement() * cudnn.sizeof(self.weight)
         if maxBufSize > self.extraBufferSizeInBytes then
-            self.extraBuffer:resize(math.ceil(maxBufSize/4))
+            self.extraBuffer:resize(math.ceil(maxBufSize/cudnn.sizeof(self.weight)))
             self.extraBufferSizeInBytes = maxBufSize
         end
 
