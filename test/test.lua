@@ -27,19 +27,22 @@ local testparams_float = {
 -- TODO: find out why the errors are so huge
 local testparams_double = {
    test_type = 'torch.CudaDoubleTensor',
-   precision_forward = 1e+2,
-   precision_backward = 1e+3, -- 1e+4,
+   precision_forward = 1e-4,
+   precision_backward = 2e-2,
    precision_jac = 1e-3,
    precision_io = 1e-5,
 }
 
-local testparams = testparams_half
+local testparams = nil
 
 local function cast(input)
    return input:type(testparams.test_type)
 end
 
 -- workarounds
+function torch.CudaHalfTensor:__sub(b)
+   return self:cuda() - b:cuda()
+end
 function torch.CudaHalfTensor:abs()
    return self:cuda():abs():cudaHalf()
 end
@@ -56,202 +59,62 @@ function torch.CudaDoubleTensor:mean()
    return self:cuda():mean()
 end
 
-function cudnntest.SpatialConvolution_forward_batch()
-   local bs = math.random(1,32)
-   local from = math.random(1,32)
-   local to = math.random(1,64)
-   local ki = math.random(1,15)
-   local kj = math.random(1,15)
-   local si = math.random(1,ki)
-   local sj = math.random(1,kj)
-   local outi = math.random(1,64)
-   local outj = math.random(1,64)
-   local ini = (outi-1)*si+ki
-   local inj = (outj-1)*sj+kj
-
-   local input = torch.randn(bs,from,inj,ini):cuda()
-   local sconv = nn.SpatialConvolution(from,to,ki,kj,si,sj):cuda()
-   local gconv = cast(cudnn.SpatialConvolution(from,to,ki,kj,si,sj)):fastest()
-   gconv.weight:copy(sconv.weight)
-   gconv.bias:copy(sconv.bias)
-
-   local function test(sconv, gconv)
-     local groundtruth = sconv:forward(input)
-     cutorch.synchronize()
-     local rescuda = gconv:forward(cast(input))
-     cutorch.synchronize()
-     local error = rescuda:float() - groundtruth:float()
-     mytester:assertlt(error:abs():max(), testparams.precision_forward, 'error on state (forward) ')
-
-     -- IO
-     local ferr,berr = jac.testIO(gconv, cast(input))
-     mytester:assertlt(ferr, testparams.precision_io, torch.typename(gconv) .. ' - i/o forward err ')
-     mytester:assertlt(berr, testparams.precision_io, torch.typename(gconv) .. ' - i/o backward err ')
-   end
-
-   test(sconv, gconv)
-   local gconv = cast(cudnn.convert(sconv, cudnn))
-   mytester:asserteq(torch.typename(gconv), 'cudnn.SpatialConvolution', 'conversion type check')
-   test(sconv, gconv)
-end
-
-
-function cudnntest.SpatialConvolution_backward_batch()
-   local bs = math.random(1,32)
-   local from = math.random(1,32)
-   local to = math.random(1,64)
-   local ki = math.random(1,15)
-   local kj = math.random(1,15)
-   local si = math.random(1,ki)
-   local sj = math.random(1,kj)
-   local outi = math.random(1,64)
-   local outj = math.random(1,64)
-   local ini = (outi-1)*si+ki
-   local inj = (outj-1)*sj+kj
-   local scale = math.random()
-
-   local input = torch.randn(bs,from,inj,ini):cuda()
-   local gradOutput = torch.randn(bs,to,outj,outi):cuda()
-   local sconv = nn.SpatialConvolution(from,to,ki,kj,si,sj):cuda()
-   sconv:forward(input)
-   sconv:zeroGradParameters()
-   local groundgrad = sconv:backward(input, gradOutput, scale)
-   cutorch.synchronize()
-   local groundweight = sconv.gradWeight
-   local groundbias = sconv.gradBias
-
-   local gconv = cast(cudnn.SpatialConvolution(from,to,ki,kj,si,sj)):fastest()
-   gconv.weight:copy(sconv.weight)
-   gconv.bias:copy(sconv.bias)
-   gconv:forward(cast(input))
-
+local function testLayer(nnlayer, cudnnlayer, input, gradOutput, scale,
+                         parametric, batchMode, description)
+   description = description or ''
    -- serialize and deserialize
-   torch.save('modelTemp.t7', gconv)
-   gconv = torch.load('modelTemp.t7')
+   torch.save('modelTemp.t7', cudnnlayer)
+   cudnnlayer = torch.load('modelTemp.t7')
 
-   local function test(sconv, gconv)
-     gconv:forward(cast(input))
-     gconv:zeroGradParameters()
-     local rescuda = gconv:backward(cast(input), cast(gradOutput), scale)
-     cutorch.synchronize()
-     local weightcuda = gconv.gradWeight
-     local biascuda = gconv.gradBias
-
-     local error = rescuda:float() - groundgrad:float()
-     local werror = weightcuda:float() - groundweight:float()
-     local berror = biascuda:float() - groundbias:float()
-
-     mytester:assertlt(error:abs():max(), testparams.precision_backward, 'error on state (backward) ')
-     mytester:assertlt(werror:abs():max(), testparams.precision_backward, 'error on weight (backward) ')
-     mytester:assertlt(berror:abs():max(), testparams.precision_backward, 'error on bias (backward) ')
+   if not batchMode then -- convert given mini-batch to single sample
+      input = input[1]:clone()
+      gradOutput = gradOutput[1]:clone()
+   end
+   local gt = {} -- groundtruth
+   gt.output = nnlayer:forward(input)
+   nnlayer:zeroGradParameters()
+   gt.gradInput = nnlayer:backward(input, gradOutput, scale)
+   if parametric then
+      gt.gradWeight = nnlayer.gradWeight
+      gt.gradBias = nnlayer.gradBias
    end
 
-   test(sconv, gconv)
-   local gconv = cast(cudnn.convert(sconv, cudnn))
-   mytester:asserteq(torch.typename(gconv), 'cudnn.SpatialConvolution', 'conversion type check')
-   test(sconv, gconv)
-end
-
-function cudnntest.SpatialConvolution_forward_single()
-   local from = math.random(1,32)
-   local to = math.random(1,64)
-   local ki = math.random(1,15)
-   local kj = math.random(1,15)
-   local si = math.random(1,ki)
-   local sj = math.random(1,kj)
-   local outi = math.random(1,64)
-   local outj = math.random(1,64)
-   local ini = (outi-1)*si+ki
-   local inj = (outj-1)*sj+kj
-
-   local input = torch.randn(from,inj,ini):cuda()
-   local sconv = nn.SpatialConvolution(from,to,ki,kj,si,sj):cuda()
-   local gconv = cast(cudnn.SpatialConvolution(from,to,ki,kj,si,sj))
-   gconv.weight:copy(sconv.weight)
-   gconv.bias:copy(sconv.bias)
-
-   local function test(sconv, gconv)
-     local groundtruth = sconv:forward(input)
-     cutorch.synchronize()
-     local rescuda = gconv:forward(cast(input))
-     cutorch.synchronize()
-     mytester:asserteq(rescuda:dim(), 3, 'error in dimension')
-     local error = rescuda:float() - groundtruth:float()
-     mytester:assertlt(error:abs():max(), testparams.precision_forward,
-                       'error on state (forward) ')
-
-     -- IO
-     local ferr,berr = jac.testIO(gconv, cast(input))
-     mytester:assertlt(ferr, testparams.precision_io, torch.typename(gconv) .. ' - i/o forward err ')
-     mytester:assertlt(berr, testparams.precision_io, torch.typename(gconv) .. ' - i/o backward err ')
+   local res = {} -- result
+   res.output = cudnnlayer:forward(cast(input))
+   cudnnlayer:zeroGradParameters()
+   res.gradInput = cudnnlayer:backward(cast(input), cast(gradOutput), scale)
+   if parametric then
+      res.gradWeight = cudnnlayer.gradWeight
+      res.gradBias = cudnnlayer.gradBias
    end
 
-   test(sconv, gconv)
-   local gconv = cast(cudnn.convert(sconv, cudnn))
-   mytester:asserteq(torch.typename(gconv), 'cudnn.SpatialConvolution', 'conversion type check')
-   test(sconv, gconv)
+   for name, _ in pairs(gt) do
+      local error = gt[name]:float() - res[name]:float()
+      error = error:abs():max()
+      local precision
+      if name == 'output' then
+         precision = testparams.precision_forward
+      else
+         precision = testparams.precision_backward
+      end
+      mytester:assertlt(error, precision, 'error on ' .. name
+                           .. ' batchMode = ' .. tostring(batchMode)
+                           .. ' ' .. description)
+   end
+
+   -- IO
+   local ferr,berr = jac.testIO(cudnnlayer, cast(input))
+   mytester:assertlt(ferr, testparams.precision_io,
+                     torch.typename(cudnnlayer) .. ' - i/o forward err '
+                        .. ' batchMode = ' .. tostring(batchMode)
+                        .. ' ' .. description)
+   mytester:assertlt(berr, testparams.precision_io,
+                     torch.typename(cudnnlayer) .. ' - i/o backward err '
+                        .. ' batchMode = ' .. tostring(batchMode)
+                        .. ' ' .. description)
 end
 
-
-function cudnntest.SpatialConvolution_backward_single()
-   local from = math.random(1,32)
-   local to = math.random(1,64)
-   local ki = math.random(1,15)
-   local kj = math.random(1,15)
-   local si = math.random(1,ki)
-   local sj = math.random(1,kj)
-   local outi = math.random(1,64)
-   local outj = math.random(1,64)
-   local ini = (outi-1)*si+ki
-   local inj = (outj-1)*sj+kj
-
-   local input = torch.randn(from,inj,ini):cuda()
-   local gradOutput = torch.randn(to,outj,outi):cuda()
-   local sconv = nn.SpatialConvolution(from,to,ki,kj,si,sj):cuda()
-   sconv:forward(input)
-   sconv:zeroGradParameters()
-   local groundgrad = sconv:backward(input, gradOutput)
-   cutorch.synchronize()
-   local groundweight = sconv.gradWeight
-   local groundbias = sconv.gradBias
-
-   local gconv = cast(cudnn.SpatialConvolution(from,to,ki,kj,si,sj))
-   gconv.weight:copy(sconv.weight)
-   gconv.bias:copy(sconv.bias)
-   local function test(sconv, gconv)
-     gconv:forward(cast(input))
-
-     -- serialize and deserialize
-     torch.save('modelTemp.t7', gconv)
-     gconv = torch.load('modelTemp.t7')
-
-     gconv:forward(cast(input))
-     gconv:zeroGradParameters()
-     local rescuda = gconv:backward(cast(input), cast(gradOutput))
-     cutorch.synchronize()
-     mytester:asserteq(rescuda:dim(), 3, 'error in dimension')
-     local weightcuda = gconv.gradWeight
-     local biascuda = gconv.gradBias
-
-     local error = rescuda:float() - groundgrad:float()
-     local werror = weightcuda:float() - groundweight:float()
-     local berror = biascuda:float() - groundbias:float()
-
-     mytester:assertlt(error:abs():max(), testparams.precision_backward,
-                       'error on state (backward) ')
-     mytester:assertlt(werror:abs():max(), testparams.precision_backward,
-                       'error on weight (backward) ')
-     mytester:assertlt(berror:abs():max(), testparams.precision_backward,
-                       'error on bias (backward) ')
-  end
-
-  test(sconv, gconv)
-  local gconv = cast(cudnn.convert(sconv, cudnn))
-  mytester:asserteq(torch.typename(gconv), 'cudnn.SpatialConvolution', 'conversion type check')
-  test(sconv, gconv)
-end
-
-function cudnntest.SpatialFullConvolution_forward_batch()
+function cudnntest.SpatialConvolution()
    local bs = math.random(1,32)
    local from = math.random(1,32)
    local to = math.random(1,64)
@@ -259,38 +122,30 @@ function cudnntest.SpatialFullConvolution_forward_batch()
    local kj = math.random(1,15)
    local si = math.random(1,ki)
    local sj = math.random(1,kj)
-   local ini = math.random(1,64)
-   local inj = math.random(1,64)
-   local outi = (ini-1)*si+ki
-   local outj = (inj-1)*sj+kj
+   local outi = math.random(1,64)
+   local outj = math.random(1,64)
+   local ini = (outi-1)*si+ki
+   local inj = (outj-1)*sj+kj
+   local scale = math.random()
 
    local input = torch.randn(bs,from,inj,ini):cuda()
-   local sconv = nn.SpatialFullConvolution(from,to,ki,kj,si,sj):cuda()
-   local gconv = cast(cudnn.SpatialFullConvolution(from,to,ki,kj,si,sj)):fastest()
+   local gradOutput = torch.randn(bs,to,outj,outi):cuda()
+   local sconv = nn.SpatialConvolution(from,to,ki,kj,si,sj):cuda()
+   local gconv = cast(cudnn.SpatialConvolution(from,to,ki,kj,si,sj)):fastest()
    gconv.weight:copy(sconv.weight)
    gconv.bias:copy(sconv.bias)
 
-   local function test(sconv, gconv)
-     local groundtruth = sconv:forward(input)
-     cutorch.synchronize()
-     local rescuda = gconv:forward(cast(input))
-     cutorch.synchronize()
-     local error = rescuda:float() - groundtruth:float()
-     mytester:assertlt(error:abs():max(), testparams.precision_forward, 'error on state (forward) ')
-
-     -- IO
-     local ferr,berr = jac.testIO(gconv, cast(input))
-     mytester:assertlt(ferr, testparams.precision_io, torch.typename(gconv) .. ' - i/o forward err ')
-     mytester:assertlt(berr, testparams.precision_io, torch.typename(gconv) .. ' - i/o backward err ')
-   end
-
-   test(sconv, gconv)
+   testLayer(sconv, gconv, input, gradOutput, scale, true, true) -- batch
+   testLayer(sconv, gconv, input, gradOutput, scale, true, false) -- non-batch
+   local originalTypename = torch.typename(gconv)
    local gconv = cast(cudnn.convert(sconv, cudnn))
-   mytester:asserteq(torch.typename(gconv), 'cudnn.SpatialFullConvolution', 'conversion type check')
-   test(sconv, gconv)
+   mytester:asserteq(torch.typename(gconv),
+                     originalTypename, 'conversion type check')
+   testLayer(sconv, gconv, input, gradOutput, scale, true, true)
+   testLayer(sconv, gconv, input, gradOutput, scale, true, false)
 end
 
-function cudnntest.SpatialFullConvolution_backward_batch()
+function cudnntest.SpatialFullConvolution()
    local bs = math.random(1,32)
    local from = math.random(1,32)
    local to = math.random(1,64)
@@ -307,90 +162,40 @@ function cudnntest.SpatialFullConvolution_backward_batch()
    local input = torch.randn(bs,from,inj,ini):cuda()
    local gradOutput = torch.randn(bs,to,outj,outi):cuda()
    local sconv = nn.SpatialFullConvolution(from,to,ki,kj,si,sj):cuda()
-   sconv:forward(input)
-   sconv:zeroGradParameters()
-   local groundgrad = sconv:backward(input, gradOutput, scale)
-   cutorch.synchronize()
-   local groundweight = sconv.gradWeight
-   local groundbias = sconv.gradBias
-
    local gconv = cast(cudnn.SpatialFullConvolution(from,to,ki,kj,si,sj):cuda():fastest())
    gconv.weight:copy(sconv.weight)
    gconv.bias:copy(sconv.bias)
-   gconv:forward(cast(input))
 
-   -- serialize and deserialize
-   torch.save('modelTemp.t7', gconv)
-   gconv = torch.load('modelTemp.t7')
-
-   local function test(sconv, gconv)
-     gconv:forward(cast(input))
-     gconv:zeroGradParameters()
-     local rescuda = gconv:backward(cast(input), cast(gradOutput), scale)
-     cutorch.synchronize()
-     local weightcuda = gconv.gradWeight
-     local biascuda = gconv.gradBias
-
-     local error = rescuda:float() - groundgrad:float()
-     local werror = weightcuda:float() - groundweight:float()
-     local berror = biascuda:float() - groundbias:float()
-
-     mytester:assertlt(error:abs():max(), testparams.precision_backward, 'error on state (backward) ')
-     mytester:assertlt(werror:abs():max(), testparams.precision_backward, 'error on weight (backward) ')
-     mytester:assertlt(berror:abs():max(), testparams.precision_backward, 'error on bias (backward) ')
-   end
-
-   test(sconv, gconv)
+   testLayer(sconv, gconv, input, gradOutput, scale, true, true) -- batch
+   testLayer(sconv, gconv, input, gradOutput, scale, true, false) -- non-batch
+   local originalTypename = torch.typename(gconv)
    local gconv = cast(cudnn.convert(sconv, cudnn))
-   mytester:asserteq(torch.typename(gconv), 'cudnn.SpatialFullConvolution', 'conversion type check')
-   test(sconv, gconv)
+   mytester:asserteq(torch.typename(gconv),
+                     originalTypename, 'conversion type check')
+   testLayer(sconv, gconv, input, gradOutput, scale, true, true)
+   testLayer(sconv, gconv, input, gradOutput, scale, true, false)
 end
 
-
-function cudnntest.TemporalConvolution_batch()
+function cudnntest.TemporalConvolution()
    local bs = math.random(1,32)
    local inputFrameSize = math.random(1,64)
    local outputFrameSize = math.random(1,64)
    local ki = math.random(1,15)
    local si = math.random(1,ki)
    local outi = math.random(1,15)
-   local ini = (outi-1)*si+ki
+   local ini = (outi - 1) * si + ki
    local scale = math.random()
 
    local input = torch.randn(bs,ini,inputFrameSize):cuda()
    local gradOutput = torch.randn(bs,outi,outputFrameSize):cuda()
    local sconv = nn.TemporalConvolution(inputFrameSize,outputFrameSize, ki, si):cuda()
-   local groundForward = sconv:forward(input)
-   sconv:zeroGradParameters()
-   local groundgrad = sconv:backward(input, gradOutput, scale)
-   cutorch.synchronize()
-   local groundweight = sconv.gradWeight
-   local groundbias = sconv.gradBias
-
    local gconv = cast(cudnn.TemporalConvolution(inputFrameSize,outputFrameSize, ki, si):cuda():fastest())
    gconv.weight:copy(sconv.weight:view(gconv.weight:size()))
    gconv.bias:copy(sconv.bias)
-   gconv:forward(cast(input))
 
-   -- serialize and deserialize
-   torch.save('modelTemp.t7', gconv)
-   gconv = torch.load('modelTemp.t7')
-
-   local cudaForward = gconv:forward(cast(input))
-   gconv:zeroGradParameters()
-   local rescuda = gconv:backward(cast(input), cast(gradOutput), scale)
-   cutorch.synchronize()
-   local weightcuda = gconv.gradWeight
-   local biascuda = gconv.gradBias
-
-   local ferror = cudaForward:float() - groundForward:float()
-   local error = rescuda:float() - groundgrad:float()
-   local werror = weightcuda:float() - groundweight:float()
-   local berror = biascuda:float() - groundbias:float()
-   mytester:assertlt(ferror:abs():max(), testparams.precision_forward, 'error on forward  ')
-   mytester:assertlt(error:abs():max(), testparams.precision_backward, 'error on state (backward) ')
-   mytester:assertlt(werror:abs():max(), testparams.precision_backward, 'error on weight (backward) ')
-   mytester:assertlt(berror:abs():max(), testparams.precision_backward, 'error on bias (backward) ')
+   testLayer(sconv, gconv, input, gradOutput, scale, true, true) -- batch
+   testLayer(sconv, gconv, input, gradOutput, scale, true, false) -- non-batch
+   -- temporal convolution does not support cudnn.convert, so no tests for that
 end
 
 function cudnntest.TemporalConvolution_padding_batch()
@@ -447,52 +252,6 @@ function cudnntest.TemporalConvolution_padding_batch()
    mytester:assertlt(berror:abs():max(), testparams.precision_backward, 'error on bias (backward) ')
 end
 
-
-function cudnntest.TemporalConvolution_single()
-   local inputFrameSize = math.random(1,64)
-   local outputFrameSize = math.random(1,64)
-   local ki = math.random(1,15)
-   local si = math.random(1,ki)
-   local outi = math.random(1,15)
-   local ini = (outi-1)*si+ki
-   local scale = math.random()
-
-   local input = torch.randn(ini,inputFrameSize):cuda()
-   local gradOutput = torch.randn(outi,outputFrameSize):cuda()
-   local sconv = nn.TemporalConvolution(inputFrameSize,outputFrameSize, ki, si):cuda()
-   local groundForward = sconv:forward(input)
-   sconv:zeroGradParameters()
-   local groundgrad = sconv:backward(input, gradOutput, scale)
-   cutorch.synchronize()
-   local groundweight = sconv.gradWeight
-   local groundbias = sconv.gradBias
-
-   local gconv = cast(cudnn.TemporalConvolution(inputFrameSize,outputFrameSize, ki, si):cuda():fastest())
-   gconv.weight:copy(sconv.weight:view(gconv.weight:size()))
-   gconv.bias:copy(sconv.bias)
-   gconv:forward(cast(input))
-
-   -- serialize and deserialize
-   torch.save('modelTemp.t7', gconv)
-   gconv = torch.load('modelTemp.t7')
-
-   local cudaForward = gconv:forward(cast(input))
-   gconv:zeroGradParameters()
-   local rescuda = gconv:backward(cast(input), cast(gradOutput), scale)
-   cutorch.synchronize()
-   local weightcuda = gconv.gradWeight
-   local biascuda = gconv.gradBias
-
-   local ferror = cudaForward:float() - groundForward:float()
-   local error = rescuda:float() - groundgrad:float()
-   local werror = weightcuda:float() - groundweight:float()
-   local berror = biascuda:float() - groundbias:float()
-   mytester:assertlt(ferror:abs():max(), testparams.precision_forward, 'error on forward  ')
-   mytester:assertlt(error:abs():max(), testparams.precision_backward, 'error on state (backward) ')
-   mytester:assertlt(werror:abs():max(), testparams.precision_backward, 'error on weight (backward) ')
-   mytester:assertlt(berror:abs():max(), testparams.precision_backward, 'error on bias (backward) ')
-end
-
 function cudnntest.TemporalConvolution_reduceBatchSize()
    local inputFrameSize = math.random(1,64)
    local outputFrameSize = math.random(1,64)
@@ -516,8 +275,8 @@ function cudnntest.TemporalConvolution_reduceBatchSize()
    mytester:asserteq(o2:size(1), smallerBatchSize, 'batch size didn\'t match')
 end
 
-
-function cudnntest.VolumetricConvolution_forward_single()
+function cudnntest.VolumetricConvolution()
+   local bs = math.random(1,32)
    local from = math.random(1,16)
    local to = math.random(1,16)
    local ki = math.random(3,5)
@@ -532,98 +291,26 @@ function cudnntest.VolumetricConvolution_forward_single()
    local ini = (outi-1)*si+ki
    local inj = (outj-1)*sj+kj
    local ink = (outk-1)*sk+kk
-   local input = torch.randn(from,ink,inj,ini):cuda()
-   local sconv = nn.VolumetricConvolution(from,to,kk,ki,kj,sk,si,sj):float()
-   local gconv = cast(cudnn.VolumetricConvolution(from,to,kk,ki,kj,sk,si,sj))
-   gconv.weight:copy(sconv.weight)
-   gconv.bias:copy(sconv.bias)
-   local function test(sconv, gconv)
-     local groundtruth = sconv:forward(input:float())
-     cutorch.synchronize()
-     local rescuda = gconv:forward(cast(input))
-     cutorch.synchronize()
-     local error = rescuda:float() - groundtruth:float()
-     mytester:assertlt(error:abs():max(), testparams.precision_forward,
-                       'error on state (forward) ')
+   local scale = math.random()
 
-     -- IO
-     local ferr,berr = jac.testIO(gconv, cast(input))
-     mytester:assertlt(ferr, testparams.precision_io, torch.typename(gconv) .. ' - i/o forward err ')
-     mytester:assertlt(berr, testparams.precision_io, torch.typename(gconv) .. ' - i/o backward err ')
-   end
-
-   test(sconv, gconv)
-   local gconv = cast(cudnn.convert(sconv, cudnn):cuda())
-   mytester:asserteq(torch.typename(gconv), 'cudnn.VolumetricConvolution', 'conversion type check')
-   test(sconv, gconv)
-end
-
-function cudnntest.VolumetricConvolution_backward_single()
-   local from = math.random(1,16)
-   local to = math.random(1,16)
-   local ki = math.random(3,5)
-   local kj = math.random(3,5)
-   local kk = math.random(3,5)
-   local si = math.random(1,ki-1)
-   local sj = math.random(1,kj-1)
-   local sk = math.random(1,kk-1)
-   local outi = math.random(1,17)
-   local outj = math.random(1,17)
-   local outk = math.random(1,5)
-   local ini = (outi-1)*si+ki
-   local inj = (outj-1)*sj+kj
-   local ink = (outk-1)*sk+kk
-   local input = torch.randn(from,ink,inj,ini):cuda()
-   local gradOutput = torch.randn(to,outk,outj,outi):cuda()
-   local sconv = nn.VolumetricConvolution(from,to,kk,ki,kj,sk,si,sj):float()
-   sconv:forward(input:float())
-   sconv:zeroGradParameters()
-   local groundgrad = sconv:backward(input:float(), gradOutput:float())
-   cutorch.synchronize()
-   local groundweight = sconv.gradWeight
-   local groundbias = sconv.gradBias
-
+   local input = torch.randn(bs,from,ink,inj,ini):cuda()
+   local gradOutput = torch.randn(bs,to,outk,outj,outi):cuda()
+   local sconv = nn.VolumetricConvolution(from,to,kk,ki,kj,sk,si,sj):cuda()
    local gconv = cast(cudnn.VolumetricConvolution(from,to,kk,ki,kj,sk,si,sj))
    gconv.weight:copy(sconv.weight)
    gconv.bias:copy(sconv.bias)
 
-   local function test(sconv, gconv)
-     gconv:forward(cast(input))
-     cutorch.synchronize()
-
-     -- serialize and deserialize
-     torch.save('modelTemp.t7', gconv)
-     gconv = torch.load('modelTemp.t7')
-
-     gconv:forward(cast(input))
-     gconv:zeroGradParameters()
-     local rescuda = gconv:backward(cast(input), cast(gradOutput))
-     cutorch.synchronize()
-
-     mytester:asserteq(rescuda:dim(), 4, 'error in dimension')
-     local weightcuda = gconv.gradWeight
-     local biascuda = gconv.gradBias
-
-     local error = rescuda:float() - groundgrad:float()
-     local werror = weightcuda:float() - groundweight:float()
-     local berror = biascuda:float() - groundbias:float()
-
-     mytester:assertlt(error:abs():max(), testparams.precision_backward,
-                       'error on state (backward) ')
-     mytester:assertlt(werror:abs():max(), testparams.precision_backward,
-                       'error on weight (backward) ')
-     mytester:assertlt(berror:abs():max(), testparams.precision_backward,
-                       'error on bias (backward) ')
-  end
-
-  test(sconv, gconv)
-  local gconv = cast(cudnn.convert(sconv, cudnn):cuda())
-  mytester:asserteq(torch.typename(gconv), 'cudnn.VolumetricConvolution', 'conversion type check')
-  test(sconv, gconv)
+   testLayer(sconv, gconv, input, gradOutput, scale, true, true) -- batch
+   testLayer(sconv, gconv, input, gradOutput, scale, true, false) -- non-batch
+   local originalTypename = torch.typename(gconv)
+   local gconv = cast(cudnn.convert(sconv, cudnn))
+   mytester:asserteq(torch.typename(gconv),
+                     originalTypename, 'conversion type check')
+   testLayer(sconv, gconv, input, gradOutput, scale, true, true)
+   testLayer(sconv, gconv, input, gradOutput, scale, true, false)
 end
 
-function cudnntest.VolumetricMaxPooling_batch()
-   if testparams.test_type ~= 'torch.CudaTensor' then return end
+function cudnntest.VolumetricMaxPooling()
    local bs = math.random(1,4)
    local from = math.random(1,4)
    local ki = math.random(2,4)
@@ -638,89 +325,23 @@ function cudnntest.VolumetricMaxPooling_batch()
    local ini = (outi-1)*si+ki
    local inj = (outj-1)*sj+kj
    local ink = (outk-1)*sk+kk
+
    local input = torch.randn(bs,from,ink,inj,ini):cuda()
    local gradOutput = torch.randn(bs,from,outk,outj,outi):cuda()
-
-   local sconv = nn.VolumetricMaxPooling(kk,ki,kj,sk,si,sj):float()
-   local gconv = cast(cudnn.VolumetricMaxPooling(kk,ki,kj,sk,si,sj))
-   local function test(sconv, gconv)
-     local groundtruth = sconv:forward(input:float())
-     local groundgrad = sconv:backward(input:float(), gradOutput:float())
-     cutorch.synchronize()
-
-     local rescuda = gconv:forward(cast(input))
-     local resgrad = gconv:backward(cast(input), cast(gradOutput))
-     cutorch.synchronize()
-
-     mytester:asserteq(rescuda:dim(), 5, 'error in dimension')
-     mytester:asserteq(resgrad:dim(), 5, 'error in dimension')
-     local error = rescuda:float() - groundtruth:float()
-     mytester:assertlt(error:abs():max(), testparams.precision_forward, 'error on state (forward) ')
-     error = resgrad:float() - groundgrad:float()
-     mytester:assertlt(error:abs():max(), testparams.precision_backward, 'error on state (backward) ')
-
-     -- IO
-     local ferr,berr = jac.testIO(gconv, cast(input))
-     mytester:assertlt(ferr, testparams.precision_io, torch.typename(gconv) .. ' - i/o forward err ')
-     mytester:assertlt(berr, testparams.precision_io, torch.typename(gconv) .. ' - i/o backward err ')
-   end
-
-   test(sconv, gconv)
-   local gconv = cast(cudnn.convert(sconv, cudnn):cuda())
-   mytester:asserteq(torch.typename(gconv), 'cudnn.VolumetricMaxPooling', 'conversion type check')
-   test(sconv, gconv)
-end
-
-function cudnntest.VolumetricMaxPooling_single()
-   if not testparams.test_type == 'torch.CudaTensor' then return end
-   local from = math.random(1,32)
-   local ki = math.random(2,4)
-   local kj = math.random(2,4)
-   local kk = math.random(2,4)
-   local si = ki
-   local sj = kj
-   local sk = kk
-   local outi = math.random(1,64)
-   local outj = math.random(1,64)
-   local outk = math.random(1,64)
-   local ini = (outi-1)*si+ki
-   local inj = (outj-1)*sj+kj
-   local ink = (outk-1)*sk+kk
-   local input = torch.randn(from,ink,inj,ini):cuda()
-   local gradOutput = torch.randn(from,outk,outj,outi):cuda()
-
-   local sconv = nn.VolumetricMaxPooling(kk,ki,kj,sk,si,sj):float()
+   local sconv = nn.VolumetricMaxPooling(kk,ki,kj,sk,si,sj):cuda()
    local gconv = cast(cudnn.VolumetricMaxPooling(kk,ki,kj,sk,si,sj))
 
-   local function test(sconv, gconv)
-      local groundtruth = sconv:forward(input:float())
-      local groundgrad = sconv:backward(input:float(), gradOutput:float())
-      cutorch.synchronize()
-      local _ = gconv:forward(cast(input))
-      -- serialize and deserialize
-      torch.save('modelTemp.t7', gconv)
-      gconv = torch.load('modelTemp.t7')
-      local rescuda = gconv:forward(cast(input))
-      local resgrad = gconv:backward(cast(input), cast(gradOutput))
-      cutorch.synchronize()
-      mytester:asserteq(rescuda:dim(), 4, 'error in dimension')
-      mytester:asserteq(resgrad:dim(), 4, 'error in dimension')
-      local error = rescuda:float() - groundtruth:float()
-      mytester:assertlt(error:abs():max(), testparams.precision_forward,
-                        'error on state (forward) ')
-      error = resgrad:float() - groundgrad:float()
-      mytester:assertlt(error:abs():max(), testparams.precision_backward,
-                        'error on state (backward) ')
-   end
-
-   test(sconv, gconv)
-   local gconv = cast(cudnn.convert(sconv, cudnn):cuda())
-   mytester:asserteq(torch.typename(gconv), 'cudnn.VolumetricMaxPooling', 'conversion type check')
-   test(sconv, gconv)
+   testLayer(sconv, gconv, input, gradOutput, scale, false, true) -- batch
+   testLayer(sconv, gconv, input, gradOutput, scale, false, false) -- non-batch
+   local originalTypename = torch.typename(gconv)
+   local gconv = cast(cudnn.convert(sconv, cudnn))
+   mytester:asserteq(torch.typename(gconv),
+                     originalTypename, 'conversion type check')
+   testLayer(sconv, gconv, input, gradOutput, scale, false, true)
+   testLayer(sconv, gconv, input, gradOutput, scale, false, false)
 end
 
-function cudnntest.SpatialMaxPooling_batch()
-   if testparams.test_type ~= 'torch.CudaTensor' then return end
+function cudnntest.SpatialMaxPooling()
    local bs = math.random(1,32)
    local from = math.random(1,32)
    local ki = math.random(2,4)
@@ -734,86 +355,25 @@ function cudnntest.SpatialMaxPooling_batch()
    local ini = (outi-1)*si+ki - padi*2
    local inj = (outj-1)*sj+kj - padj*2
    local ceil_mode = math.random(0,1) == 1
+
    local input = torch.randn(bs,from,inj,ini):cuda()
    local gradOutput = torch.randn(bs,from,outj,outi):cuda()
-
-   local sconv = nn.SpatialMaxPooling(ki,kj,si,sj,padi,padj):cuda()
-   if ceil_mode then sconv:ceil() end
-   local groundtruth = sconv:forward(input)
-   local groundgrad = sconv:backward(input, gradOutput)
-   cutorch.synchronize()
-   local gconv = cast(cudnn.SpatialMaxPooling(ki,kj,si,sj,padi,padj))
-   if ceil_mode then gconv:ceil() end
-   local rescuda = gconv:forward(cast(input))
-   -- serialize and deserialize
-   torch.save('modelTemp.t7', gconv)
-   gconv = torch.load('modelTemp.t7')
-   local rescuda = gconv:forward(cast(input))
-   local resgrad = gconv:backward(cast(input), cast(gradOutput))
-   cutorch.synchronize()
-   mytester:asserteq(rescuda:dim(), 4, 'error in dimension')
-   mytester:asserteq(resgrad:dim(), 4, 'error in dimension')
-   local error = rescuda:float() - groundtruth:float()
-   mytester:assertlt(error:abs():max(), testparams.precision_forward, 'error on state (forward) ')
-   error = resgrad:float() - groundgrad:float()
-   mytester:assertlt(error:abs():max(), testparams.precision_backward, 'error on state (backward) ')
-
-   -- IO
-   local ferr,berr = jac.testIO(gconv, cast(input))
-   mytester:assertlt(ferr, testparams.precision_io, torch.typename(gconv) .. ' - i/o forward err ')
-   mytester:assertlt(berr, testparams.precision_io, torch.typename(gconv) .. ' - i/o backward err ')
-end
-
-function cudnntest.SpatialMaxPooling_single()
-   local from = math.random(1,32)
-   local ki = math.random(2,4)
-   local kj = math.random(2,4)
-   local si = math.random(1,4)
-   local sj = math.random(1,4)
-   local outi = math.random(16,64)
-   local outj = math.random(16,64)
-   local padi = math.random(0,ki/2-1)
-   local padj = math.random(0,kj/2-1)
-   local ini = (outi-1)*si+ki - padi*2
-   local inj = (outj-1)*sj+kj - padj*2
-   local ceil_mode = math.random(0,1) == 1
-   local input = torch.randn(from,inj,ini):cuda()
-   local gradOutput = torch.randn(from,outj,outi):cuda()
-
    local sconv = nn.SpatialMaxPooling(ki,kj,si,sj,padi,padj):cuda()
    if ceil_mode then sconv:ceil() end
    local gconv = cast(cudnn.SpatialMaxPooling(ki,kj,si,sj,padi,padj))
    if ceil_mode then gconv:ceil() end
 
-   local function test(sconv, gconv)
-      local groundtruth = sconv:forward(input)
-      local groundgrad = sconv:backward(input, gradOutput)
-      cutorch.synchronize()
-      local _ = gconv:forward(cast(input))
-      -- serialize and deserialize
-      torch.save('modelTemp.t7', gconv)
-      gconv = torch.load('modelTemp.t7')
-      local rescuda = gconv:forward(cast(input))
-      local resgrad = gconv:backward(cast(input), cast(gradOutput))
-      cutorch.synchronize()
-      mytester:asserteq(rescuda:dim(), 3, 'error in dimension')
-      mytester:asserteq(resgrad:dim(), 3, 'error in dimension')
-      local error = rescuda:float() - groundtruth:float()
-      mytester:assertlt(error:abs():max(), testparams.precision_forward,
-                        'error on state (forward) ')
-      error = resgrad:float() - groundgrad:float()
-      mytester:assertlt(error:abs():max(), testparams.precision_backward,
-                        'error on state (backward) ')
-   end
-
-   test(sconv, gconv)
-   local gconv = cast(cudnn.convert(sconv, cudnn):cuda())
-   mytester:asserteq(torch.typename(gconv), 'cudnn.SpatialMaxPooling', 'conversion type check')
-   test(sconv, gconv)
+   testLayer(sconv, gconv, input, gradOutput, scale, false, true) -- batch
+   testLayer(sconv, gconv, input, gradOutput, scale, false, false) -- non-batch
+   local originalTypename = torch.typename(gconv)
+   local gconv = cast(cudnn.convert(sconv, cudnn))
+   mytester:asserteq(torch.typename(gconv),
+                     originalTypename, 'conversion type check')
+   testLayer(sconv, gconv, input, gradOutput, scale, false, true)
+   testLayer(sconv, gconv, input, gradOutput, scale, false, false)
 end
 
-function cudnntest.SpatialAveragePooling_batch()
-   if testparams.test_type ~= 'torch.CudaTensor' then return end
+function cudnntest.SpatialAveragePooling()
    local bs = math.random(1,32)
    local from = math.random(1,32)
    local ki = math.random(2,4)
@@ -824,190 +384,57 @@ function cudnntest.SpatialAveragePooling_batch()
    local outj = math.random(1,64)
    local ini = (outi-1)*si+ki
    local inj = (outj-1)*sj+kj
+
    local input = torch.randn(bs,from,inj,ini):cuda()
    local gradOutput = torch.randn(bs,from,outj,outi):cuda()
-
-   local sconv = nn.SpatialAveragePooling(ki,kj,si,sj):cuda()
-   local groundtruth = sconv:forward(input):clone()
-   local groundgrad = sconv:backward(input, gradOutput)
-   cutorch.synchronize()
-   local gconv = cast(cudnn.SpatialAveragePooling(ki,kj,si,sj))
-   local rescuda = gconv:forward(cast(input))
-   -- serialize and deserialize
-   torch.save('modelTemp.t7', gconv)
-   gconv = torch.load('modelTemp.t7')
-   local rescuda = gconv:forward(cast(input))
-   local resgrad = gconv:backward(cast(input), gradOutput)
-   cutorch.synchronize()
-   mytester:asserteq(rescuda:dim(), 4, 'error in dimension')
-   mytester:asserteq(resgrad:dim(), 4, 'error in dimension')
-   local error = rescuda:float() - groundtruth:float()
-   mytester:assertlt(error:abs():max(), testparams.precision_forward, 'error on state (forward) ')
-   error = resgrad:float() - groundgrad:float()
-   mytester:assertlt(error:abs():max(), testparams.precision_backward, 'error on state (backward) ')
-
-   -- IO
-   local ferr,berr = jac.testIO(gconv, cast(input))
-   mytester:assertlt(ferr, testparams.precision_io, torch.typename(gconv) .. ' - i/o forward err ')
-   mytester:assertlt(berr, testparams.precision_io, torch.typename(gconv) .. ' - i/o backward err ')
-end
-
-function cudnntest.SpatialAveragePooling_single()
-   local from = math.random(1,32)
-   local ki = math.random(2,4)
-   local kj = math.random(2,4)
-   local si = math.random(2,4)
-   local sj = math.random(2,4)
-   local outi = math.random(1,64)
-   local outj = math.random(1,64)
-   local ini = (outi-1)*si+ki
-   local inj = (outj-1)*sj+kj
-   local input = torch.randn(from,inj,ini):cuda()
-   local gradOutput = torch.randn(from,outj,outi):cuda()
-
    local sconv = nn.SpatialAveragePooling(ki,kj,si,sj):cuda()
    local gconv = cast(cudnn.SpatialAveragePooling(ki,kj,si,sj))
+
+   testLayer(sconv, gconv, input, gradOutput, scale, false, true) -- batch
+   testLayer(sconv, gconv, input, gradOutput, scale, false, false) -- non-batch
+   local originalTypename = torch.typename(gconv)
+   local gconv = cast(cudnn.convert(sconv, cudnn))
+   mytester:asserteq(torch.typename(gconv),
+                     originalTypename, 'conversion type check')
+   testLayer(sconv, gconv, input, gradOutput, scale, false, true)
+   testLayer(sconv, gconv, input, gradOutput, scale, false, false)
 
    mytester:assert(cudnn.C.CUDNN_POOLING_AVERAGE ~= nil, 'back-compat broken')
-
-   local function test(sconv, gconv)
-      local groundtruth = sconv:forward(input):clone()
-      local groundgrad = sconv:backward(input, gradOutput)
-      cutorch.synchronize()
-      local _ = gconv:forward(cast(input))
-      -- serialize and deserialize
-      torch.save('modelTemp.t7', gconv)
-      gconv = torch.load('modelTemp.t7')
-      local rescuda = gconv:forward(cast(input))
-      local resgrad = gconv:backward(cast(input), cast(gradOutput))
-      cutorch.synchronize()
-      mytester:asserteq(rescuda:dim(), 3, 'error in dimension')
-      mytester:asserteq(resgrad:dim(), 3, 'error in dimension')
-      local error = rescuda:float() - groundtruth:float()
-      mytester:assertlt(error:abs():max(), testparams.precision_forward,
-                        'error on state (forward) ')
-      error = resgrad:float() - groundgrad:float()
-      mytester:assertlt(error:abs():max(), testparams.precision_backward,
-                        'error on state (backward) ')
-   end
-
-   test(sconv, gconv)
-   local gconv = cast(cudnn.convert(sconv, cudnn):cuda())
-   mytester:asserteq(torch.typename(gconv), 'cudnn.SpatialAveragePooling', 'conversion type check')
-   test(sconv, gconv)
 end
 
-local function nonlinSingle(nonlin)
-   local from = math.random(1,32)
-   local outi = math.random(1,64)
-   local outj = math.random(1,64)
-   local ini = outi
-   local inj = outj
-   local input = torch.randn(from,inj,ini):cuda()
-   local gradOutput = torch.randn(from,outj,outi):cuda()
-
-   local sconv = nn[nonlin]():cuda()
-   local gconv = cast(cudnn[nonlin](inplace))
-   local function test(sconv, gconv)
-     local groundtruth = sconv:forward(input)
-     local groundgrad = sconv:backward(input, gradOutput)
-     cutorch.synchronize()
-     -- 50% prob to choose inplace or out-of-place
-     local inplace = false
-     if math.random(0,1) == 1 then
-        inplace = true
-     end
-     local input__ = cast(input:clone())
-     local _ = gconv:forward(input__)
-
-     -- serialize and deserialize
-     torch.save('modelTemp.t7', gconv)
-     gconv = torch.load('modelTemp.t7')
-
-     local input__ = cast(input:clone())
-     local gradOutput__ = cast(gradOutput:clone())
-     local rescuda = gconv:forward(input__)
-     local resgrad = gconv:backward(input__, gradOutput__)
-     cutorch.synchronize()
-     mytester:asserteq(rescuda:dim(), 3, 'error in dimension')
-     mytester:asserteq(resgrad:dim(), 3, 'error in dimension')
-     local error = rescuda:float() - groundtruth:float()
-     mytester:assertlt(error:abs():max(), testparams.precision_forward,
-                       'error on state (forward) ')
-     error = resgrad:float() - groundgrad:float()
-     mytester:assertlt(error:abs():max(), testparams.precision_backward,
-                       'error on state (backward) ')
-     -- IO
-     local ferr,berr = jac.testIO(gconv, cast(input))
-     mytester:assertlt(ferr, testparams.precision_io, torch.typename(gconv) .. ' - i/o forward err ')
-     mytester:assertlt(berr, testparams.precision_io, torch.typename(gconv) .. ' - i/o backward err ')
-   end
-
-   test(sconv, gconv)
-   local gconv = cast(cudnn.convert(sconv, cudnn))
-   mytester:asserteq(torch.typename(gconv), 'cudnn.'..nonlin, 'conversion type check')
-   test(sconv, gconv)
-end
-
-local function nonlinBatch(nonlin)
+local function nonlin(nonlin, inplace)
    local bs = math.random(1,32)
    local from = math.random(1,32)
    local outi = math.random(1,64)
    local outj = math.random(1,64)
    local ini = outi
    local inj = outj
+
    local input = torch.randn(bs,from,inj,ini):cuda()
    local gradOutput = torch.randn(bs,from,outj,outi):cuda()
-
-   local sconv = nn[nonlin]():cuda()
+   local sconv = nn[nonlin](inplace):cuda()
    local gconv = cast(cudnn[nonlin](inplace))
-   local function test(sconv, gconv)
-      local groundtruth = sconv:forward(input)
-      local groundgrad = sconv:backward(input, gradOutput)
-      cutorch.synchronize()
-      -- 50% prob to choose inplace or out-of-place
-      local inplace = false
-      if math.random(0,1) == 1 then
-         inplace = true
-      end
-      local input__ = cast(input:clone())
-      local rescuda = gconv:forward(input__)
 
-      -- serialize and deserialize
-      torch.save('modelTemp.t7', gconv)
-      gconv = torch.load('modelTemp.t7')
-
-      local input__ = cast(input:clone())
-      local gradOutput__ = cast(gradOutput:clone())
-      local rescuda = gconv:forward(input__)
-      local resgrad = gconv:backward(input__, gradOutput__)
-      cutorch.synchronize()
-      mytester:asserteq(rescuda:dim(), 4, 'error in dimension')
-      mytester:asserteq(resgrad:dim(), 4, 'error in dimension')
-      local error = rescuda:float() - groundtruth:float()
-      mytester:assertlt(error:abs():max(), testparams.precision_forward,
-                        'error on state (forward) ')
-      error = resgrad:float() - groundgrad:float()
-      mytester:assertlt(error:abs():max(), testparams.precision_backward,
-                        'error on state (backward) ')
-     -- IO
-     local ferr,berr = jac.testIO(gconv, cast(input))
-     mytester:assertlt(ferr, testparams.precision_io, torch.typename(gconv) .. ' - i/o forward err ')
-     mytester:assertlt(berr, testparams.precision_io, torch.typename(gconv) .. ' - i/o backward err ')
-   end
-
-   test(sconv, gconv)
+   local description = 'inplace = ' .. tostring(inplace)
+   testLayer(sconv, gconv, input, gradOutput, scale, false, true, description)
+   testLayer(sconv, gconv, input, gradOutput, scale, false, false, description)
+   local originalTypename = torch.typename(gconv)
    local gconv = cast(cudnn.convert(sconv, cudnn))
-   mytester:asserteq(torch.typename(gconv), 'cudnn.'..nonlin, 'conversion type check')
-   test(sconv, gconv)
+   mytester:asserteq(torch.typename(gconv),
+                     originalTypename, 'conversion type check')
+   testLayer(sconv, gconv, input, gradOutput, scale, false, true, description)
+   testLayer(sconv, gconv, input, gradOutput, scale, false, false, description)
 end
 
-function cudnntest.ReLU_single()
-   nonlinSingle('ReLU')
+function cudnntest.ReLU()
+   nonlin('ReLU', true) -- inplace
+   nonlin('ReLU', false) -- out of place
 end
-
-function cudnntest.ReLU_batch()
-   nonlinBatch('ReLU')
+function cudnntest.Tanh()
+   nonlin('Tanh', false) -- out of place
+end
+function cudnntest.Sigmoid()
+   nonlin('Sigmoid', false) -- out of place
 end
 
 function cudnntest.ClippedReLU_single()
@@ -1021,22 +448,6 @@ function cudnntest.ClippedReLU_single()
     mytester:assertTensorEq(output, expectedOutput)
 end
 
-function cudnntest.Tanh_single()
-   nonlinSingle('Tanh')
-end
-
-function cudnntest.Tanh_batch()
-   nonlinBatch('Tanh')
-end
-
-function cudnntest.Sigmoid_single()
-   nonlinSingle('Sigmoid')
-end
-
-function cudnntest.Sigmoid_batch()
-   nonlinBatch('Sigmoid')
-end
-
 function cudnntest.SpatialCrossMapLRN_batch()
    local bs = math.random(4,10)
    local inputSize = math.random(6,9)
@@ -1046,219 +457,65 @@ function cudnntest.SpatialCrossMapLRN_batch()
    local beta  = math.random(0,100)/100
    local k = math.random(1,3)
 
-   local tm = {}
-   local title = string.format('SpatialCrossMapLRN.forward')
-   times[title] = tm
-
    local input = torch.rand(bs, nbfeatures, inputSize, inputSize):cuda()
    local gradOutput = torch.rand(input:size()):cuda()
    local sconv = nn.SpatialCrossMapLRN(size, alpha, beta, k):cuda()
    local gconv = cast(cudnn.SpatialCrossMapLRN(size, alpha, beta, k))
 
-   local function test(sconv, gconv)
-     local groundtruth = sconv:forward(input):clone()
-     local groundgrad = sconv:backward(input, gradOutput)
-     cutorch.synchronize()
-     gconv:forward(cast(input))
-     -- serialize and deserialize
-     torch.save('modelTemp.t7', gconv)
-     gconv = torch.load('modelTemp.t7')
-     local rescuda = gconv:forward(cast(input))
-     local resgrad = gconv:backward(cast(input), cast(gradOutput))
-     cutorch.synchronize()
-     mytester:asserteq(rescuda:dim(), 4, 'error in dimension')
-     mytester:asserteq(resgrad:dim(), 4, 'error in dimension')
-     local error = rescuda:float() - groundtruth:float()
-     mytester:assertlt(error:abs():max(), testparams.precision_forward,
-                       'error on state (forward) ')
-     error = resgrad:float() - groundgrad:float()
-     mytester:assertlt(error:abs():max(), testparams.precision_backward,
-                       'error on state (backward) ')
-   end
-
-   test(sconv, gconv)
+   testLayer(sconv, gconv, input, gradOutput, scale, true, true) -- batch
+   testLayer(sconv, gconv, input, gradOutput, scale, true, false) -- non-batch
+   local originalTypename = torch.typename(gconv)
    local gconv = cast(cudnn.convert(sconv, cudnn))
-   mytester:asserteq(torch.typename(gconv), 'cudnn.SpatialCrossMapLRN', 'conversion type check')
-   test(sconv, gconv)
+   mytester:asserteq(torch.typename(gconv),
+                     originalTypename, 'conversion type check')
+   testLayer(sconv, gconv, input, gradOutput, scale, true, true)
+   testLayer(sconv, gconv, input, gradOutput, scale, true, false)
 end
-
 
 function cudnntest.SoftMax_single()
+   local bs = math.random(1, 32)
    local sz = math.random(1,64)
-   local input = torch.randn(sz):cuda()
-   local gradOutput = torch.randn(sz):cuda()
+   local input = torch.randn(bs, sz):cuda()
+   local gradOutput = torch.randn(bs, sz):cuda()
 
    local sconv = nn.SoftMax():cuda()
-   local groundtruth = sconv:forward(input)
-   local groundgrad = sconv:backward(input, gradOutput)
-   cutorch.synchronize()
    local gconv = cast(cudnn.SoftMax())
-   local _ = gconv:forward(cast(input))
 
    -- serialize and deserialize
    torch.save('modelTemp.t7', gconv)
    gconv = torch.load('modelTemp.t7')
 
-   local rescuda = gconv:forward(cast(input))
-   local resgrad = gconv:backward(cast(input), cast(gradOutput))
-   cutorch.synchronize()
-   local error = rescuda:float() - groundtruth:float()
-   local errmax = error:abs():max()
-   if (errmax ~= errmax) then
-      local state = {}
-      state.input = input
-      state.gradOutput = gradOutput
-      state.rescuda = rescuda
-      state.resgrad = resgrad
-      state.groundtruth = groundtruth
-      state.groundgrad = groundgrad
-      print(#input)
-      torch.save('badSoftMax.t7', state)
-      print(#input)
-   end
-   mytester:assertlt(errmax, testparams.precision_forward,
-                     'error on state (forward) ')
-   error = resgrad:float() - groundgrad:float()
-   errmax = error:abs():max()
-   if (errmax ~= errmax) then
-      local state = {}
-      state.input = input
-      state.gradOutput = gradOutput
-      state.rescuda = rescuda
-      state.resgrad = resgrad
-      state.groundtruth = groundtruth
-      state.groundgrad = groundgrad
-      print(#input)
-      torch.save('badSoftMax.t7', state)
-      print(#input)
-   end
-   mytester:assertlt(errmax, testparams.precision_backward,
-                     'error on state (backward) ')
+   testLayer(sconv, gconv, input, gradOutput, scale, false, true) -- batch
+   testLayer(sconv, gconv, input, gradOutput, scale, false, false) -- non-batch
+   local originalTypename = torch.typename(gconv)
+   local gconv = cast(cudnn.convert(sconv, cudnn))
+   mytester:asserteq(torch.typename(gconv),
+                     originalTypename, 'conversion type check')
+   testLayer(sconv, gconv, input, gradOutput, scale, false, true)
+   testLayer(sconv, gconv, input, gradOutput, scale, false, false)
 end
 
-function cudnntest.SoftMax_batch()
-   local bs = math.random(1,32)
-   local from = math.random(1,32)
-   local outi = math.random(1,64)
-   local outj = math.random(1,64)
-   local ini = outi
-   local inj = outj
-   local input = torch.randn(bs,from,inj,ini):cuda()
-   local gradOutput = torch.randn(bs,from,outj,outi):cuda()
+function cudnntest.LogSoftMax()
+   local bs = math.random(1, 32)
+   local sz = math.random(1,64)
+   local input = torch.randn(bs, sz):cuda()
+   local gradOutput = torch.randn(bs, sz):cuda()
 
-   local sconv = nn.SoftMax():cuda()
-   local groundtruth = sconv:forward(input:view(bs,-1))
-   local groundgrad = sconv:backward(input, gradOutput)
-   cutorch.synchronize()
-   local gconv = cast(cudnn.SoftMax())
-   local rescuda = gconv:forward(cast(input))
+   local sconv = nn.LogSoftMax():cuda()
+   local gconv = cast(cudnn.LogSoftMax())
 
    -- serialize and deserialize
    torch.save('modelTemp.t7', gconv)
    gconv = torch.load('modelTemp.t7')
 
-   local rescuda = gconv:forward(cast(input))
-   local resgrad = gconv:backward(cast(input), cast(gradOutput))
-   cutorch.synchronize()
-   mytester:asserteq(rescuda:dim(), 4, 'error in dimension')
-   mytester:asserteq(resgrad:dim(), 4, 'error in dimension')
-
-   local error = rescuda:float() - groundtruth:float()
-   mytester:assertlt(error:abs():max(),
-                     testparams.precision_forward, 'error on state (forward) ')
-   error = resgrad:float() - groundgrad:float()
-   mytester:assertlt(error:abs():max(),
-                     testparams.precision_backward, 'error on state (backward) ')
-
-   -- IO
-   local ferr,berr = jac.testIO(gconv, cast(input))
-   mytester:assertlt(ferr, testparams.precision_io, torch.typename(gconv) .. ' - i/o forward err ')
-   mytester:assertlt(berr, testparams.precision_io, torch.typename(gconv) .. ' - i/o backward err ')
-end
-
-
-function cudnntest.LogSoftMax_single()
-   local sz = math.random(1,64)
-   local input = torch.randn(sz):cuda()
-   local gradOutput = torch.randn(sz):cuda()
-
-   local sconv = nn.LogSoftMax():cuda()
-   local gconv = cast(cudnn.LogSoftMax())
-
-   local function test(sconv, gconv)
-      local groundtruth = sconv:forward(input)
-      local groundgrad = sconv:backward(input, gradOutput)
-      cutorch.synchronize()
-      local _ = gconv:forward(cast(input))
-
-      -- serialize and deserialize
-      torch.save('modelTemp.t7', gconv)
-      gconv = torch.load('modelTemp.t7')
-
-      local rescuda = gconv:forward(cast(input))
-      local resgrad = gconv:backward(cast(input), cast(gradOutput))
-      cutorch.synchronize()
-      local error = rescuda:float() - groundtruth:float()
-      local errmax = error:abs():max()
-      mytester:assertlt(errmax, testparams.precision_forward,
-                        'error on state (forward) ')
-      error = resgrad:float() - groundgrad:float()
-      errmax = error:abs():max()
-      mytester:assertlt(errmax, testparams.precision_backward,
-                        'error on state (backward) ')
-      -- IO
-      local ferr,berr = jac.testIO(gconv, cast(input))
-      mytester:assertlt(ferr, testparams.precision_io, torch.typename(gconv) .. ' - i/o forward err ')
-      mytester:assertlt(berr, testparams.precision_io, torch.typename(gconv) .. ' - i/o backward err ')
-   end
-
-   test(sconv, gconv)
+   testLayer(sconv, gconv, input, gradOutput, scale, false, true) -- batch
+   testLayer(sconv, gconv, input, gradOutput, scale, false, false) -- non-batch
+   local originalTypename = torch.typename(gconv)
    local gconv = cast(cudnn.convert(sconv, cudnn))
-   mytester:asserteq(torch.typename(gconv), 'cudnn.LogSoftMax', 'conversion type check')
-   test(sconv, gconv)
-end
-
-function cudnntest.LogSoftMax_batch()
-   local bs = math.random(1,32)
-   local from = math.random(1,32)
-   local input = torch.randn(bs,from):cuda()
-   local gradOutput = torch.randn(bs,from):cuda()
-
-   local sconv = nn.LogSoftMax():cuda()
-   local gconv = cast(cudnn.LogSoftMax())
-   local function test(sconv, gconv)
-      local groundtruth = sconv:forward(input)
-      local groundgrad = sconv:backward(input, gradOutput)
-      cutorch.synchronize()
-      local rescuda = gconv:forward(cast(input))
-
-      -- serialize and deserialize
-      torch.save('modelTemp.t7', gconv)
-      gconv = torch.load('modelTemp.t7')
-
-      local rescuda = gconv:forward(cast(input))
-      local resgrad = gconv:backward(cast(input), cast(gradOutput))
-      cutorch.synchronize()
-      mytester:asserteq(rescuda:dim(), 2, 'error in dimension')
-      mytester:asserteq(resgrad:dim(), 2, 'error in dimension')
-
-      local error = rescuda:float() - groundtruth:float()
-      mytester:assertlt(error:abs():max(),
-                        testparams.precision_forward, 'error on state (forward) ')
-      error = resgrad:float() - groundgrad:float()
-      mytester:assertlt(error:abs():max(),
-                        testparams.precision_backward, 'error on state (backward) ')
-
-      -- IO
-      local ferr,berr = jac.testIO(gconv, cast(input))
-      mytester:assertlt(ferr, testparams.precision_io, torch.typename(gconv) .. ' - i/o forward err ')
-      mytester:assertlt(berr, testparams.precision_io, torch.typename(gconv) .. ' - i/o backward err ')
-   end
-
-   test(sconv, gconv)
-   local gconv = cast(cudnn.convert(sconv, cudnn))
-   mytester:asserteq(torch.typename(gconv), 'cudnn.LogSoftMax', 'conversion type check')
-   test(sconv, gconv)
+   mytester:asserteq(torch.typename(gconv),
+                     originalTypename, 'conversion type check')
+   testLayer(sconv, gconv, input, gradOutput, scale, false, true)
+   testLayer(sconv, gconv, input, gradOutput, scale, false, false)
 end
 
 function cudnntest.SpatialLogSoftMax()
@@ -1290,9 +547,11 @@ function cudnntest.SpatialLogSoftMax()
         end
     end
     local err = (gi - ggi):abs():max()
-    mytester:assertlt(err, testparams.precision_backward, 'error in difference between central difference and :backward')
+    mytester:assertlt(err, testparams.precision_backward,
+                      'error in difference between central difference and :backward')
     local err = (op - gop):abs():max()
-    mytester:assertlt(err, testparams.precision_backward, 'error in difference between central difference and :backward')
+    mytester:assertlt(err, testparams.precision_backward,
+                      'error in difference between central difference and :backward')
 end
 
 local function testBatchNormalization(moduleName, inputSize)
@@ -1390,7 +649,6 @@ function cudnntest.SpatialCrossEntropyCriterion()
     local target = torch.Tensor(bsz, h, w):random(1, numLabels):cuda()
 
     local cri = cast(cudnn.SpatialCrossEntropyCriterion())
-
     local gcri = nn.CrossEntropyCriterion():cuda()
 
     local op = cri:forward(cast(input), cast(target))
@@ -1413,8 +671,8 @@ function cudnntest.SpatialCrossEntropyCriterion()
     ggi:div(h * w)
 
     local err = (gi - ggi):abs():max()
-    mytester:assertlt(err, testparams.precision_backward, 'error in difference between central difference and :backward')
-
+    mytester:assertlt(err, testparams.precision_backward,
+                      'error in difference between central difference and :backward')
 end
 
 function cudnntest.functional_bias2D()
@@ -1507,32 +765,36 @@ math.randomseed(os.time())
 mytester = torch.Tester()
 mytester:add(cudnntest)
 
-if torch.random(1,2) == 1 then
-   cudnn.benchmark = true -- run manual auto-tuner
---   cudnn.verbose = true
-end
+for i = 1, 1 do -- cutorch.getDeviceCount() do
+   for _, benchmark in ipairs({false, true}) do
+      cudnn.benchmark = benchmark
 
+      local prop = cutorch.getDeviceProperties(i)
+      print('Running test on device: #' .. i .. ' : ' .. prop.name
+               .. ' with benchmark = ' .. tostring(cudnn.benchmark))
 
-for i=1,cutorch.getDeviceCount() do
+      cutorch.setDevice(i)
 
-   local prop = cutorch.getDeviceProperties(i)
-   print('Running test on device: #' .. i .. ' : ' .. prop.name)
+      print'Testing torch.CudaTensor'
+      testparams = testparams_float
+      mytester:run()
 
-   cutorch.setDevice(i)
+      print(
+[[Half and Double Tensor tests are disabled due to missing functionality.
+They will be enabled once fully fixed and functional.
+See https://github.com/soumith/cudnn.torch/issues/226 and https://github.com/soumith/cudnn.torch/issues/225 for progress
+]])
 
-   print'Testing torch.CudaHalfTensor'
-   testparams = testparams_half
-   mytester:run()
+      -- Developers, do not commit uncommented regions until bindings fixed
+      -- print'Testing torch.CudaHalfTensor'
+      -- testparams = testparams_half
+      -- mytester:run()
 
-   print'Testing torch.CudaTensor'
-   testparams = testparams_float
-   mytester:run()
-
---   double tensor may be broken at some places, gets NaNs.
---   print'Testing torch.CudaDoubleTensor'
---   testparams = testparams_double
---   mytester:run()
-
+      --   double tensor may be broken at some places, gets NaNs.
+      --   print'Testing torch.CudaDoubleTensor'
+      --   testparams = testparams_double
+      --   mytester:run()
+   end
 end
 
 os.execute('rm -f modelTemp.t7')
