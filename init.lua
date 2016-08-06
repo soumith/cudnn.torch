@@ -22,7 +22,7 @@ local function destroy(handle)
         -- streams go from 0 to maxStreamsPerDevice - 1
         for j=0,maxStreamsPerDevice - 1 do
             if handleStatus[i][j + 1] == 1 then -- if handle was created
-                errcheck('cudnnDestroy', handle[(((i-1)*maxStreamsPerDevice) + j)]);
+                cudnn.errcheck('cudnnDestroy', handle[(((i-1)*maxStreamsPerDevice) + j)]);
             end
         end
     end
