@@ -414,3 +414,9 @@ function SpatialFullConvolution:clearState()
    self:clearDesc()
    return nn.Module.clearState(self)
 end
+
+function SpatialFullConvolution:read(file, version)
+   parent.read(self, file)
+   self.adjW = self.adjW or 0
+   self.adjH = self.adjH or 0
+end
