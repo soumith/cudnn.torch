@@ -248,6 +248,12 @@ function RNN:resetStates()
    if self.cellInput then
       self.cellInput = nil
    end
+   if self.gradHiddenOutput then
+      self.gradHiddenOutput = nil
+   end
+   if self.gradCellOutput then
+      self.gradCellOutput = nil
+   end
 end
 
 
