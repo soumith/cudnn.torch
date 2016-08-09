@@ -37,7 +37,7 @@ cudnn.typemap = {
 }
 
 local sizeofmap = {
-   ['torch.CudaHalfTensor']   = ffi.sizeof('half'),
+   ['torch.CudaHalfTensor']   = cutorch.hasHalf and ffi.sizeof('half') or 2,
    ['torch.CudaTensor']       = ffi.sizeof('float'),
    ['torch.CudaDoubleTensor'] = ffi.sizeof('double'),
 }
