@@ -784,12 +784,12 @@ math.randomseed(os.time())
 mytester = torch.Tester()
 mytester:add(cudnntest)
 
--- new flag to use FindEx instead of Find : disabled as we encounter errors.
-cudnn.useFindEx=false
+-- new flag to use FindEx instead of Find
+cudnn.useFindEx=true
 cudnn.verbose=false
 
 for i = 1, cutorch.getDeviceCount() do
-   for _, benchmark in ipairs({false, true}) do
+   for _, benchmark in ipairs({false,true}) do
       cudnn.benchmark = benchmark
 
       local prop = cutorch.getDeviceProperties(i)

@@ -54,7 +54,7 @@ local function setupAlgo(self, algo_t, perf_t, findAPI_idx, getAPI, wsAPI, algSe
               if cudnn.useFindEx then
                  status = algo.call(self, findAPI,
                                      cudnn.getHandle(),
-                                     params[1], params[2], params[3], params[4], params[5], params[6], params[7],
+                                     params[1], params[2]:data(), params[3], params[4]:data(), params[5], params[6], params[7]:data(),
                                      1, intt:data(), perfResults, self.extraBuffer:data(), self.extraBuffer:nElement() * self.extraBuffer.elementSize())
 
               else
@@ -161,8 +161,11 @@ function algo.setupForwardAlgorithm(self, params)
    else
       algSearchMode = 'CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT'
    end
-
-   params = params or { self.iDesc[0], self.input_slice:data(), self.weightDesc[0], self.weight:data(), self.convDesc[0], self.oDesc[0], self.output_slice:data() }
+   params = params or { self.iDesc[0], self.input_slice, self.weightDesc[0], self.weight, self.convDesc[0], self.oDesc[0], self.output_slice}
+   -- supply a temporary for findEx
+   if cudnn.useFindEx and (cudnn.benchmark or cudnn.fastest) and not self.fmode then
+      params[7]=params[7]:clone()
+   end
    self.fwdAlgType = self.fmode or
       setupAlgo(self,"cudnnConvolutionFwdAlgo_t[?]", "cudnnConvolutionFwdAlgoPerf_t[?]",
                 1, 'cudnnGetConvolutionForwardAlgorithm',
@@ -174,7 +177,11 @@ function algo.setupBackwardFilterAlgorithm(self, params)
    if self.fastest_mode  or cudnn.fastest == true then
       algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST'
    end
-   params = params or { self.iDesc[0], self.input_slice:data(), self.oDesc[0], self.output_slice:data(), self.convDesc[0], self.weightDesc[0], self.weight:data() }
+   params = params or { self.iDesc[0], self.input_slice, self.oDesc[0], self.output_slice, self.convDesc[0], self.weightDesc[0], self.weight}
+   -- supply a temporary for findEx
+   if cudnn.useFindEx and (cudnn.benchmark or cudnn.fastest) and not self.bdmode then
+      params[7]=params[7]:clone()
+   end
    self.bwdFilterAlgType = self.bwmode or
       setupAlgo(self,"cudnnConvolutionBwdFilterAlgo_t[?]", "cudnnConvolutionBwdFilterAlgoPerf_t[?]",
                 2, 'cudnnGetConvolutionBackwardFilterAlgorithm',
@@ -187,7 +194,11 @@ function algo.setupBackwardDataAlgorithm(self, params)
    if self.fastest_mode  or cudnn.fastest == true then
       algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST'
    end
-   params =  params or { self.weightDesc[0], self.weight:data(), self.oDesc[0], self.output_slice:data(), self.convDesc[0], self.iDesc[0], self.input_slice:data() }
+   params =  params or { self.weightDesc[0], self.weight, self.oDesc[0], self.output_slice, self.convDesc[0], self.iDesc[0], self.input_slice }
+   -- supply a temporary for findEx
+   if cudnn.useFindEx and (cudnn.benchmark or cudnn.fastest) and not self.bdmode then
+      params[7]=params[7]:clone()
+   end
    self.bwdDataAlgType = self.bdmode or
       setupAlgo(self,"cudnnConvolutionBwdDataAlgo_t[?]", "cudnnConvolutionBwdDataAlgoPerf_t[?]",
                 3, 'cudnnGetConvolutionBackwardDataAlgorithm',

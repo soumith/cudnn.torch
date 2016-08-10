@@ -86,8 +86,8 @@ end
 function SpatialFullConvolution:updateOutput(input)
     self:createIODescriptors(input)
     if not self.bwdDataAlgType then
-       algo.setupBackwardDataAlgorithm(self, {self.weightDesc[0], self.weight:data(), self.iDesc[0],self.input_slice:data(),
-                                              self.convDesc[0], self.oDesc[0], self.output_slice:data()})
+       algo.setupBackwardDataAlgorithm(self, {self.weightDesc[0], self.weight, self.iDesc[0],self.input_slice,
+                                              self.convDesc[0], self.oDesc[0], self.output_slice})
     end
 
     -- Because SpatialFullConvolution is performing the adjoint of the forward
@@ -119,8 +119,8 @@ function SpatialFullConvolution:updateGradInput(input, gradOutput)
     assert(gradOutput:isContiguous(), 'gradOutput has to be contiguous')
     self:createIODescriptors(input)
     if not self.fwdDataAlgType then
-       algo.setupForwardAlgorithm(self, {self.oDesc[0], self.output_slice:data(), self.weightDesc[0], self.weight:data(),
-                                         self.convDesc[0], self.iDesc[0], self.input_slice:data() })
+       algo.setupForwardAlgorithm(self, {self.oDesc[0], self.output_slice, self.weightDesc[0], self.weight,
+                                         self.convDesc[0], self.iDesc[0], self.input_slice})
     end
 
     errcheck(self,'cudnnConvolutionForward', cudnn.getHandle(),
@@ -148,8 +148,8 @@ function SpatialFullConvolution:accGradParameters(input, gradOutput, scale)
     assert(gradOutput:isContiguous(), 'gradOutput has to be contiguous')
     self:createIODescriptors(input)
     if not self.bwdFilterAlgType then
-       algo.setupBackwardFilterAlgorithm(self, {self.oDesc[0], self.output_slice:data(), self.iDesc[0], self.input_slice:data(),
-                                                self.convDesc[0], self.weightDesc[0], self.weight:data()})
+       algo.setupBackwardFilterAlgorithm(self, {self.oDesc[0], self.output_slice, self.iDesc[0], self.input_slice,
+                                                self.convDesc[0], self.weightDesc[0], self.weight})
     end
 
     -- gradBias
