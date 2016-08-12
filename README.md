@@ -31,12 +31,16 @@ cudnn.SoftMax(fastMode [= false])          -- SoftMax across each image (just li
 cudnn.LogSoftMax()                         -- LogSoftMax across each image (just like nn.LogSoftMax)
 cudnn.SpatialSoftMax(fastMode [= false])   -- SoftMax across feature-maps (per spatial location)
 cudnn.SpatialLogSoftMax()                  -- LogSoftMax across feature-maps (per spatial location)
+cudnn.VolumetricSoftMax(fastMode [= false])   -- SoftMax across feature-maps (per spatial location)
+cudnn.VolumetricLogSoftMax()                  -- LogSoftMax across feature-maps (per spatial location)
 
 cudnn.SpatialCrossEntropyCriterion()       -- A spatial version of LogSoftMax + ClassNLLCriterion in one shot
+cudnn.VolumetricCrossEntropyCriterion()       -- A volumetric version of LogSoftMax + ClassNLLCriterion in one shot
 
 -- Batch Normalization
 cudnn.BatchNormalization(nFeature, eps, momentum, affine) -- same arguments as https://github.com/torch/nn/blob/master/doc/simple.md#nn.BatchNormalization
 cudnn.SpatialBatchNormalization(nFeature, eps, momentum, affine)
+cudnn.VolumetricBatchNormalization(nFeature, eps, momentum, affine)
 
 
 -- Volumetric inputs (4D or 5D batched mode)
