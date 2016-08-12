@@ -57,7 +57,7 @@ function RNN:reset(stdv)
             self.xDescs[0],
             weightSize:data(),
 	    self.datatype)
-   weightSize[1] = (weightSize[1] + 3) / 4 -- sizeof(float)
+   weightSize[1] = torch.floor((weightSize[1] + 3) / 4) -- sizeof(float)
    self.weight:resize(weightSize[1])
    self.weight:uniform(-stdv, stdv)
    self.gradWeight:resizeAs(self.weight):zero()
@@ -332,7 +332,7 @@ function RNN:updateOutput(input)
 	    self.seqLength,
             self.xDescs,
             workspaceSize:data())
-   workspaceSize[1] = (workspaceSize[1] + 3) / 4 -- sizeof(float)
+   workspaceSize[1] = torch.floor((workspaceSize[1] + 3) / 4) -- sizeof(float)
    if self.workspace:size(1) < workspaceSize[1] then
       self.workspace:resize(workspaceSize[1])
    end
@@ -345,7 +345,7 @@ function RNN:updateOutput(input)
 	       self.seqLength,
                self.xDescs,
                reserveSize:data())
-      reserveSize[1] = (reserveSize[1] + 3) / 4 -- sizeof(float)
+      reserveSize[1] = torch.floor((reserveSize[1] + 3) / 4) -- sizeof(float)
       if self.reserve:dim() == 0 or
          self.reserve:size(1) < reserveSize[1] then
          self.reserve:resize(reserveSize[1])
