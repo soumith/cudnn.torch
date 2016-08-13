@@ -64,11 +64,10 @@ function torch.CudaDoubleTensor:mean()
    return self:cuda():mean()
 end
 
--- experiment: what if we return random *even* number for half, random otherwise
--- did not help this time, but let's keep this manipulation point for the future
-local function random2(min,max)
-   if false then -- testparams.test_type == 'torch.CudaHalfTensor' then
-      return math.ceil((math.random(min,max)+1)/2)
+-- whapper for math.random() to accomodate certain limitations for 'half'
+local function random2(min,max, half_max)
+   if half_max and testparams.test_type == 'torch.CudaHalfTensor' then
+      return math.random(min,half_max)
    else
       return math.random(min,max)
    end
@@ -136,10 +135,10 @@ function cudnntest.SpatialConvolution()
    local bs = random2(1,32)
    local from = random2(1,32)
    local to = random2(1,64)
-   local ki = random2(1,15)
-   local kj = random2(1,15)
-   local si = random2(1,ki)
-   local sj = random2(1,kj)
+   local ki = random2(1,9,4)
+   local kj = random2(1,9,4)
+   local si = random2(1,ki, 1)
+   local sj = random2(1,kj, 1)
    local outi = random2(1,64)
    local outj = random2(1,64)
    local ini = (outi-1)*si+ki
@@ -168,10 +167,10 @@ function cudnntest.SpatialFullConvolution()
    local bs = random2(1,32)
    local from = random2(1,32)
    local to = random2(1,64)
-   local ki = random2(1,15)
-   local kj = random2(1,15)
-   local si = random2(1,ki)
-   local sj = random2(1,kj)
+   local ki = random2(1,9)
+   local kj = random2(1,9)
+   local si = random2(1,ki,1)
+   local sj = random2(1,kj,1)
    local ini = random2(1,64)
    local inj = random2(1,64)
    local outi = (ini-1)*si+ki
@@ -196,12 +195,16 @@ function cudnntest.SpatialFullConvolution()
 end
 
 function cudnntest.TemporalConvolution()
-   local bs = random2(1,32)
+   if testparams.test_type == 'torch.CudaHalfTensor' then
+      -- was not able to foind any parameters that would work for half
+      return
+   end
+   local bs = random2(2,32)
    local inputFrameSize = random2(1,64)
    local outputFrameSize = random2(1,64)
-   local ki = random2(1,15)
-   local si = random2(1,ki)
-   local outi = random2(1,15)
+   local ki = random2(2,6)
+   local si = random2(2,ki,1)
+   local outi = random2(2,9,4)
    local ini = (outi - 1) * si + ki
    local scale = math.random()
 
@@ -218,13 +221,17 @@ function cudnntest.TemporalConvolution()
 end
 
 function cudnntest.TemporalConvolution_padding_batch()
-   local bs = random2(1,32)
-   local inputFrameSize = random2(1,64)
-   local outputFrameSize = random2(1,64)
-   local ki = random2(2,15)
+   if testparams.test_type == 'torch.CudaHalfTensor' then
+      -- was not able to foind any parameters that would work for half
+      return
+   end
+   local bs = random2(2,32)
+   local inputFrameSize = random2(2,64)
+   local outputFrameSize = random2(2,64)
+   local ki = random2(2,9)
    local pad_h = math.floor(ki/2)
-   local si = random2(1,ki)
-   local outi = random2(2,15)
+   local si = random2(1,ki,1)
+   local outi = random2(2,9,4)
    local ini = (outi-1)*si+ki
    local scale = math.random()
 
@@ -274,9 +281,9 @@ end
 function cudnntest.TemporalConvolution_reduceBatchSize()
    local inputFrameSize = random2(1,64)
    local outputFrameSize = random2(1,64)
-   local ki = random2(1,15)
-   local si = random2(1,ki)
-   local outi = random2(1,15)
+   local ki = random2(1,9,6)
+   local si = random2(1,ki,1)
+   local outi = random2(2,9)
    local ini = (outi-1)*si+ki
    local batchSize = 128
    local smallerBatchSize = batchSize/2
@@ -295,18 +302,22 @@ function cudnntest.TemporalConvolution_reduceBatchSize()
 end
 
 function cudnntest.VolumetricConvolution()
+   if testparams.test_type == 'torch.CudaHalfTensor' then
+      -- was not able to foind any parameters that would work for half
+      return
+   end
    local bs = random2(1,32)
-   local from = random2(1,16)
-   local to = random2(1,16)
-   local ki = random2(3,5)
-   local kj = random2(3,5)
-   local kk = random2(3,5)
-   local si = random2(1,ki-1)
-   local sj = random2(1,kj-1)
-   local sk = random2(1,kk-1)
-   local outi = random2(1,17)
-   local outj = random2(1,17)
-   local outk = random2(1,5)
+   local from = random2(1,bs)
+   local to = random2(from,bs)
+   local ki = random2(3,5,3)
+   local kj = random2(3,5,3)
+   local kk = random2(3,5,3)
+   local si = random2(1,ki-1,1)
+   local sj = random2(1,kj-1,1)
+   local sk = random2(1,kk-1,1)
+   local outi = random2(2,17)
+   local outj = random2(2,17)
+   local outk = random2(2,5)
    local ini = (outi-1)*si+ki
    local inj = (outj-1)*sj+kj
    local ink = (outk-1)*sk+kk
@@ -784,39 +795,43 @@ math.randomseed(os.time())
 mytester = torch.Tester()
 mytester:add(cudnntest)
 
--- new flag to use FindEx instead of Find
-cudnn.useFindEx=true
 cudnn.verbose=false
 
-for i = 1, cutorch.getDeviceCount() do
-   for _, benchmark in ipairs({false,true}) do
-      cudnn.benchmark = benchmark
+-- Developers, do not commit uncommented regions until bindings fixed
+-- local runHalf = true
 
+for i = 1, cutorch.getDeviceCount() do
+
+   for _, benchmark in ipairs({true, false}) do
+      cudnn.benchmark = benchmark
       local prop = cutorch.getDeviceProperties(i)
+
       print('Running test on device: #' .. i .. ' : ' .. prop.name
                .. ' with benchmark = ' .. tostring(cudnn.benchmark))
 
       cutorch.setDevice(i)
 
+      if runHalf and cudnn.benchmark then
+         print'Testing torch.CudaHalfTensor'
+         testparams = testparams_half
+         mytester:run()
+      else
+         print(
+            [[Half Tensor tests are disabled due to missing functionality.
+They will be enabled once fully fixed and functional.
+See https://github.com/soumith/cudnn.torch/issues/225 for progress
+]])
+      end
+
       print'Testing torch.CudaTensor'
       testparams = testparams_float
       mytester:run()
 
-      --   double tensor may be broken at some places, gets NaNs.
       print'Testing torch.CudaDoubleTensor'
       testparams = testparams_double
       mytester:run()
 
 
-      print(
-         [[Half Tensor tests are disabled due to missing functionality.
-They will be enabled once fully fixed and functional.
-See https://github.com/soumith/cudnn.torch/issues/225 for progress
-]])
-      -- Developers, do not commit uncommented regions until bindings fixed
---      print'Testing torch.CudaHalfTensor'
---      testparams = testparams_half
---      mytester:run()
    end
 end
 

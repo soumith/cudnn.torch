@@ -22,120 +22,104 @@ local function errcheck(self, f, ...)
    if status ~= ffi.C.CUDNN_STATUS_SUCCESS then
       local str = ffi.string(cudnn.C.cudnnGetErrorString(status))
       error('Error in CuDNN: ' .. str .. ' ('..f..')')
-      return false
    end
-   return true
 end
 algo.errcheck = errcheck
 
-local function initCache(useEx)
-   if useEx then
-      algo.findAlgos = algo.findExAlgos
-   else
-      algo.findAlgos = algo.findNoExAlgos
-   end
-end
-
 local function setupAlgo(self, algo_t, perf_t, findAPI_idx, getAPI, wsAPI, algSearchMode, params)
-        -- recheck if cudnn.useFindEx was reset
-        initCache(cudnn.useFindEx)
-        local findAPI = algo.findAlgos[findAPI_idx]
+        local findAPI = algo.findNoExAlgos[findAPI_idx]
+        local findExAPI = algo.findExAlgos[findAPI_idx]
+
         self.extraBuffer = self.extraBuffer or cudnn.getSharedWorkspace()
         local extraBufferSizeInBytes = self.extraBuffer:nElement() * self.extraBuffer.elementSize()
-        local cachedAlgo = algo.autotunerCache[findAPI_idx][self.autotunerHash]
+        local algWorkspaceLimit = self.workspace_limit
+           or (self.nInputPlane * self.kH * self.kW * self.weight.elementSize())
+
         local cacheHit = '[found in cache]'
+        local cachedAlgo = algo.autotunerCache[findAPI_idx][self.autotunerHash]
         if not cachedAlgo then
            cacheHit = ''
            cachedAlgo = {}
            local perfResults = ffi.new(perf_t, 1)
+
            if cudnn.benchmark or cudnn.fastest then -- the manual auto-tuner is run
               local intt = torch.IntTensor(1)
-              local status
-              if cudnn.useFindEx then
-                 status = algo.call(self, findAPI,
-                                     cudnn.getHandle(),
-                                     params[1], params[2]:data(), params[3], params[4]:data(), params[5], params[6], params[7]:data(),
-                                     1, intt:data(), perfResults, self.extraBuffer:data(), self.extraBuffer:nElement() * self.extraBuffer.elementSize())
+              errcheck(self, findAPI,
+                       cudnn.getHandle(),
+                       params[1], params[3], params[5], params[6],
+                       1, intt:data(), perfResults)
 
-              else
-                 status = algo.call(self, findAPI,
-                          cudnn.getHandle(),
-                          params[1], params[3], params[5], params[6],
-                          1, intt:data(), perfResults)
-              end
+              cachedAlgo.algo = tonumber(perfResults[0].algo)
+              cachedAlgo.memory = tonumber(perfResults[0].memory)
+              cachedAlgo.status = tonumber(perfResults[0].status)
 
-              if status == ffi.C.CUDNN_STATUS_SUCCESS then
-                 cachedAlgo.algo = tonumber(perfResults[0].algo)
-                 cachedAlgo.memory = tonumber(perfResults[0].memory)
-                 cachedAlgo.time = tonumber(perfResults[0].time)
-                 cachedAlgo.status = tonumber(perfResults[0].status)
-              else
-                 cachedAlgo.algo =0
-                 cachedAlgo.memory = 0
-                 cachedAlgo.time = 0
-                 cachedAlgo.status = tonumber(status)
-              end
               if cudnn.verbose then
                  print(string.format(
-                          "\n" .. findAPI .. " Time: %3.5f Memory: %8d Algorithm: %d(out of %d, status: %d)"
-                             .. " hash: %45s",
-                          cachedAlgo.time, cachedAlgo.memory,
-                          cachedAlgo.algo, intt[1], cachedAlgo.status, self.autotunerHash ))
+                          "\n" .. findAPI .. " algo: %d (status: %d), memory: %8d"
+                             .. " hash: %45s " .. cacheHit,
+                          cachedAlgo.algo,  cachedAlgo.status, cachedAlgo.memory, self.autotunerHash))
 
               end
            else
               findAPI=getAPI
               local algType = ffi.new(algo_t, 1)
-              local algWorkspaceLimit = self.workspace_limit
-                 or (self.nInputPlane * self.kH * self.kW * self.weight.elementSize())
-              local status = algo.call(self, getAPI,
-                                       cudnn.getHandle(),
-                                       params[1], params[3], params[5], params[6],
-                                       algSearchMode, algWorkspaceLimit, algType)
-
+              errcheck(self, getAPI,
+                       cudnn.getHandle(),
+                       params[1], params[3], params[5], params[6],
+                       algSearchMode, algWorkspaceLimit, algType)
 
               if cudnn.verbose then
                  print(string.format(
-                          "\n" .. getAPI .. ": %d (ws limit: %d) mode = %s status=%d",
+                          "\n" .. getAPI .. ": %d (ws limit: %d) mode = %s",
                           tonumber(algType[0]),
                           algWorkspaceLimit,
-                          algSearchMode, tonumber(status)))
+                          algSearchMode))
               end
 
-              if status ~= ffi.C.CUDNN_STATUS_SUCCESS then
-                 cachedAlgo.algo =0
-                 cachedAlgo.memory = 0
-              else
-                 cachedAlgo.algo = tonumber(algType[0])
-                 local bufSize = torch.LongTensor(1)
-                 status = algo.call(self, wsAPI,
-                                    cudnn.getHandle(),
-                                    params[1], params[3], params[5], params[6],
-                                    algType[0], bufSize:data())
-                 if cudnn.verbose then
-                    print(string.format(
-                             "\n" .. wsAPI  .. ": bufSize: %d, current ws: %d, status: %d",
-                             tonumber(bufSize[1]), tonumber(extraBufferSizeInBytes), tonumber(status)))
-                 end
-                 if status ~= ffi.C.CUDNN_STATUS_SUCCESS then
-                    cachedAlgo.memory = 0
-                 else
-                    cachedAlgo.memory = tonumber(bufSize[1])
-                 end
+              cachedAlgo.algo = tonumber(algType[0])
+              local bufSize = torch.LongTensor(1)
+              errcheck(self, wsAPI,
+                       cudnn.getHandle(),
+                       params[1], params[3], params[5], params[6],
+                       algType[0], bufSize:data())
+              if cudnn.verbose then
+                 print(string.format(
+                          "\n" .. wsAPI  .. ": bufSize: %d, current ws: %d",
+                          tonumber(bufSize[1]), tonumber(extraBufferSizeInBytes)))
               end
+              cachedAlgo.memory = tonumber(bufSize[1])
            end
            algo.autotunerCache[findAPI_idx][self.autotunerHash] = cachedAlgo
         end
 
-        if extraBufferSizeInBytes < cachedAlgo.memory then
-           self.extraBuffer:resize((tonumber(cachedAlgo.memory)+self.extraBuffer.elementSize())/self.extraBuffer.elementSize())
-        end
-
         if cudnn.verbose then
            print(string.format(
-                    "\n" .. findAPI  .. ": %d Workspace: %8d  hash: %45s" .. cacheHit,
-                    tonumber(cachedAlgo.algo), tonumber(cachedAlgo.memory), self.autotunerHash))
+                    "\n" .. findAPI  .. ": %d Workspace: %8d (current ws size %d)  hash: %45s" .. cacheHit,
+                    tonumber(cachedAlgo.algo), tonumber(cachedAlgo.memory), extraBufferSizeInBytes, self.autotunerHash))
         end
+
+        if extraBufferSizeInBytes < cachedAlgo.memory then
+           extraBufferSizeInBytes = cachedAlgo.memory
+           if self.workspace_limit and extraBufferSizeInBytes > self.workspace_limit then
+              extraBufferSizeInBytes = self.workspace_limit
+           end
+        end
+
+        if extraBufferSizeInBytes > self.extraBuffer:elementSize()*self.extraBuffer:nElement() then
+           -- todo: how to check failure here ?
+           self.extraBuffer:resize((extraBufferSizeInBytes+(self.extraBuffer:elementSize())-1)/self.extraBuffer:elementSize())
+           local cant_resize=false
+           if cudnn.useFindEx and cant_resize then
+              errcheck(self, findExAPI,
+                       cudnn.getHandle(),
+                       params[1], params[2]:data(), params[3], params[4]:data(), params[5], params[6], params[7]:data(),
+                       1, intt:data(), perfResults, self.extraBuffer:data(), self.extraBuffer:nElement() * self.extraBuffer.elementSize())
+              cachedAlgo.algo = tonumber(perfResults[0].algo)
+              cachedAlgo.memory = tonumber(perfResults[0].memory)
+              cachedAlgo.status = tonumber(perfResults[0].status)
+           end
+        end
+
         return cachedAlgo.algo
 end
 

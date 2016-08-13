@@ -219,15 +219,15 @@ function SpatialConvolution:updateGradInput(input, gradOutput)
     end
 
     for g = 0,self.groups - 1 do
-        local success = errcheck(self,'cudnnConvolutionBackwardData', cudnn.getHandle(),
-                                 cudnn.scalar(input, 1),
-                                 self.weightDesc[0], self.weight:data() + g*self.weight_offset,
-                                 self.oDesc[0], gradOutput:data() + g*self.output_offset,
-                                 self.convDesc[0],
-                                 self.bwdDataAlgType,
-                                 self.extraBuffer:data(), self.extraBuffer:nElement() * self.extraBuffer.elementSize(),
-                                 cudnn.scalar(input, 0),
-                                 self.iDesc[0], self.gradInput:data() + g*self.input_offset)
+        errcheck(self,'cudnnConvolutionBackwardData', cudnn.getHandle(),
+                 cudnn.scalar(input, 1),
+                 self.weightDesc[0], self.weight:data() + g*self.weight_offset,
+                 self.oDesc[0], gradOutput:data() + g*self.output_offset,
+                 self.convDesc[0],
+                 self.bwdDataAlgType,
+                 self.extraBuffer:data(), self.extraBuffer:nElement() * self.extraBuffer.elementSize(),
+                 cudnn.scalar(input, 0),
+                 self.iDesc[0], self.gradInput:data() + g*self.input_offset)
     end
     return self.gradInput
 end
