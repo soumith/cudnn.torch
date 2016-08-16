@@ -1,71 +1,31 @@
 local SpatialFullConvolution, parent =
     torch.class('cudnn.SpatialFullConvolution', 'nn.SpatialFullConvolution')
 local ffi = require 'ffi'
-local errcheck = cudnn.errcheck
+local algo = require 'cudnn.algo'
+local errcheck = algo.errcheck
 
-local autotunerCache = {}
-autotunerCache[1] = {} -- forward
-autotunerCache[2] = {} -- backwardFilter
-autotunerCache[3] = {} -- backwardData
+local Convolution = cudnn.SpatialConvolution
 
--- if you change the configuration of the module manually, call this
 function SpatialFullConvolution:resetWeightDescriptors()
-    assert(cudnn.typemap[torch.typename(self.weight)], 'Only Cuda supported duh!')
-    assert(cudnn.typemap[torch.typename(self.bias)] or not self.bias, 'Only Cuda supported duh!')
-    -- create filterDescriptor for weight
-    self.weightDesc = ffi.new('struct cudnnFilterStruct*[1]')
-    errcheck('cudnnCreateFilterDescriptor', self.weightDesc)
-    local desc = torch.IntTensor({self.nInputPlane,
-                                  self.nOutputPlane,
-                                  self.kH, self.kW})
-    errcheck('cudnnSetFilterNdDescriptor', self.weightDesc[0],
-             cudnn.typemap[torch.typename(self.weight)], 'CUDNN_TENSOR_NCHW', 4,
-             desc:data());
-    local function destroyWDesc(d)
-        errcheck('cudnnDestroyFilterDescriptor', d[0]);
-    end
-    ffi.gc(self.weightDesc, destroyWDesc)
-
-    -- create descriptor for bias
-    if self.bias then
-        self.biasDesc = cudnn.toDescriptor(self.bias:view(1, self.nOutputPlane,1,1))
-    end
+   return Convolution.resetWeightDescriptors(self, torch.IntTensor({self.nInputPlane,
+                                                                    self.nOutputPlane,
+                                                                    self.kH, self.kW}))
 end
 
 function SpatialFullConvolution:fastest(mode)
-    if mode == nil then mode = true end
-    self.fastest_mode = mode
-    self.iSize = self.iSize or torch.LongStorage(4)
-    self.iSize:fill(0)
-    return self
+   return Convolution.fastest(self, mode)
 end
 
 function SpatialFullConvolution:setMode(fmode, bdmode, bwmode)
-    if fmode ~= nil then
-        self.fmode = fmode
-    end
-    if bdmode ~= nil then
-        self.bdmode = bdmode
-    end
-    if bwmode ~= nil then
-        self.bwmode = bwmode
-    end
-    self.iSize = self.iSize or torch.LongStorage(4)
-    self.iSize:fill(0)
-    return self
+   return Convolution.setMode(self, fmode, bdmode, bwmode)
 end
 
 function SpatialFullConvolution:resetMode()
-    self.fmode = nil
-    self.bdmode = nil
-    self.bwmode = nil
-    return self
+   return Convolution.resetMode(self)
 end
 
 function SpatialFullConvolution:noBias()
-   self.bias = nil
-   self.gradBias = nil
-   return self
+   return Convolution.noBias(self)
 end
 
 function SpatialFullConvolution:createIODescriptors(input)
@@ -76,35 +36,22 @@ function SpatialFullConvolution:createIODescriptors(input)
     end
     assert(input:dim() == 4 and input:isContiguous());
     self.iSize = self.iSize or torch.LongStorage(4):fill(0)
-    if not self.iDesc or not self.oDesc or
-        input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
-    or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
-        self.iSize = input:size()
 
-        assert(self.nInputPlane == input:size(2), 'input has to contain: '
-                   .. self.nInputPlane
-                   .. ' feature maps, but received input of size: '
-                   .. input:size(1) .. ' x ' .. input:size(2) ..
-                   ' x ' .. input:size(3) .. ' x ' .. input:size(4))
-
+    if Convolution.checkInputChanged(self, input) then
         -- create input descriptor
-        local input_slice = {{},{1,self.nInputPlane},{},{}}
-        self.iDesc = cudnn.toDescriptor(input[input_slice])
+        local input_slice = input[{{},{1,self.nInputPlane},{},{}}]
+        self.iDesc = cudnn.toDescriptor(input_slice)
 
         -- create conv descriptor
-        self.convDesc = ffi.new('struct cudnnConvolutionStruct*[1]')
-        errcheck('cudnnCreateConvolutionDescriptor', self.convDesc)
+        self.convDesc = cudnn.createDescriptors(1, 'struct cudnnConvolutionStruct*[?]',
+                                                'cudnnCreateConvolutionDescriptor', 'cudnnDestroyConvolutionDescriptor')
         local pad = torch.IntTensor({self.padH, self.padW})
         local stride = torch.IntTensor({self.dH, self.dW})
         local upscale = torch.IntTensor({1,1})
-        errcheck('cudnnSetConvolutionNdDescriptor', self.convDesc[0],
+        errcheck(self,'cudnnSetConvolutionNdDescriptor', self.convDesc[0],
                  2, pad:data(),
                  stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
                  cudnn.configmap(torch.type(self.weight)));
-        local function destroyConvDesc(d)
-            errcheck('cudnnDestroyConvolutionDescriptor', d[0]);
-        end
-        ffi.gc(self.convDesc, destroyConvDesc)
 
         -- get output shape, resize output
         local iwidth = input:size(4)
@@ -115,184 +62,15 @@ function SpatialFullConvolution:createIODescriptors(input)
         self.output:resize(oSize:long():storage())
 
         -- create descriptor for output
-        local output_slice = {{},{1,self.nOutputPlane},{},{}}
-        self.oDesc = cudnn.toDescriptor(self.output[output_slice])
+        local output_slice = self.output[{{},{1,self.nOutputPlane},{},{}}]
+        self.oDesc = cudnn.toDescriptor(output_slice)
         self.oDescForBias = cudnn.toDescriptor(self.output)
 
-        -----------------------------------------------------------------------
-        local function shape(x)
-            local sz = x:size()
-            local str = ''
-            for i=1,sz:size() do
-                str = str .. sz[i] .. 'x'
-            end
-            if #str > 0 then
-                str = str:sub(1, #str-1)
-            end
-            return str
-        end
-        local autotunerHash = shape(self.weight) .. ';'
-            .. shape(input[input_slice]) .. ';'
-            .. shape(self.output[output_slice])
+        self.input_offset = 0
+        self.output_offset = 0
+        self.weight_offset = 0
 
-        local maxBufSize = 0
-
-        -- create forwardAlgorithm descriptors
-        local algType = ffi.new("cudnnConvolutionFwdAlgo_t[?]", 1)
-        local algSearchMode = 'CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT'
-        local algWorkspaceLimit = self.workspace_limit
-            or (self.nOutputPlane * self.kH * self.kW * 4) -- 4 = sizeof int/float.
-
-        if self.fastest_mode or cudnn.fastest == true then
-            algSearchMode = 'CUDNN_CONVOLUTION_FWD_PREFER_FASTEST'
-        end
-
-        if cudnn.benchmark then -- the manual auto-tuner is run
-            if autotunerCache[1][autotunerHash] then
-                algType[0] = autotunerCache[1][autotunerHash]
-                if cudnn.verbose then
-                   print('Autotuning SFC: using cached algo = ', algType[0], ' for: ', autotunerHash)
-                end
-            else
-                local perfResults = ffi.new("cudnnConvolutionFwdAlgoPerf_t[?]", 1)
-                local intt = torch.IntTensor(1);
-                errcheck('cudnnFindConvolutionForwardAlgorithm',
-                         cudnn.getHandle(),
-                         self.oDesc[0], self.weightDesc[0],
-                         self.convDesc[0], self.iDesc[0],
-                         1, intt:data(), perfResults)
-                algType[0] = perfResults[0].algo
-                autotunerCache[1][autotunerHash] = perfResults[0].algo
-                if cudnn.verbose then
-                    print(string.format(
-                              "Autotuning        Forward: Time: %3.5f Memory: %8d Algorithm: %d"
-                                  .. " Weight: %15s Input: %15s Output: %15s",
-                              perfResults[0].time, tonumber(perfResults[0].memory),
-                              tonumber(perfResults[0].algo),
-                              shape(self.weight), shape(input[input_slice]),
-                              shape(self.output[output_slice])))
-                end
-            end
-        else
-            errcheck('cudnnGetConvolutionForwardAlgorithm',
-                     cudnn.getHandle(),
-                     self.oDesc[0], self.weightDesc[0],
-                     self.convDesc[0], self.iDesc[0],
-                     algSearchMode, algWorkspaceLimit, algType)
-        end
-        algType[0] = self.fmode or algType[0]
-        self.fwdAlgType = algType
-        local bufSize = torch.LongTensor(1)
-        errcheck('cudnnGetConvolutionForwardWorkspaceSize',
-                 cudnn.getHandle(),
-                 self.oDesc[0], self.weightDesc[0],
-                 self.convDesc[0], self.iDesc[0],
-                 algType[0], bufSize:data())
-        maxBufSize = math.max(maxBufSize, bufSize[1])
-
-        -- create backwardFilterAlgorithm descriptors
-        local algType = ffi.new("cudnnConvolutionBwdFilterAlgo_t[?]", 1)
-        local algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_NO_WORKSPACE'
-        local algWorkspaceLimit = self.workspace_limit
-            or (self.nOutputPlane * self.kH * self.kW * 4) -- 4 = sizeof int/float.
-        if self.fastest_mode  or cudnn.fastest == true then
-            algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST'
-        end
-
-        if cudnn.benchmark then -- the manual auto-tuner is run
-            if autotunerCache[2][autotunerHash] then
-                algType[0] = autotunerCache[2][autotunerHash]
-            else
-                local perfResults = ffi.new("cudnnConvolutionBwdFilterAlgoPerf_t[?]", 1)
-                local intt = torch.IntTensor(1);
-                errcheck('cudnnFindConvolutionBackwardFilterAlgorithm',
-                         cudnn.getHandle(),
-                         self.oDesc[0], self.iDesc[0],
-                         self.convDesc[0], self.weightDesc[0],
-                         1, intt:data(), perfResults)
-                algType[0] = perfResults[0].algo
-                autotunerCache[2][autotunerHash] = perfResults[0].algo
-                if cudnn.verbose then
-                    print(string.format(
-                              "Autotuning backwardFilter: Time: %3.5f Memory: %8d Algorithm: %d"
-                                  .. " Weight: %15s Input: %15s Output: %15s",
-                              perfResults[0].time, tonumber(perfResults[0].memory),
-                              tonumber(perfResults[0].algo),
-                              shape(self.weight), shape(input[input_slice]),
-                              shape(self.output[output_slice])))
-                end
-            end
-        else
-            errcheck('cudnnGetConvolutionBackwardFilterAlgorithm',
-                     cudnn.getHandle(),
-                     self.oDesc[0], self.iDesc[0],
-                     self.convDesc[0], self.weightDesc[0],
-                     algSearchMode, algWorkspaceLimit, algType)
-        end
-        algType[0] = self.bwmode or algType[0]
-        self.bwdFilterAlgType = algType
-        local bufSize = torch.LongTensor(1)
-        errcheck('cudnnGetConvolutionBackwardFilterWorkspaceSize',
-                 cudnn.getHandle(),
-                 self.oDesc[0], self.iDesc[0],
-                 self.convDesc[0], self.weightDesc[0],
-                 algType[0], bufSize:data())
-        maxBufSize = math.max(maxBufSize, bufSize[1])
-
-        -- create backwardDataAlgorithm descriptors
-        local algType = ffi.new("cudnnConvolutionBwdDataAlgo_t[?]", 1)
-        local algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_NO_WORKSPACE'
-        local algWorkspaceLimit = self.workspace_limit
-            or (self.nOutputPlane * self.kH * self.kW * 4) -- 4 = sizeof int/float.
-        if self.fastest_mode or cudnn.fastest == true then
-            algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST'
-        end
-        if cudnn.benchmark then -- the manual auto-tuner is run
-            if autotunerCache[3][autotunerHash] then
-                algType[0] = autotunerCache[3][autotunerHash]
-            else
-                local perfResults = ffi.new("cudnnConvolutionBwdDataAlgoPerf_t[?]", 1)
-                local intt = torch.IntTensor(1);
-                errcheck('cudnnFindConvolutionBackwardDataAlgorithm',
-                         cudnn.getHandle(),
-                         self.weightDesc[0], self.iDesc[0],
-                         self.convDesc[0], self.oDesc[0],
-                         1, intt:data(), perfResults)
-                algType[0] = perfResults[0].algo
-                autotunerCache[3][autotunerHash] = perfResults[0].algo
-                if cudnn.verbose then
-                    print(string.format(
-                              "Autotuning   backwardData: Time: %3.5f Memory: %8d Algorithm: %d"
-                                  .. " Weight: %15s Input: %15s Output: %15s\n",
-                              perfResults[0].time, tonumber(perfResults[0].memory),
-                              tonumber(perfResults[0].algo),
-                              shape(self.weight), shape(input[input_slice]),
-                              shape(self.output[output_slice])))
-                end
-            end
-        else
-            errcheck('cudnnGetConvolutionBackwardDataAlgorithm',
-                     cudnn.getHandle(),
-                     self.weightDesc[0], self.iDesc[0],
-                     self.convDesc[0], self.oDesc[0],
-                     algSearchMode, algWorkspaceLimit, algType)
-        end
-        algType[0] = self.bdmode or algType[0]
-        self.bwdDataAlgType = algType
-        local bufSize = torch.LongTensor(1)
-        errcheck('cudnnGetConvolutionBackwardDataWorkspaceSize',
-                 cudnn.getHandle(),
-                 self.weightDesc[0], self.iDesc[0],
-                 self.convDesc[0], self.oDesc[0],
-                 algType[0], bufSize:data())
-        maxBufSize = math.max(maxBufSize, bufSize[1])
-
-        self.extraBuffer = self.extraBuffer or cudnn.getSharedWorkspace()
-        self.extraBufferSizeInBytes = self.extraBuffer:nElement() * 4 -- float
-        if maxBufSize > self.extraBufferSizeInBytes then
-            self.extraBuffer:resize(math.ceil(maxBufSize/4))
-            self.extraBufferSizeInBytes = maxBufSize
-        end
+        algo.prepareHash(self, input_slice, output_slice)
 
         if not batch then
             self.output = self.output:view(self.output:size(2),
@@ -306,23 +84,26 @@ end
 
 
 function SpatialFullConvolution:updateOutput(input)
-    if not self.weightDesc then self:resetWeightDescriptors() end
     self:createIODescriptors(input)
+    if not self.bwdDataAlgType then
+       algo.setupBackwardDataAlgorithm(self, {self.weightDesc[0], self.weight, self.iDesc[0],self.input_slice,
+                                              self.convDesc[0], self.oDesc[0], self.output_slice})
+    end
 
     -- Because SpatialFullConvolution is performing the adjoint of the forward
     -- convolution operator, we need to swap the forward and backward passes.
-    errcheck('cudnnConvolutionBackwardData', cudnn.getHandle(),
+    errcheck(self,'cudnnConvolutionBackwardData', cudnn.getHandle(),
              cudnn.scalar(input, 1),
              self.weightDesc[0], self.weight:data(),
              self.iDesc[0], input:data(),
-             self.convDesc[0], self.bwdDataAlgType[0],
-             self.extraBuffer:data(), self.extraBufferSizeInBytes,
+             self.convDesc[0], self.bwdDataAlgType,
+             self.extraBuffer:data(), self.extraBuffer:nElement() * self.extraBuffer.elementSize(),
              cudnn.scalar(input, 0),
              self.oDesc[0], self.output:data())
 
     -- add bias
     if self.bias then
-        errcheck('cudnnAddTensor', cudnn.getHandle(),
+        errcheck(self,'cudnnAddTensor', cudnn.getHandle(),
                  cudnn.scalar(input, 1), self.biasDesc[0], self.bias:data(),
                  cudnn.scalar(input, 1), self.oDescForBias[0], self.output:data())
     end
@@ -336,16 +117,19 @@ function SpatialFullConvolution:updateGradInput(input, gradOutput)
 
     assert(gradOutput:dim() == 3 or gradOutput:dim() == 4, 'gradOutput has to be 3D or 4D');
     assert(gradOutput:isContiguous(), 'gradOutput has to be contiguous')
-    if not self.weightDesc then self:resetWeightDescriptors() end
     self:createIODescriptors(input)
+    if not self.fwdDataAlgType then
+       algo.setupForwardAlgorithm(self, {self.oDesc[0], self.output_slice, self.weightDesc[0], self.weight,
+                                         self.convDesc[0], self.iDesc[0], self.input_slice})
+    end
 
-    errcheck('cudnnConvolutionForward', cudnn.getHandle(),
+    errcheck(self,'cudnnConvolutionForward', cudnn.getHandle(),
              cudnn.scalar(input, 1),
              self.oDesc[0], gradOutput:data(),
              self.weightDesc[0], self.weight:data(),
              self.convDesc[0],
-             self.fwdAlgType[0],
-             self.extraBuffer:data(), self.extraBufferSizeInBytes,
+             self.fwdAlgType,
+             self.extraBuffer:data(), self.extraBuffer:nElement() * self.extraBuffer.elementSize(),
              cudnn.scalar(input, 0),
              self.iDesc[0], self.gradInput:data());
     return self.gradInput
@@ -362,12 +146,15 @@ function SpatialFullConvolution:accGradParameters(input, gradOutput, scale)
     assert(gradOutput:dim() == 3 or gradOutput:dim() == 4,
            'gradOutput has to be 3D or 4D');
     assert(gradOutput:isContiguous(), 'gradOutput has to be contiguous')
-    if not self.weightDesc then self:resetWeightDescriptors() end
     self:createIODescriptors(input)
+    if not self.bwdFilterAlgType then
+       algo.setupBackwardFilterAlgorithm(self, {self.oDesc[0], self.output_slice, self.iDesc[0], self.input_slice,
+                                                self.convDesc[0], self.weightDesc[0], self.weight})
+    end
 
     -- gradBias
     if self.bias then
-        errcheck('cudnnConvolutionBackwardBias', cudnn.getHandle(),
+        errcheck(self,'cudnnConvolutionBackwardBias', cudnn.getHandle(),
                  self.scaleT:data(),
                  self.oDescForBias[0], gradOutput:data(),
                  cudnn.scalar(input, 1),
@@ -375,30 +162,19 @@ function SpatialFullConvolution:accGradParameters(input, gradOutput, scale)
     end
 
     -- gradWeight
-    errcheck('cudnnConvolutionBackwardFilter', cudnn.getHandle(),
+    errcheck(self,'cudnnConvolutionBackwardFilter', cudnn.getHandle(),
              self.scaleT:data(),
              self.oDesc[0], gradOutput:data(),
              self.iDesc[0], input:data(),
              self.convDesc[0],
-             self.bwdFilterAlgType[0],
-             self.extraBuffer:data(), self.extraBufferSizeInBytes,
+             self.bwdFilterAlgType,
+             self.extraBuffer:data(), self.extraBuffer:nElement() * self.extraBuffer.elementSize(),
              cudnn.scalar(input, 1),
              self.weightDesc[0], self.gradWeight:data())
 end
 
 function SpatialFullConvolution:clearDesc()
-    self.weightDesc = nil
-    self.biasDesc = nil
-    self.convDesc = nil
-    self.iDesc = nil
-    self.oDesc = nil
-    self.oDescForBias = nil
-    self.algType = nil
-    self.fwdAlgType = nil
-    self.bwdDataAlgType = nil
-    self.bwdFilterAlgType = nil
-    self.extraBuffer = nil
-    self.extraBufferSizeInBytes = nil
+   return Convolution.clearDesc(self)
 end
 
 function SpatialFullConvolution:write(f)
