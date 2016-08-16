@@ -81,6 +81,7 @@ function BatchNormalization:updateOutput(input)
 end
 
 local function backward(self,input,gradOutput, scale)
+    assert(self.train, 'cudnn.BatchNormalization doesnt support backward in evaluate, use nn')
     self.scaleT = self.scaleT or self.weight.new(1)
     -- this line forces this member to always be on CPU (needed for cudnn)
     self.scaleT = torch.type(self.weight) == 'torch.CudaDoubleTensor'
