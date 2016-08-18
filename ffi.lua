@@ -1608,7 +1608,7 @@ if cudnn.version < 5005 then
            .. '  \nAre you using an older version of CuDNN?')
 end
 
--- cechk GPU driver version
+-- check GPU driver version
 local props = cutorch.getDeviceProperties(cutorch.getDevice())
 if cutorch.driverVersion and -- for backward compatiblity
      not(cutorch.driverVersion >= 7050 -- desktop GPUs

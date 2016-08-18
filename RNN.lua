@@ -580,8 +580,8 @@ local function retrieveLinearParams(self, cuDNNMethod)
                 linLayerMatDesc[0],
                 ffi.cast("void**", matrixPointer))
 
-            local dataType = 'CUDNN_DATA_FLOAT'
-            local format = 'CUDNN_TENSOR_NCHW'
+            local dataType = cudnn.externalizeString('CUDNN_DATA_FLOAT')
+            local format = cudnn.externalizeString('CUDNN_TENSOR_NCHW')
             local nbDims = torch.IntTensor(1)
 
             local minDim = 3
@@ -590,7 +590,7 @@ local function retrieveLinearParams(self, cuDNNMethod)
                 linLayerMatDesc[0],
                 minDim,
                 ffi.cast("cudnnDataType_t*", dataType),
-                ffi.cast("cudnnDataType_t*", format),
+                ffi.cast("cudnnTensorFormat_t*", format),
                 nbDims:data(),
                 filterDimA:data())
 
