@@ -161,6 +161,14 @@ function cudnn.getSharedWorkspace()
     return sharedBuffer[device][stream]
 end
 
+-- Creates a clone of luaStr that can be used to prevent side
+-- effects when passing char* to C functions.
+function cudnn.externalizeString(luaStr)
+    local cStr = ffi.new("char[?]", #luaStr+1)
+    ffi.copy(cStr, luaStr)
+    return cStr
+end
+
 require('cudnn.SpatialConvolution')
 require('cudnn.VolumetricConvolution')
 require('cudnn.SpatialFullConvolution')
