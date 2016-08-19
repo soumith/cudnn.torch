@@ -63,43 +63,29 @@ function RNN:reset(stdv)
    self.gradWeight:resizeAs(self.weight):zero()
 end
 
-function RNN:createDescriptors(count, descs_type, create_func, destroy_func)
-   local ds = ffi.new(descs_type, count)
-   for i = 0, count - 1 do
-      errcheck(create_func, ds + i)
-   end
-   local function destroyDescriptors(ds)
-      for i = 0, count - 1 do
-         errcheck(destroy_func, ds[i])
-      end
-   end
-   ffi.gc(ds, destroyDescriptors)
-   return ds
-end
-
 function RNN:createDropoutDescriptors(count)
-   return self:createDescriptors(count,
+   return cudnn.createDescriptors(count,
                             'cudnnDropoutDescriptor_t[?]',
                             'cudnnCreateDropoutDescriptor',
                             'cudnnDestroyDropoutDescriptor')
 end
 
 function RNN:createFilterDescriptors(count)
-   return self:createDescriptors(count,
+   return cudnn.createDescriptors(count,
                             'cudnnFilterDescriptor_t[?]',
                             'cudnnCreateFilterDescriptor',
                             'cudnnDestroyFilterDescriptor')
 end
 
 function RNN:createRNNDescriptors(count)
-   return self:createDescriptors(count,
+   return cudnn.createDescriptors(count,
                             'cudnnRNNDescriptor_t[?]',
                             'cudnnCreateRNNDescriptor',
                             'cudnnDestroyRNNDescriptor')
 end
 
 function RNN:createTensorDescriptors(count)
-   return self:createDescriptors(count,
+   return cudnn.createDescriptors(count,
                             'cudnnTensorDescriptor_t[?]',
                             'cudnnCreateTensorDescriptor',
                             'cudnnDestroyTensorDescriptor')
@@ -383,7 +369,7 @@ function RNN:updateOutput(input)
 	if self.cellOutput then
 	   self.cellInput = self.cellOutput:clone()
         end
-   end    
+   end
    if (self.batchFirst) then
       self.output = self.output:transpose(1, 2)
    end
