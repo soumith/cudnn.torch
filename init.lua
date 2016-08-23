@@ -209,9 +209,10 @@ local function allocateStorage(buf, ifGreater)
 
    if buf.storage then
       if (newelem == buf.storage:size()) or (ifGreater and newelem < buf.storage:size()) then
-         -- print( "allocateStorage: buf.size is enough: new: ", buf.nextSize, "current: " , buf.currentSize)
       else
-         -- print( "allocateStorage: size is ", buf.nextSize)
+         if cudnn.verbose then
+            print( "allocateStorage: new WS size is ", buf.nextSize)
+         end
          -- resize to just to make sure we return memory
          buf.storage:resize(0)
          buf.storage:resize(newelem)
@@ -311,7 +312,7 @@ require('cudnn.convert')
 function cudnn.reset()
 -- this resets everything
    if cudnn.verbose then
-      --- print("cudnn::reset for device #", cutorch.getDevice())
+      print("cudnn::reset for device #", cutorch.getDevice())
    end
    cutorch.synchronize()
    -- make sure shared buffers that may have been cached, have 0 size

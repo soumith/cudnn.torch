@@ -71,7 +71,6 @@ end
 
 function find:lookup(layer, findAPI_idx)
    if self.useCalculatedWorkspaceSize or not self.useFindEx then
---      print ("Looking up ", layer.autotunerHash)
       return  self.autotunerCache[findAPI_idx][layer.autotunerHash]
    else
       return nil
@@ -90,14 +89,19 @@ function find:setMaxWorkspaceSize(reserve, fraction)
    if not fraction or fraction > max_fraction then fraction = max_fraction end
    -- check current usage
    local freeMemory, totalMemory = cutorch.getMemoryUsage(self.id)
---   print("Memory: ", freeMemory, totalMemory)
+
    local ws, curSize = cudnn.getSharedWorkspace()
    local newSize= (freeMemory+curSize-reserve) * fraction
    if (newSize > curSize) then
       self.maxWorkspaceSize = newSize
       cudnn.setSharedWorkspaceSize(newSize)
+   else
+      self.maxWorkspaceSize = curSize
    end
    self.useMaxWorkspaceSize = true
+   if cudnn.verbose then
+      print("setMaxWorkspaceSize Memory: ", freeMemory, totalMemory, self.maxWorkspaceSize)
+   end
 end
 
 function find:setCalculatedWorkspaceSize(greater)
@@ -125,14 +129,17 @@ function find:registerWorkspaceSize(cachedAlgo)
                 totalWS = totalWS + sz
              end
              if totalWS + delta < self.maxWorkspaceSize then
-                self.calculatedWorkspaceSize[stream] = algoSize
+                self.calculatedWorkspaceSize[stream] = algoSize + delta
+                   if cudnn.verbose then
+                      print("find:registerWorkspaceSize: calculated ", self.calculatedWorkspaceSize[stream], " delta = ", delta, "max : " , self.maxWorkspaceSize)
+                   end
                 return cachedAlgo[a].algo
              end
           else
                 return cachedAlgo[a].algo
           end  -- delta
        end
-       -- todo: panic
+       errcheck(false)
     else
        -- no FindEx - do not rely on find stored data
        cudnn.setSharedWorkspaceSize(cachedAlgo[1].memory, true)
@@ -248,7 +255,7 @@ function find:setupAlgo(layer, algo_t, perf_t, findAPI_idx, getAPI, wsAPI, algSe
               end
 
               local validResults = 0
-              for r=1,intt[1] do
+              for r=0,intt[1]-1 do
                  local res = perfResults[r]
                  if res.status == 0 then
                     validResults = validResults+1
@@ -304,7 +311,7 @@ function find:setupAlgo(layer, algo_t, perf_t, findAPI_idx, getAPI, wsAPI, algSe
            self:store(layer, findAPI_idx, cachedAlgo)
         end
         -- this may return different algo if size does not fit
-        retAlgo = find:registerWorkspaceSize(cachedAlgo)
+        retAlgo = self:registerWorkspaceSize(cachedAlgo)
 
         if cudnn.verbose then
            local freeMemory, totalMemory = cutorch.getMemoryUsage(self.id)
