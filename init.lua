@@ -17,20 +17,18 @@ cudnn.fastest = false
 cudnn.useFindEx = false
 
 -- amount of memory to use on 1st iteration for FindEx
--- we need a substantial buffer right away to get reasonable algo
-cudnn.initialWorkspaceBytes = 1024*1024
+cudnn.initialWorkspaceBytes = 1024
 
 --
 cudnn.reservedGPUBytes = 1024*1024
 
-cudnn.maxWorkspaceGPUMemPercent = 90
+cudnn.maxWorkspaceGPUMemPercent = 95
 
 local maxStreamsPerDevice = 1024
 
 --------------------------------------------------------------------
 -- end defaults
 --------------------------------------------------------------------
-
 
 local numDevices = cutorch.getDeviceCount()
 -- this tensor keeps track of whether a handle has been initialized or not
@@ -190,14 +188,66 @@ function cudnn.createDescriptors(count, descs_type, create_func, destroy_func)
 end
 
 local sharedBuffer = {}
+local nextBufferSize = {}
+
+local function setNextSize(buf, size, ifGreater)
+   if size > buf.nextSize or not ifGreater then
+      buf.nextSize = size
+   end
+end
+
+-- may reassign currentSize
+local function allocateStorage(buf, ifGreater)
+
+   if buf.nextSize < 0 then
+      buf.nextSize = buf.currentSize
+   end
+
+   local elSize = 8
+   -- get number of elements in the buf, rounded up
+   local newelem = math.floor((buf.nextSize+elSize-1)/elSize)
+
+   if buf.storage then
+      if (newelem == buf.storage:size()) or (ifGreater and newelem < buf.storage:size()) then
+         -- print( "allocateStorage: buf.size is enough: new: ", buf.nextSize, "current: " , buf.currentSize)
+      else
+         -- print( "allocateStorage: size is ", buf.nextSize)
+         -- resize to just to make sure we return memory
+         buf.storage:resize(0)
+         buf.storage:resize(newelem)
+      end
+   else
+      -- this is to be replaced with new cutorch tempbuf stuff
+      -- may reassign currentSize again
+      buf.storage = torch.CudaDoubleStorage(newelem)
+   end
+
+   buf.currentSize = buf.storage:size()*elSize
+   buf.data = buf.storage:data()
+   buf.nextSize = -1
+end
+
+local function sharedBufForCurrentStream()
+    local device = cutorch.getDevice()
+    local stream = cutorch.getStream() -- starts from 0
+    if not sharedBuffer[device] then sharedBuffer[device] = {} end
+    local buf = sharedBuffer[device][stream]
+    if not buf then
+       buf = {
+          currentSize = cudnn.initialWorkspaceBytes,
+          nextSize = -1
+       }
+       allocateStorage(buf)
+       sharedBuffer[device][stream] = buf
+    end
+    return buf
+end
 
 function cudnn.getSharedWorkspace()
-    local device = cutorch.getDevice()
-    if not sharedBuffer[device] then
-       local tempBuf = torch.CudaDoubleStorage(cudnn.initialWorkspaceBytes/8)
-       sharedBuffer[device] = tempBuf
-    end
-    return sharedBuffer[device]
+--   print ("Getting buf ")
+   local buf = sharedBufForCurrentStream()
+--   print ("Buf: ", buf)
+   return buf.data, buf.currentSize
 end
 
 -- Creates a clone of luaStr that can be used to prevent side
@@ -208,29 +258,18 @@ function cudnn.externalizeString(luaStr)
     return cStr
 end
 
-function cudnn.adjustSharedWorkspaceSize(bytes)
-   local tempBuf = cudnn.getSharedWorkspace()
-   local newSize = floor((tempBuf:elementSize()*tempBuf:size()+bytes+tempBuf:elementSize()-1)/tempBuf:elementSize())
-   tempBuf:resize(0)
-   tempBuf:resize(newsize)
+function cudnn.adjustSharedWorkspaceSize(bytesDelta)
+   local buf = sharedBufForCurrentStream()
+   setNextSize(buf, buf.currentSize + bytesDelta)
+   allocateStorage(buf)
 end
 
 function cudnn.setSharedWorkspaceSize(bytes, ifGreater)
-   bytes = bytes or cudnn.initialWorkspaceBytes
+   local buf = sharedBufForCurrentStream()
    ifGreater = ifGreater or false
-   local tempBuf = cudnn.getSharedWorkspace()
-   local elSize = tempBuf:elementSize()
-   -- get number of elements in the buf, rounded up
-   local nelem = math.floor((bytes+elSize-1)/elSize)
-   if (nelem == tempBuf:size()) or (ifGreater and nelem < tempBuf:size()) then
-      return
-   end
-   if cudnn.verbose then
-      print ('Resizing WS to ', nelem*8)
-   end
-   -- resize to 0 first to avoid data copy
-   tempBuf:resize(0)
-   tempBuf:resize(nelem)
+   bytes = bytes or cudnn.initialWorkspaceBytes
+   setNextSize(buf, bytes, ifGreater)
+   allocateStorage(buf, ifGreater)
 end
 
 local find = require('cudnn.find')
@@ -270,10 +309,18 @@ require('cudnn.functional')
 require('cudnn.convert')
 
 function cudnn.reset()
+-- this resets everything
+   if cudnn.verbose then
+      --- print("cudnn::reset for device #", cutorch.getDevice())
+   end
+   cutorch.synchronize()
+   -- make sure shared buffers that may have been cached, have 0 size
+   for i=1,numDevices do
+      sharedBuffer[i] = {}
+   end
+   collectgarbage()
    -- this resets internal algorithm finder state machine and cache
    find.reset()
 end
-
-
 
 return cudnn

@@ -89,6 +89,7 @@ function SpatialFullConvolution:updateOutput(input)
                                                          self.convDesc[0], self.oDesc[0], self.output_slice})
     end
 
+    local extraBuffer, extraBufferSize = cudnn.getSharedWorkspace()
 
     -- Because SpatialFullConvolution is performing the adjoint of the forward
     -- convolution operator, we need to swap the forward and backward passes.
@@ -97,7 +98,7 @@ function SpatialFullConvolution:updateOutput(input)
              self.weightDesc[0], self.weight:data(),
              self.iDesc[0], input:data(),
              self.convDesc[0], self.bdmode,
-             self.extraBuffer:data(), self.extraBuffer:size()*self.extraBuffer:elementSize(),
+             extraBuffer, extraBufferSize,
              cudnn.scalar(input, 0),
              self.oDesc[0], self.output:data())
 
@@ -124,13 +125,14 @@ function SpatialFullConvolution:updateGradInput(input, gradOutput)
                                                    self.weightDesc[0], self.weight,
                                                    self.convDesc[0], self.iDesc[0], self.input_slice})
     end
+    local extraBuffer, extraBufferSize = cudnn.getSharedWorkspace()
     errcheck(self,'cudnnConvolutionForward', cudnn.getHandle(),
              cudnn.scalar(input, 1),
              self.oDesc[0], gradOutput:data(),
              self.weightDesc[0], self.weight:data(),
              self.convDesc[0],
              self.fmode,
-             self.extraBuffer:data(), self.extraBuffer:size()*self.extraBuffer:elementSize(),
+             extraBuffer, extraBufferSize,
              cudnn.scalar(input, 0),
              self.iDesc[0], self.gradInput:data());
     return self.gradInput
@@ -162,7 +164,7 @@ function SpatialFullConvolution:accGradParameters(input, gradOutput, scale)
                  cudnn.scalar(input, 1),
                  self.biasDesc[0], self.gradBias:data())
     end
-
+    local extraBuffer, extraBufferSize = cudnn.getSharedWorkspace()
     -- gradWeight
     errcheck(self,'cudnnConvolutionBackwardFilter', cudnn.getHandle(),
              self.scaleT:data(),
@@ -170,7 +172,7 @@ function SpatialFullConvolution:accGradParameters(input, gradOutput, scale)
              self.iDesc[0], input:data(),
              self.convDesc[0],
              self.bmode,
-             self.extraBuffer:data(), self.extraBuffer:size()*self.extraBuffer:elementSize(),
+             extraBuffer, extraBufferSize,
              cudnn.scalar(input, 1),
              self.weightDesc[0], self.gradWeight:data())
 end

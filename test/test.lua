@@ -1,6 +1,6 @@
 require 'cudnn'
 require 'cunn'
-local find = require 'cudnn.find'
+
 
 local cudnntest = torch.TestSuite()
 local times = {}
@@ -795,11 +795,10 @@ math.randomseed(os.time())
 mytester = torch.Tester()
 mytester:add(cudnntest)
 
-cudnn.verbose=false
+cudnn.verbose=true
 
 -- Developers, do not commit uncommented regions until bindings fixed
 local runHalf = false
-
 -- TODO: adapt tests for FindEx
 -- cudnn.useFindEx=false
 
