@@ -189,13 +189,14 @@ function SpatialConvolution:updateOutput(input)
     if not (self.fmode and finder.useCalculatedWorkspaceSize) then
        self.fmode = finder:forwardAlgorithm(self, { self.iDesc[0], self.input_slice, self.weightDesc[0], self.weight, self.convDesc[0], self.oDesc[0], self.output_slice})
     end
+    local extraBuffer, extraBufferSize = cudnn.getSharedWorkspace()
     for g = 0, self.groups - 1 do
         errcheck(self,'cudnnConvolutionForward', cudnn.getHandle(),
                  cudnn.scalar(input, 1),
                  self.iDesc[0], input:data() + g*self.input_offset,
                  self.weightDesc[0], self.weight:data() + g*self.weight_offset,
                  self.convDesc[0], self.fmode,
-                 self.extraBuffer:data(), self.extraBuffer:size()*self.extraBuffer:elementSize(),
+                 extraBuffer, extraBufferSize,
                  cudnn.scalar(input, 0),
                  self.oDesc[0], self.output:data() + g*self.output_offset);
     end
@@ -221,6 +222,7 @@ function SpatialConvolution:updateGradInput(input, gradOutput)
     if not (finder.useCalculatedWorkspaceSize and self.bdmode) then
        self.bdmode = finder:backwardDataAlgorithm(self, { self.weightDesc[0], self.weight, self.oDesc[0], self.output_slice, self.convDesc[0], self.iDesc[0], self.input_slice })
     end
+    local extraBuffer, extraBufferSize = cudnn.getSharedWorkspace()
     for g = 0,self.groups - 1 do
         errcheck(self,'cudnnConvolutionBackwardData', cudnn.getHandle(),
                  cudnn.scalar(input, 1),
@@ -228,7 +230,7 @@ function SpatialConvolution:updateGradInput(input, gradOutput)
                  self.oDesc[0], gradOutput:data() + g*self.output_offset,
                  self.convDesc[0],
                  self.bdmode,
-                 self.extraBuffer:data(), self.extraBuffer:size()*self.extraBuffer:elementSize(),
+                 extraBuffer, extraBufferSize,
                  cudnn.scalar(input, 0),
                  self.iDesc[0], self.gradInput:data() + g*self.input_offset)
     end
@@ -257,7 +259,7 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
                  cudnn.scalar(input, 1),
                  self.biasDesc[0], self.gradBias:data())
     end
-
+    local extraBuffer, extraBufferSize = cudnn.getSharedWorkspace()
     for g = 0, self.groups - 1 do
         -- gradWeight
         errcheck(self,'cudnnConvolutionBackwardFilter', cudnn.getHandle(),
@@ -266,7 +268,7 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
                  self.oDesc[0], gradOutput:data() + g*self.output_offset,
                  self.convDesc[0],
                  self.bmode,
-                 self.extraBuffer:data(), self.extraBuffer:size()*self.extraBuffer:elementSize(),
+                 extraBuffer, extraBufferSize,
                  cudnn.scalar(input, 1),
                  self.weightDesc[0], self.gradWeight:data() + g*self.weight_offset);
     end
@@ -282,7 +284,6 @@ function SpatialConvolution:clearDesc()
     self.oDesc = nil
     self.oDescForBias = nil
     self.oSize = nil
-    self.extraBuffer = nil
     self.scaleT = nil
     return self
 end
