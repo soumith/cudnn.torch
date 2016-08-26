@@ -195,10 +195,6 @@ function cudnntest.SpatialFullConvolution()
 end
 
 function cudnntest.TemporalConvolution()
-   if testparams.test_type == 'torch.CudaHalfTensor' then
-      -- was not able to foind any parameters that would work for half
-      return
-   end
    local bs = random2(2,32)
    local inputFrameSize = random2(1,64)
    local outputFrameSize = random2(1,64)
@@ -221,10 +217,6 @@ function cudnntest.TemporalConvolution()
 end
 
 function cudnntest.TemporalConvolution_padding_batch()
-   if testparams.test_type == 'torch.CudaHalfTensor' then
-      -- was not able to foind any parameters that would work for half
-      return
-   end
    local bs = random2(2,32)
    local inputFrameSize = random2(2,64)
    local outputFrameSize = random2(2,64)
@@ -795,7 +787,7 @@ math.randomseed(os.time())
 mytester = torch.Tester()
 mytester:add(cudnntest)
 
-cudnn.verbose=true
+cudnn.verbose=false
 
 -- Developers, do not commit uncommented regions until bindings fixed
 local runHalf = false
@@ -805,7 +797,7 @@ local runHalf = false
 
 for i = 1, cutorch.getDeviceCount() do
 
-   for _, benchmark in ipairs({true, false}) do
+   for _, benchmark in ipairs({false,true}) do
       cudnn.benchmark = benchmark
       local prop = cutorch.getDeviceProperties(i)
 
@@ -814,7 +806,7 @@ for i = 1, cutorch.getDeviceCount() do
 
       cutorch.setDevice(i)
 
-      if runHalf and cudnn.benchmark then
+      if runHalf then
          print'Testing torch.CudaHalfTensor'
          testparams = testparams_half
          mytester:run()
