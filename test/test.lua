@@ -64,13 +64,8 @@ function torch.CudaDoubleTensor:mean()
    return self:cuda():mean()
 end
 
--- whapper for math.random() to accomodate certain limitations for 'half'
 local function random2(min,max, half_max)
-   if half_max and testparams.test_type == 'torch.CudaHalfTensor' then
-      return math.random(min,half_max)
-   else
-      return math.random(min,max)
-   end
+   return math.random(min,max)
 end
 
 local function testLayer(nnlayer, cudnnlayer, input, gradOutput, scale,
@@ -294,10 +289,6 @@ function cudnntest.TemporalConvolution_reduceBatchSize()
 end
 
 function cudnntest.VolumetricConvolution()
-   if testparams.test_type == 'torch.CudaHalfTensor' then
-      -- was not able to foind any parameters that would work for half
-      return
-   end
    local bs = random2(1,32)
    local from = random2(1,bs)
    local to = random2(from,bs)
@@ -790,10 +781,9 @@ mytester:add(cudnntest)
 cudnn.verbose=false
 
 -- Developers, do not commit uncommented regions until bindings fixed
-local runHalf = false
+local runHalf = true
 -- TODO: adapt tests for FindEx
 -- cudnn.useFindEx=false
-
 
 for i = 1, cutorch.getDeviceCount() do
 

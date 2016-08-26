@@ -3,20 +3,31 @@ local ffi = require 'ffi'
 find = {}
 find.__index = find
 
-local function call(self, f, ...)
+local function call(layer, f, ...)
    local status = cudnn.call(f, ...)
    if status ~= ffi.C.CUDNN_STATUS_SUCCESS and cudnn.verbose then
-      print("find:call:" .. f .. " failed: ", status)
-      if self.autotunerHash then
-         print("Hash sizes: " , self.autotunerHash)
+      local pad = ffi.new('int[5]')
+      local stride = ffi.new('int[5]')
+      local upscale = ffi.new('int[5]')
+      local dim = ffi.new('int[5]')
+      local mode = ffi.new('cudnnConvolutionMode_t[5]')
+      local datatype = ffi.new('cudnnDataType_t[5]')
+
+      cudnn.call('cudnnGetConvolutionNdDescriptor', layer.convDesc[0],
+                 4, dim, pad, stride,
+                 upscale, mode, datatype)
+
+      print("find:call:" .. f .. " failed: ", tonumber(status) , ' mode : ', tonumber(mode[0]), ' datatype : ', tonumber(datatype[0]))
+      if layer.autotunerHash then
+         print("Hash sizes: " , layer.autotunerHash)
       end
    end
    return status
 end
 find.call = call
 
-local function errcheck(self, f, ...)
-   local status = call(self, f, ...)
+local function errcheck(layer, f, ...)
+   local status = call(layer, f, ...)
    if status ~= ffi.C.CUDNN_STATUS_SUCCESS then
       local str = ffi.string(cudnn.C.cudnnGetErrorString(status))
       error('Error in CuDNN: ' .. str .. ' ('..f..')')
@@ -39,34 +50,17 @@ local function defaultFallback(layer)
    local mode = ffi.new('cudnnConvolutionMode_t[5]')
    local datatype = ffi.new('cudnnDataType_t[5]')
 
-   if cudnn.verbose then
-      print("find.defaultFallback: checking", layer.autotunerHash)
-   end
-
    errcheck(layer,'cudnnGetConvolutionNdDescriptor', layer.convDesc[0],
             4, dim, pad, stride,
             upscale, mode, datatype)
 
-   if cudnn.verbose then
-      print("cudnnGetConvolutionNdDescriptor: passed", layer.autotunerHash)
-   end
-
    if datatype[0] == ffi.C.CUDNN_DATA_HALF then
       if cudnn.verbose then
-         print("find.defaultFallback: no 16bit algo found, will try float for ", layer.autotunerHash)
+         print("find.defaultFallback: no 16-bit float algo found, will try 32 bits for ", layer.autotunerHash)
       end
-
-      layer.convDesc = cudnn.createDescriptors(1, 'struct cudnnConvolutionStruct*[?]',
-                                                'cudnnCreateConvolutionDescriptor', 'cudnnDestroyConvolutionDescriptor')
-
-      errcheck(self,'cudnnSetConvolutionNdDescriptor', layer.convDesc[0],
+      errcheck(layer,'cudnnSetConvolutionNdDescriptor', layer.convDesc[0],
                dim[0], pad, stride,
                upscale, mode[0], 'CUDNN_DATA_FLOAT')
-
-      if cudnn.verbose then
-         print("find.defaultFallback: passed cudnnSetConvolutionNdDescriptor", layer.autotunerHash)
-      end
-
       return true
    else
       return false
@@ -273,6 +267,7 @@ function find:setupAlgo(layer, algo_t, perf_t, findAPI_idx, getAPI, wsAPI, algSe
         local findExAPI = findExAlgos[findAPI_idx]
         local retAlgo
         local cacheHit = '[found in cache]'
+        local useFallback = false
 
         -- advance state machine
         self:advanceStateMachine(layer, findAPI_idx)
@@ -288,6 +283,7 @@ function find:setupAlgo(layer, algo_t, perf_t, findAPI_idx, getAPI, wsAPI, algSe
 
         if cachedAlgo then
            validResults = #cachedAlgo
+           useFallback = cachedAlgo[1].fallback
         else
            cacheHit = ''
            cachedAlgo = {}
@@ -360,10 +356,13 @@ function find:setupAlgo(layer, algo_t, perf_t, findAPI_idx, getAPI, wsAPI, algSe
            if status ~= ffi.C.CUDNN_STATUS_SUCCESS or perfResults[0].status ~=0 then
               if self.fallback and self.fallback(layer) then
                  status = callCudnn(layer)
-                 if status ~= ffi.C.CUDNN_STATUS_SUCCESS  then error "Fallback attempt failed!" end
+                 if status ~= ffi.C.CUDNN_STATUS_SUCCESS  then error "Fallback attempt failed!"
+                 else
+                    useFallback = true;
+                 end
               end
               if cudnn.verbose then
-                 print("\ncallCudnn: ", findAPI, "returned ",  intt[0], " results , status = " , ret, "\n", perfResults )
+                 print("\ncallCudnn: ", findAPI, "returned ",  intt[0], " results , status = " , status, "\n")
               end
            end
 
@@ -374,7 +373,8 @@ function find:setupAlgo(layer, algo_t, perf_t, findAPI_idx, getAPI, wsAPI, algSe
                  cachedAlgo[validResults] = { algo = tonumber(res.algo),
                                               memory = tonumber(res.memory),
                                               time = tonumber(res.time),
-                                              status = tonumber(res.status) }
+                                              status = tonumber(res.status),
+                                              fallback = useFallback}
                  if cudnn.verbose and find.verbose then
                     print(string.format(
                              "\n" .. curFindAPI .. " algo: %d (status: %d), memory: %8d, count: %d"
@@ -393,13 +393,18 @@ function find:setupAlgo(layer, algo_t, perf_t, findAPI_idx, getAPI, wsAPI, algSe
         -- todo: add case of multi-stream not fitting in size
         end
 
+        -- need to replay fallback on cache hit
+        if (useFallback) then self.fallback(layer) end
+
         -- this may return different algo if size does not fit
         retAlgo = self:registerWorkspaceSize(cachedAlgo)
 
         if cudnn.verbose then
            local freeMemory, totalMemory = cutorch.getMemoryUsage(self.id)
+           local fallback = ""
+           if (useFallback) then fallback = "[FALLBACK]"  end
            print(string.format(
-                    "\n" .. curFindAPI  .. ": %d(%d) Workspace: %8d (current ws size %d, free: %d)  hash: %45s" .. cacheHit,
+                    "\n" .. curFindAPI  .. ": %d(%d) Workspace: %8d (current ws size %d, free: %d)  hash: %45s" .. cacheHit .. fallback,
                     retAlgo, tonumber(cachedAlgo[1].algo), tonumber(cachedAlgo[1].memory), extraBufferSize, freeMemory, layer.autotunerHash))
         end
         return retAlgo
