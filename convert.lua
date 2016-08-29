@@ -23,7 +23,8 @@ local layer_list = {
 function cudnn.convert(net, dst, exclusion_fn)
   return net:replace(function(x)
     if torch.type(x) == 'nn.gModule' then
-      error('cudnn.convert does not work with nngraph yet')
+      io.stderr:write('Warning: cudnn.convert does not work with nngraph yet. Ignoring nn.gModule')
+      return x
     end
     local y = 0
     local src = dst == nn and cudnn or nn
@@ -61,4 +62,3 @@ function cudnn.convert(net, dst, exclusion_fn)
     return y == 0 and x or y
   end)
 end
-
