@@ -245,9 +245,7 @@ local function sharedBufForCurrentStream()
 end
 
 function cudnn.getSharedWorkspace()
---   print ("Getting buf ")
    local buf = sharedBufForCurrentStream()
---   print ("Buf: ", buf)
    return buf.data, buf.currentSize
 end
 

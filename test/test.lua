@@ -64,10 +64,6 @@ function torch.CudaDoubleTensor:mean()
    return self:cuda():mean()
 end
 
-local function random2(min,max, half_max)
-   return math.random(min,max)
-end
-
 local function testLayer(nnlayer, cudnnlayer, input, gradOutput, scale,
                          parametric, batchMode, description)
    description = description or ''
@@ -127,15 +123,15 @@ local function testLayer(nnlayer, cudnnlayer, input, gradOutput, scale,
 end
 
 function cudnntest.SpatialConvolution()
-   local bs = random2(1,32)
-   local from = random2(1,32)
-   local to = random2(1,64)
-   local ki = random2(1,9,4)
-   local kj = random2(1,9,4)
-   local si = random2(1,ki, 1)
-   local sj = random2(1,kj, 1)
-   local outi = random2(1,64)
-   local outj = random2(1,64)
+   local bs = math.random(1,32)
+   local from = math.random(1,32)
+   local to = math.random(1,64)
+   local ki = math.random(1,9,4)
+   local kj = math.random(1,9,4)
+   local si = math.random(1,ki)
+   local sj = math.random(1,kj)
+   local outi = math.random(1,64)
+   local outj = math.random(1,64)
    local ini = (outi-1)*si+ki
    local inj = (outj-1)*sj+kj
 
@@ -159,15 +155,15 @@ end
 
 function cudnntest.SpatialFullConvolution()
 
-   local bs = random2(1,32)
-   local from = random2(1,32)
-   local to = random2(1,64)
-   local ki = random2(1,9)
-   local kj = random2(1,9)
-   local si = random2(1,ki,1)
-   local sj = random2(1,kj,1)
-   local ini = random2(1,64)
-   local inj = random2(1,64)
+   local bs = math.random(1,32)
+   local from = math.random(1,32)
+   local to = math.random(1,64)
+   local ki = math.random(1,9)
+   local kj = math.random(1,9)
+   local si = math.random(1,ki)
+   local sj = math.random(1,kj)
+   local ini = math.random(1,64)
+   local inj = math.random(1,64)
    local outi = (ini-1)*si+ki
    local outj = (inj-1)*sj+kj
    local scale = math.random()
@@ -190,12 +186,12 @@ function cudnntest.SpatialFullConvolution()
 end
 
 function cudnntest.TemporalConvolution()
-   local bs = random2(2,32)
-   local inputFrameSize = random2(1,64)
-   local outputFrameSize = random2(1,64)
-   local ki = random2(2,6)
-   local si = random2(2,ki,1)
-   local outi = random2(2,9,4)
+   local bs = math.random(2,32)
+   local inputFrameSize = math.random(1,64)
+   local outputFrameSize = math.random(1,64)
+   local ki = math.random(2,6)
+   local si = math.random(2,ki)
+   local outi = math.random(2,9)
    local ini = (outi - 1) * si + ki
    local scale = math.random()
 
@@ -212,13 +208,13 @@ function cudnntest.TemporalConvolution()
 end
 
 function cudnntest.TemporalConvolution_padding_batch()
-   local bs = random2(2,32)
-   local inputFrameSize = random2(2,64)
-   local outputFrameSize = random2(2,64)
-   local ki = random2(2,9)
+   local bs = math.random(2,32)
+   local inputFrameSize = math.random(2,64)
+   local outputFrameSize = math.random(2,64)
+   local ki = math.random(2,9)
    local pad_h = math.floor(ki/2)
-   local si = random2(1,ki,1)
-   local outi = random2(2,9,4)
+   local si = math.random(1,ki,1)
+   local outi = math.random(2,9)
    local ini = (outi-1)*si+ki
    local scale = math.random()
 
@@ -266,11 +262,11 @@ function cudnntest.TemporalConvolution_padding_batch()
 end
 
 function cudnntest.TemporalConvolution_reduceBatchSize()
-   local inputFrameSize = random2(1,64)
-   local outputFrameSize = random2(1,64)
-   local ki = random2(1,9,6)
-   local si = random2(1,ki,1)
-   local outi = random2(2,9)
+   local inputFrameSize = math.random(1,64)
+   local outputFrameSize = math.random(1,64)
+   local ki = math.random(1,9)
+   local si = math.random(1,ki)
+   local outi = math.random(2,9)
    local ini = (outi-1)*si+ki
    local batchSize = 128
    local smallerBatchSize = batchSize/2
@@ -289,18 +285,18 @@ function cudnntest.TemporalConvolution_reduceBatchSize()
 end
 
 function cudnntest.VolumetricConvolution()
-   local bs = random2(1,32)
-   local from = random2(1,bs)
-   local to = random2(from,bs)
-   local ki = random2(3,5,3)
-   local kj = random2(3,5,3)
-   local kk = random2(3,5,3)
-   local si = random2(1,ki-1,1)
-   local sj = random2(1,kj-1,1)
-   local sk = random2(1,kk-1,1)
-   local outi = random2(2,17)
-   local outj = random2(2,17)
-   local outk = random2(2,5)
+   local bs = math.random(1,32)
+   local from = math.random(1,bs)
+   local to = math.random(from,bs)
+   local ki = math.random(3,5,3)
+   local kj = math.random(3,5,3)
+   local kk = math.random(3,5,3)
+   local si = math.random(1,ki-1)
+   local sj = math.random(1,kj-1)
+   local sk = math.random(1,kk-1)
+   local outi = math.random(2,17)
+   local outj = math.random(2,17)
+   local outk = math.random(2,5)
    local ini = (outi-1)*si+ki
    local inj = (outj-1)*sj+kj
    local ink = (outk-1)*sk+kk
@@ -324,17 +320,17 @@ function cudnntest.VolumetricConvolution()
 end
 
 function cudnntest.VolumetricMaxPooling()
-   local bs = random2(1,4)
-   local from = random2(1,4)
-   local ki = random2(2,4)
-   local kj = random2(2,4)
-   local kk = random2(2,4)
+   local bs = math.random(1,4)
+   local from = math.random(1,4)
+   local ki = math.random(2,4)
+   local kj = math.random(2,4)
+   local kk = math.random(2,4)
    local si = ki
    local sj = kj
    local sk = kk
-   local outi = random2(1,64)
-   local outj = random2(1,64)
-   local outk = random2(1,64)
+   local outi = math.random(1,64)
+   local outj = math.random(1,64)
+   local outk = math.random(1,64)
    local ini = (outi-1)*si+ki
    local inj = (outj-1)*sj+kj
    local ink = (outk-1)*sk+kk
@@ -355,19 +351,19 @@ function cudnntest.VolumetricMaxPooling()
 end
 
 function cudnntest.SpatialMaxPooling()
-   local bs = random2(1,32)
-   local from = random2(1,32)
-   local ki = random2(2,4)
-   local kj = random2(2,4)
-   local si = random2(1,4)
-   local sj = random2(1,4)
-   local outi = random2(16,64)
-   local outj = random2(16,64)
-   local padi = random2(0,ki/2-1)
-   local padj = random2(0,kj/2-1)
+   local bs = math.random(1,32)
+   local from = math.random(1,32)
+   local ki = math.random(2,4)
+   local kj = math.random(2,4)
+   local si = math.random(1,4)
+   local sj = math.random(1,4)
+   local outi = math.random(16,64)
+   local outj = math.random(16,64)
+   local padi = math.random(0,ki/2-1)
+   local padj = math.random(0,kj/2-1)
    local ini = (outi-1)*si+ki - padi*2
    local inj = (outj-1)*sj+kj - padj*2
-   local ceil_mode = random2(0,1) == 1
+   local ceil_mode = math.random(0,1) == 1
 
    local input = torch.randn(bs,from,inj,ini):cuda()
    local gradOutput = torch.randn(bs,from,outj,outi):cuda()
@@ -387,14 +383,14 @@ function cudnntest.SpatialMaxPooling()
 end
 
 function cudnntest.SpatialAveragePooling()
-   local bs = random2(1,32)
-   local from = random2(1,32)
-   local ki = random2(2,4)
-   local kj = random2(2,4)
-   local si = random2(2,4)
-   local sj = random2(2,4)
-   local outi = random2(1,64)
-   local outj = random2(1,64)
+   local bs = math.random(1,32)
+   local from = math.random(1,32)
+   local ki = math.random(2,4)
+   local kj = math.random(2,4)
+   local si = math.random(2,4)
+   local sj = math.random(2,4)
+   local outi = math.random(1,64)
+   local outj = math.random(1,64)
    local ini = (outi-1)*si+ki
    local inj = (outj-1)*sj+kj
 
@@ -416,10 +412,10 @@ function cudnntest.SpatialAveragePooling()
 end
 
 local function nonlin(nonlin, inplace)
-   local bs = random2(1,32)
-   local from = random2(1,32)
-   local outi = random2(1,64)
-   local outj = random2(1,64)
+   local bs = math.random(1,32)
+   local from = math.random(1,32)
+   local outi = math.random(1,64)
+   local outj = math.random(1,64)
    local ini = outi
    local inj = outj
 
@@ -462,13 +458,13 @@ function cudnntest.ClippedReLU_single()
 end
 
 function cudnntest.SpatialCrossMapLRN_batch()
-   local bs = random2(4,10)
-   local inputSize = random2(6,9)
-   local size = random2(1,3)*2+1
-   local nbfeatures = random2(3,8)
-   local alpha = random2(1,100)/100
-   local beta  = random2(1,100)/100
-   local k = random2(1,3)
+   local bs = math.random(4,10)
+   local inputSize = math.random(6,9)
+   local size = math.random(1,3)*2+1
+   local nbfeatures = math.random(3,8)
+   local alpha = math.random(1,100)/100
+   local beta  = math.random(1,100)/100
+   local k = math.random(1,3)
 
    local input = torch.rand(bs, nbfeatures, inputSize, inputSize):cuda()
    local gradOutput = torch.rand(input:size()):cuda()
@@ -486,8 +482,8 @@ function cudnntest.SpatialCrossMapLRN_batch()
 end
 
 function cudnntest.SoftMax_single()
-   local bs = random2(1, 32)
-   local sz = random2(1,64)
+   local bs = math.random(1, 32)
+   local sz = math.random(1,64)
    local input = torch.randn(bs, sz):cuda()
    local gradOutput = torch.randn(bs, sz):cuda()
 
@@ -509,8 +505,8 @@ function cudnntest.SoftMax_single()
 end
 
 function cudnntest.LogSoftMax()
-   local bs = random2(1, 32)
-   local sz = random2(1,64)
+   local bs = math.random(1, 32)
+   local sz = math.random(1,64)
    local input = torch.randn(bs, sz):cuda()
    local gradOutput = torch.randn(bs, sz):cuda()
 
@@ -533,10 +529,10 @@ end
 
 function cudnntest.SpatialLogSoftMax()
     -- batch
-    local numLabels = random2(5,10)
-    local h = random2(5,10)
-    local w = random2(5,10)
-    local bsz = random2(3, 7)
+    local numLabels = math.random(5,10)
+    local h = math.random(5,10)
+    local w = math.random(5,10)
+    local bsz = math.random(3, 7)
     local input = torch.zeros(bsz, numLabels, h, w):normal():cuda()
     local target = torch.zeros(bsz, numLabels, h, w):normal():cuda()
 
@@ -624,29 +620,29 @@ end
 
 function cudnntest.BatchNormalization()
    local size = {
-      random2(2, 32),
-      random2(16, 256),
+      math.random(2, 32),
+      math.random(16, 256),
    }
    testBatchNormalization('BatchNormalization', size)
 end
 
 function cudnntest.SpatialBatchNormalization()
    local size = {
-      random2(1, 32),
-      random2(1, 32),
-      random2(5, 10),
-      random2(5, 10),
+      math.random(1, 32),
+      math.random(1, 32),
+      math.random(5, 10),
+      math.random(5, 10),
    }
    testBatchNormalization('SpatialBatchNormalization', size)
 end
 
 function cudnntest.VolumetricBatchNormalization()
    local size = {
-      random2(1, 32),
-      random2(1, 32),
-      random2(2, 6),
-      random2(2, 6),
-      random2(2, 6),
+      math.random(1, 32),
+      math.random(1, 32),
+      math.random(2, 6),
+      math.random(2, 6),
+      math.random(2, 6),
    }
    testBatchNormalization('VolumetricBatchNormalization', size)
 end
@@ -654,10 +650,10 @@ end
 function cudnntest.SpatialCrossEntropyCriterion()
     if testparams.test_type ~= 'torch.CudaTensor' then return end
     -- batch
-    local numLabels = random2(5,10)
-    local h = random2(5,10)
-    local w = random2(5,10)
-    local bsz = random2(3, 7)
+    local numLabels = math.random(5,10)
+    local h = math.random(5,10)
+    local w = math.random(5,10)
+    local bsz = math.random(3, 7)
     local input = torch.zeros(bsz, numLabels, h, w):normal():cuda()
     local target = torch.Tensor(bsz, h, w):random(1, numLabels):cuda()
 
@@ -689,15 +685,15 @@ function cudnntest.SpatialCrossEntropyCriterion()
 end
 
 function cudnntest.functional_bias2D()
-   local bs = random2(1,32)
-   local from = random2(1,32)
-   local to = random2(1,64)
-   local ki = random2(1,15)
-   local kj = random2(1,15)
-   local si = random2(1,ki)
-   local sj = random2(1,kj)
-   local outi = random2(1,64)
-   local outj = random2(1,64)
+   local bs = math.random(1,32)
+   local from = math.random(1,32)
+   local to = math.random(1,64)
+   local ki = math.random(1,15)
+   local kj = math.random(1,15)
+   local si = math.random(1,ki)
+   local sj = math.random(1,kj)
+   local outi = math.random(1,64)
+   local outj = math.random(1,64)
    local ini = (outi-1)*si+ki
    local inj = (outj-1)*sj+kj
    local scale = torch.uniform()
@@ -781,9 +777,8 @@ mytester:add(cudnntest)
 cudnn.verbose=false
 
 -- Developers, do not commit uncommented regions until bindings fixed
-local runHalf = true
 -- TODO: adapt tests for FindEx
--- cudnn.useFindEx=false
+-- cudnn.useFindEx=true
 
 for i = 1, cutorch.getDeviceCount() do
 
@@ -796,17 +791,9 @@ for i = 1, cutorch.getDeviceCount() do
 
       cutorch.setDevice(i)
 
-      if runHalf then
-         print'Testing torch.CudaHalfTensor'
-         testparams = testparams_half
-         mytester:run()
-      else
-         print(
-            [[Half Tensor tests are disabled due to missing functionality.
-They will be enabled once fully fixed and functional.
-See https://github.com/soumith/cudnn.torch/issues/225 for progress
-]])
-      end
+      print'Testing torch.CudaHalfTensor'
+      testparams = testparams_half
+      mytester:run()
 
       print'Testing torch.CudaTensor'
       testparams = testparams_float

@@ -89,22 +89,24 @@ end
 
 
 function SpatialConvolution:checkInputChanged(input)
-    assert(input:isContiguous())
-
+    assert(input:isContiguous(),
+           "input to " .. torch.type(self) .. " needs to be contiguous, but is non-contiguous")
     if not self.iSize or self.iSize:size() ~= input:dim() then
        self.iSize = torch.LongStorage(input:dim()):fill(0)
     end
     self.groups = self.groups or 1
     if not self.weightDesc then self:resetWeightDescriptors() end
+
     if not self.iDesc or not self.oDesc or input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
     or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] or (input:dim()==5 and input:size(5) ~= self.iSize[5]) then
        self.iSize = input:size()
-
-       assert(self.nInputPlane == input:size(2), 'input has to contain: '
+       assert(self.nInputPlane == input:size(2),
+              'input has to contain: '
                  .. self.nInputPlane
                  .. ' feature maps, but received input of size: '
-                 .. input:size(1) .. ' x ' .. input:size(2) ..
-                 ' x ' .. input:size(3) .. ' x ' .. input:size(4))
+                 .. input:size(1) .. ' x ' .. input:size(2) .. ' x ' .. input:size(3)
+                 .. (input:dim()>3 and ' x ' .. input:size(4) ..
+                        (input:dim()==5 and ' x ' .. input:size(5) or '') or ''))
        return true
     end
     return false

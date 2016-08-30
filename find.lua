@@ -6,18 +6,7 @@ find.__index = find
 local function call(layer, f, ...)
    local status = cudnn.call(f, ...)
    if status ~= ffi.C.CUDNN_STATUS_SUCCESS and cudnn.verbose then
-      local pad = ffi.new('int[5]')
-      local stride = ffi.new('int[5]')
-      local upscale = ffi.new('int[5]')
-      local dim = ffi.new('int[5]')
-      local mode = ffi.new('cudnnConvolutionMode_t[5]')
-      local datatype = ffi.new('cudnnDataType_t[5]')
-
-      cudnn.call('cudnnGetConvolutionNdDescriptor', layer.convDesc[0],
-                 4, dim, pad, stride,
-                 upscale, mode, datatype)
-
-      print("find:call:" .. f .. " failed: ", tonumber(status) , ' mode : ', tonumber(mode[0]), ' datatype : ', tonumber(datatype[0]))
+      print("find:call:" .. f .. " failed: ", tonumber(status) , ' datatype : ', tonumber(datatype[0]))
       if layer.autotunerHash then
          print("Hash sizes: " , layer.autotunerHash)
       end
@@ -38,7 +27,8 @@ find.errcheck = errcheck
 local function noFallback(layer)
    if cudnn.verbose then
       print("find.defaultFallback: call failed for:  ", layer.autotunerHash)
-   end   return false
+   end
+   return false
 end
 
 local function defaultFallback(layer)
@@ -130,7 +120,7 @@ end
 -- record algo, memory in cache
 function find:store(layer, findAPI_idx, cachedAlgo)
 --   print ("Storing ", findAPI_idx, layer.autotunerHash, cachedAlgo)
-   self.autotunerCache[findAPI_idx][layer.autotunerHash] = cachedAlgo
+  self.autotunerCache[findAPI_idx][layer.autotunerHash] = cachedAlgo
 end
 
 function find:setMaxWorkspaceSize(reserve, fraction)
@@ -284,6 +274,8 @@ function find:setupAlgo(layer, algo_t, perf_t, findAPI_idx, getAPI, wsAPI, algSe
         if cachedAlgo then
            validResults = #cachedAlgo
            useFallback = cachedAlgo[1].fallback
+           -- need to replay fallback on cache hit
+           if (useFallback) then self.fallback(layer) end
         else
            cacheHit = ''
            cachedAlgo = {}
@@ -300,20 +292,21 @@ function find:setupAlgo(layer, algo_t, perf_t, findAPI_idx, getAPI, wsAPI, algSe
               end
            end
 
-           local function callCudnn(layer)
+           local function callCudnn(layer, nAlgos)
+              nAlgos = nAlgos or 16
               if cudnn.benchmark or cudnn.fastest then
                  local ret
                  if cudnn.useFindEx then
                     ret =  cudnn.call(findExAPI,
                                       cudnn.getHandle(),
                                       params[1], params[2]:data(), params[3], params[4]:data(), layer.convDesc[0], params[6], params[7]:data(),
-                                      10, intt, perfResults, extraBuffer, extraBufferSize)
+                                      nAlgos, intt, perfResults, extraBuffer, extraBufferSize)
                  else
                     curFindAPI = findAPI
                     ret = cudnn.call(findAPI,
                                      cudnn.getHandle(),
                                      params[1], params[3], layer.convDesc[0], params[6],
-                                     10, intt, perfResults)
+                                     nAlgos, intt, perfResults)
                  end
               else
                  curFindAPI=getAPI
@@ -347,7 +340,7 @@ function find:setupAlgo(layer, algo_t, perf_t, findAPI_idx, getAPI, wsAPI, algSe
                                    memory = tonumber(bufSize[1]),
                                    status = ret}
               end
-              return ret;
+              return ret
            end
 
            -- do the actual call
@@ -356,13 +349,14 @@ function find:setupAlgo(layer, algo_t, perf_t, findAPI_idx, getAPI, wsAPI, algSe
            if status ~= ffi.C.CUDNN_STATUS_SUCCESS or perfResults[0].status ~=0 then
               if self.fallback and self.fallback(layer) then
                  status = callCudnn(layer)
-                 if status ~= ffi.C.CUDNN_STATUS_SUCCESS  then error "Fallback attempt failed!"
+                 if status ~= ffi.C.CUDNN_STATUS_SUCCESS  then
+                    error ("Fallback attempt failed for " .. curFindAPI .. ', sizes: ' .. layer.autotunerHash)
                  else
                     useFallback = true;
                  end
               end
               if cudnn.verbose then
-                 print("\ncallCudnn: ", findAPI, "returned ",  intt[0], " results , status = " , status, "\n")
+                 print("\ncallCudnn: ", curFindAPI, "returned ",  intt[0], " results , status = " , status, "\n")
               end
            end
 
@@ -392,9 +386,6 @@ function find:setupAlgo(layer, algo_t, perf_t, findAPI_idx, getAPI, wsAPI, algSe
            error("Could not find any valid convolution algorithms for sizes: " .. layer.autotunerHash)
         -- todo: add case of multi-stream not fitting in size
         end
-
-        -- need to replay fallback on cache hit
-        if (useFallback) then self.fallback(layer) end
 
         -- this may return different algo if size does not fit
         retAlgo = self:registerWorkspaceSize(cachedAlgo)
