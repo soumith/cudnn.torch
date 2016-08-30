@@ -126,8 +126,8 @@ function cudnntest.SpatialConvolution()
    local bs = math.random(1,32)
    local from = math.random(1,32)
    local to = math.random(1,64)
-   local ki = math.random(1,9,4)
-   local kj = math.random(1,9,4)
+   local ki = math.random(1,9)
+   local kj = math.random(1,9)
    local si = math.random(1,ki)
    local sj = math.random(1,kj)
    local outi = math.random(1,64)
@@ -774,7 +774,7 @@ math.randomseed(os.time())
 mytester = torch.Tester()
 mytester:add(cudnntest)
 
-cudnn.verbose=false
+-- cudnn.verbose=true
 
 -- Developers, do not commit uncommented regions until bindings fixed
 -- TODO: adapt tests for FindEx
@@ -782,7 +782,7 @@ cudnn.verbose=false
 
 for i = 1, cutorch.getDeviceCount() do
 
-   for _, benchmark in ipairs({false,true}) do
+   for _, benchmark in ipairs({true, false}) do
       cudnn.benchmark = benchmark
       local prop = cutorch.getDeviceProperties(i)
 
@@ -791,12 +791,12 @@ for i = 1, cutorch.getDeviceCount() do
 
       cutorch.setDevice(i)
 
-      print'Testing torch.CudaHalfTensor'
-      testparams = testparams_half
-      mytester:run()
-
       print'Testing torch.CudaTensor'
       testparams = testparams_float
+      mytester:run()
+
+      print'Testing torch.CudaHalfTensor'
+      testparams = testparams_half
       mytester:run()
 
       print'Testing torch.CudaDoubleTensor'
