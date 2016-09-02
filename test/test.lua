@@ -782,7 +782,7 @@ mytester:add(cudnntest)
 
 for i = 1, cutorch.getDeviceCount() do
 
-   for _, benchmark in ipairs({true, false}) do
+   for _, benchmark in ipairs({false, true}) do
       cudnn.benchmark = benchmark
       local prop = cutorch.getDeviceProperties(i)
 
