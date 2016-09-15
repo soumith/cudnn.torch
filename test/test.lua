@@ -563,6 +563,45 @@ function cudnntest.SpatialLogSoftMax()
                       'error in difference between central difference and :backward')
 end
 
+function cudnntest.VolumetricLogSoftMax()
+    -- batch
+    local numLabels = math.random(5,10)
+    local t = math.random(5,10)
+    local h = math.random(5,10)
+    local w = math.random(5,10)
+    local bsz = math.random(3, 7)
+    local input = torch.zeros(bsz, numLabels, t, h, w):normal():cuda()
+    local target = torch.zeros(bsz, numLabels, t, h, w):normal():cuda()
+
+    local cri = cast(cudnn.VolumetricLogSoftMax())
+    local gcri = nn.LogSoftMax():cuda()
+
+    local op = cri:forward(cast(input), cast(target))
+    local gi = cri:backward(cast(input), cast(target))
+
+    local gop = op:clone():zero()
+    local ggi = gi:clone():zero()
+
+    for i=1,t do
+        for j=1,h do
+            for k =1,w do
+               local i1 = input[{ {}, {}, {i}, {j}, {k} }]:contiguous():squeeze()
+               local t1 = target[{ {}, {}, {i}, {j}, {k} }]:contiguous():squeeze()
+               local gop1 = gcri:forward(i1, t1)
+               local ggi1 = gcri:backward(i1, t1)
+               gop[{ {}, {}, {i}, {j}, {k} }]:copy(gop1)
+               ggi[{ {}, {}, {i}, {j}, {k} }]:copy(ggi1)
+            end
+        end
+    end
+    local err = (gi - ggi):abs():max()
+    mytester:assertlt(err, testparams.precision_backward,
+                      'error in difference between central difference and :backward')
+    local err = (op - gop):abs():max()
+    mytester:assertlt(err, testparams.precision_backward,
+                      'error in difference between central difference and :backward')
+end
+
 local function testBatchNormalization(moduleName, inputSize)
    local input = torch.randn(table.unpack(inputSize)):cuda()
    local gradOutput = torch.randn(table.unpack(inputSize)):cuda()
@@ -678,6 +717,46 @@ function cudnntest.SpatialCrossEntropyCriterion()
     -- nn.CrossEntropy in contrast to cudnn.SpatialCrossEntropyCriterion cannot
     -- average over the last spatial dimensions because it is run in a loop
     ggi:div(h * w)
+
+    local err = (gi - ggi):abs():max()
+    mytester:assertlt(err, testparams.precision_backward,
+                      'error in difference between central difference and :backward')
+end
+
+function cudnntest.VolumetricCrossEntropyCriterion()
+    if testparams.test_type ~= 'torch.CudaTensor' then return end
+    -- batch
+    local numLabels = math.random(5,10)
+    local t = math.random(5,10)
+    local h = math.random(5,10)
+    local w = math.random(5,10)
+    local bsz = math.random(3, 7)
+    local input = torch.zeros(bsz, numLabels, t, h, w):normal():cuda()
+    local target = torch.Tensor(bsz, t, h, w):random(1, numLabels):cuda()
+
+    local cri = cast(cudnn.VolumetricCrossEntropyCriterion())
+    local gcri = nn.CrossEntropyCriterion():cuda()
+
+    local op = cri:forward(cast(input), cast(target))
+    local gi = cri:backward(cast(input), cast(target))
+
+    local ggi = gi:clone():zero()
+
+    for i=1,t do
+        for j=1,h do
+            for k=1,w do
+               local i1 = input[{ {}, {}, {i}, {j}, {k} }]:contiguous():squeeze()
+               local t1 = target[{ {}, {i}, {j}, {k} }]:contiguous():squeeze()
+               local gop1 = gcri:forward(i1, t1)
+               local ggi1 = gcri:backward(i1, t1)
+               ggi[{ {}, {}, {i}, {j}, {k} }]:copy(ggi1)
+            end
+        end
+    end
+
+    -- nn.CrossEntropy in contrast to cudnn.VolumetricCrossEntropyCriterion cannot
+    -- average over the last spatial dimensions because it is run in a loop
+    ggi:div(t* h * w)
 
     local err = (gi - ggi):abs():max()
     mytester:assertlt(err, testparams.precision_backward,

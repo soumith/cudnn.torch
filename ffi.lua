@@ -1586,18 +1586,30 @@ cudnnStatus_t             cudnnActivationBackward_v4(
 
 ]]
 
-local libnames = {'libcudnn.so.5', 'libcudnn.5.dylib'}
-local ok = false
-for i=1,#libnames do
-   ok = pcall(function () cudnn.C = ffi.load(libnames[i]) end)
-   if ok then break; end
-end
+local CUDNN_PATH = os.getenv('CUDNN_PATH')
+if CUDNN_PATH then
+    print('Found Environment variable CUDNN_PATH = ' .. CUDNN_PATH)
+    cudnn.C = ffi.load(CUDNN_PATH)
+else
 
-if not ok then
-   error([['libcudnn (R5) not found in library path.
+    local libnames = {'libcudnn.so.5', 'libcudnn.5.dylib'}
+    local ok = false
+    for i=1,#libnames do
+        ok = pcall(function () cudnn.C = ffi.load(libnames[i]) end)
+        if ok then break; end
+    end
+
+    if not ok then
+        error([['libcudnn (R5) not found in library path.
 Please install CuDNN from https://developer.nvidia.com/cuDNN
-Then make sure files named as libcudnn.so.5 or libcudnn.5.dylib are placed in your library load path (for example /usr/local/lib , or manually add a path to LD_LIBRARY_PATH)
+Then make sure files named as libcudnn.so.5 or libcudnn.5.dylib are placed in
+your library load path (for example /usr/local/lib , or manually add a path to LD_LIBRARY_PATH)
+
+Alternatively, set the path to libcudnn.so.5 or libcudnn.5.dylib
+to the environment variable CUDNN_PATH and rerun torch.
+For example: export CUDNN_PATH = "/usr/local/cuda/lib64/libcudnn.so.5"
 ]])
+    end
 end
 
 -- check cuDNN version
