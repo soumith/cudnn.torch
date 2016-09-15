@@ -301,6 +301,7 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
 
         local extraBuffer, extraBufferSize = cudnn.getSharedWorkspace()
         local validResults = 0
+        local API
         local perfResults = perfResultsArray[findAPI_idx]
         -- try to find algo in the cache first
         cachedAlgo =  self:lookup(layer, findAPI_idx)
@@ -323,9 +324,7 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
 
            local function callCudnn(layer)
               local ret = 0
-              local API
               validResults = 0
-
               if cudnn.benchmark or cudnn.fastest then
                  if cudnn.useFindEx then
                     API = findExAlgos[findAPI_idx]
