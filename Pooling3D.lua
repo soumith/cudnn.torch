@@ -57,7 +57,9 @@ function Pooling:createIODescriptors(input)
       input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
    or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4]
    or input:size(5) ~= self.iSize[5] then
-      self.iSize = input:size()
+      self.iSize:copy(input:size())
+      -- resize gradInput
+      self.gradInput:resizeAs(input)
       -- resize output
       local oW, oH, oT
       if self.ceil_mode then
@@ -75,10 +77,14 @@ function Pooling:createIODescriptors(input)
       self.iDesc = cudnn.toDescriptor(input)
       self.oDesc = cudnn.toDescriptor(self.output)
       if not batch then
-         self.output = self.output:view(self.output:size(2),
-                                        self.output:size(3),
-                                        self.output:size(4),
-                                        self.output:size(5))
+         self.gradInput:set(self.gradInput:view(self.gradInput:size(2),
+                                                self.gradInput:size(3),
+                                                self.gradInput:size(4),
+                                                self.gradInput:size(5)))
+         self.output:set(self.output:view(self.output:size(2),
+                                          self.output:size(3),
+                                          self.output:size(4),
+                                          self.output:size(5)))
       end
    end
 end

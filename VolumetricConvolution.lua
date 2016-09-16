@@ -8,6 +8,11 @@ autotunerCache[1] = {} -- forward
 autotunerCache[2] = {} -- backwardFilter
 autotunerCache[3] = {} -- backwardData
 
+function VolumetricConvolution:__init(...)
+   parent.__init(self, ...)
+   self.iSize = torch.LongStorage(5):fill(0)
+end
+
 -- if you change the configuration of the module manually, call this
 function VolumetricConvolution:resetWeightDescriptors()
    assert(cudnn.typemap[torch.typename(self.weight)], 'Only Cuda supported duh!')
@@ -33,7 +38,7 @@ end
 function VolumetricConvolution:fastest(mode)
    if mode == nil then mode = true end
    self.fastest_mode = mode
-   self.iSize = self.iSize or torch.LongStorage(4)
+   self.iSize = self.iSize or torch.LongStorage(5)
    self.iSize:fill(0)
    return self
 end
@@ -48,7 +53,7 @@ function VolumetricConvolution:setMode(fmode, bdmode, bwmode)
    if bwmode ~= nil then
       self.bwmode = bwmode
    end
-   self.iSize = self.iSize or torch.LongStorage(4)
+   self.iSize = self.iSize or torch.LongStorage(5)
    self.iSize:fill(0)
    return self
 end
@@ -68,12 +73,13 @@ function VolumetricConvolution:createIODescriptors(input)
       batch = false
    end
    assert(input:dim() == 5 and input:isContiguous());
-   self.iSize = self.iSize or torch.LongStorage(4):fill(0)
    if not self.iDesc or not self.oDesc or
       input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
    or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4]
    or input:size(5) ~= self.iSize[5] then
-         self.iSize = input:size()
+         self.iSize:copy(input:size())
+         -- resize gradInput
+         if self.gradInput then self.gradInput:resizeAs(input); end
          -- create input descriptor
          self.iDesc = cudnn.toDescriptor(input)
          -- create conv descriptor
@@ -285,10 +291,14 @@ function VolumetricConvolution:createIODescriptors(input)
         -----------------------------------------------------------------------
 
          if not batch then
-            self.output = self.output:view(self.output:size(2),
-                                           self.output:size(3),
-                                           self.output:size(4),
-                                           self.output:size(5))
+            self.gradInput:set(self.gradInput:view(self.gradInput:size(2),
+                                                   self.gradInput:size(3),
+                                                   self.gradInput:size(4),
+                                                   self.gradInput:size(5)))
+            self.output:set(self.output:view(self.output:size(2),
+                                             self.output:size(3),
+                                             self.output:size(4),
+                                             self.output:size(5)))
          end
    end
 end
