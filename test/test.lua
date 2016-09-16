@@ -11,7 +11,7 @@ local jac = nn.Jacobian
 local testparams_half = {
    test_type = 'torch.CudaHalfTensor',
    precision_forward = 2e-1,
-   precision_backward = 6,
+   precision_backward = 8,
    precision_jac = 1e-3,
    precision_io = 1e-1,
 }
