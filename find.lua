@@ -301,7 +301,9 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
 
         local extraBuffer, extraBufferSize = cudnn.getSharedWorkspace()
         local validResults = 0
-        local API
+        local API = cudnn.useFindEx and findExAlgos[findAPI_idx]
+           or ( (cudnn.benchmark or cudnn.fastest) and
+                  findNoExAlgos[findAPI_idx] or getAlgos[findAPI_idx])
         local perfResults = perfResultsArray[findAPI_idx]
         -- try to find algo in the cache first
         cachedAlgo =  self:lookup(layer, findAPI_idx)
@@ -327,20 +329,17 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
               validResults = 0
               if cudnn.benchmark or cudnn.fastest then
                  if cudnn.useFindEx then
-                    API = findExAlgos[findAPI_idx]
                     ret =  call(layer, API,
                                 cudnn.getHandle(),
                                 params[1], params[2]:data(), params[3], params[4]:data(), layer.convDesc[0], params[6], params[7]:data(),
                                 nAlgos, numPerfResults, perfResults, extraBuffer, extraBufferSize)
                  else
-                    API = findNoExAlgos[findAPI_idx]
                     ret = call(layer, API,
                                     cudnn.getHandle(),
                                     params[1], params[3], layer.convDesc[0], params[6],
                                     nAlgos, numPerfResults, perfResults)
                  end
               else
-                 API = getAlgos[findAPI_idx]
                  numPerfResults[0]=1
                  local algWorkspaceLimit = layer.workspace_limit
                     or (layer.nInputPlane * layer.kH * layer.kW * layer.weight.elementSize())
