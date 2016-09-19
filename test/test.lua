@@ -310,7 +310,7 @@ function cudnntest.VolumetricConvolution()
    local ini = (outi-1)*si+ki
    local inj = (outj-1)*sj+kj
    local ink = (outk-1)*sk+kk
-   local scale = math.random(-10,10)
+   local scale = math.random()
 
    local input = torch.randn(bs,from,ink,inj,ini):cuda()
    local gradOutput = torch.randn(bs,to,outk,outj,outi):cuda()
@@ -863,15 +863,15 @@ math.randomseed(os.time())
 mytester = torch.Tester()
 mytester:add(cudnntest)
 
-cudnn.verbose=true
+-- cudnn.verbose=true
 
 -- Developers, do not commit uncommented regions until bindings fixed
 -- TODO: adapt tests for FindEx
 -- cudnn.useFindEx=true
 
-for i = 1, 1 do -- cutorch.getDeviceCount() do
+for i = 1, cutorch.getDeviceCount() do
 
-   for _, benchmark in ipairs({true}) do
+   for _, benchmark in ipairs({false, true}) do
       cudnn.benchmark = benchmark
       local prop = cutorch.getDeviceProperties(i)
 
@@ -880,10 +880,17 @@ for i = 1, 1 do -- cutorch.getDeviceCount() do
 
       cutorch.setDevice(i)
 
+      print'Testing torch.CudaTensor'
+      testparams = testparams_float
+      mytester:run()
+
       print'Testing torch.CudaHalfTensor'
       testparams = testparams_half
       mytester:run()
 
+      print'Testing torch.CudaDoubleTensor'
+      testparams = testparams_double
+      mytester:run()
    end
 end
 
