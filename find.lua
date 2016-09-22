@@ -6,6 +6,10 @@ find.__index = find
 -- constants to index array tables below
 local Fwd, BwdFilter, BwdData = 1, 2, 3
 
+local warmupIterations = 0
+
+local Meg = 1024*1024
+
 -- cudnnGetxxx APIs: default, when cudnn.benchmark == false
 local getAlgos = {'cudnnGetConvolutionForwardAlgorithm',
                   'cudnnGetConvolutionBackwardFilterAlgorithm',
@@ -25,9 +29,44 @@ local findExAlgos = {'cudnnFindConvolutionForwardAlgorithmEx',
                      'cudnnFindConvolutionBackwardDataAlgorithmEx'}
 
 
+local fwdAlgoNames = {
+   "IMPLICIT_GEMM",
+   "IMPLICIT_PRECOMP_GEMM",
+   "GEMM",
+   "DIRECT",
+   "FFT",
+   "FFT_TILING",
+   "WINOGRAD",
+   "WINOGRAD_NONFUSED"
+}
+
+local bwdFilterAlgoNames = {
+   "ALGO_0",
+   "ALGO_1",
+   "FFT",
+   "ALGO_3",
+   "WINOGRAD",
+   "WINOGRAD_NONFUSED"
+}
+
+local bwdDataAlgoNames = {
+   "ALGO_0",
+   "ALGO_1",
+   "FFT",
+   "FFT_TILING",
+   "WINOGRAD",
+   "WINOGRAD_NONFUSED"
+}
+
+local algoNames = {fwdAlgoNames, bwdFilterAlgoNames, bwdDataAlgoNames}
+
 local function call(layer, f, ...)
+   if find.verbose then
+
+        print("find:call: calling " .. f .. ", hash: ",  layer.autotunerHash)
+   end
    local status = cudnn.call(f, ...)
-   if status ~= ffi.C.CUDNN_STATUS_SUCCESS and cudnn.verbose then
+   if status ~= ffi.C.CUDNN_STATUS_SUCCESS and (find.verbose or find.verboseError) then
       local stride = ffi.new('int[8]')
       local upscale = ffi.new('int[8]')
       local dim = ffi.new('int[8]')
@@ -37,9 +76,9 @@ local function call(layer, f, ...)
                  4, dim, pad, stride,
                  upscale, mode, datatype)
       print("find:call:" .. f .. " failed: ", tonumber(status) , ' mode : ', tonumber(mode[0]), ' datatype : ', tonumber(datatype[0]))
-      if layer.autotunerHash then
-         print("Hash sizes: " , layer.autotunerHash)
-      end
+   end
+   if find.verbose then
+      print("find:call: success, " .. f )
    end
    return status
 end
@@ -55,7 +94,7 @@ end
 find.errcheck = errcheck
 
 local function noFallback(layer)
-   if cudnn.verbose then
+   if find.verbose then
       print("find.defaultFallback: call failed for:  ", layer.autotunerHash)
    end
    return false
@@ -75,7 +114,7 @@ local function defaultFallback(layer, replay)
             upscale, mode, datatype)
 
    if datatype[0] == ffi.C.CUDNN_DATA_HALF then
-      if cudnn.verbose then
+      if find.verbose then
          if replay then
             print("find.defaultFallback: replay for ", layer.autotunerHash)
          else
@@ -84,7 +123,7 @@ local function defaultFallback(layer, replay)
       end
       errcheck(layer,'cudnnSetConvolutionNdDescriptor', layer.convDesc[0],
                dim[0], pad, stride,
-               upscale, mode[0], 'CUDNN_DATA_FLOAT')
+               upscale, mode[0], ffi.C.CUDNN_DATA_FLOAT)
       return true
    else
       return false
@@ -96,25 +135,15 @@ function find.create(id)
    local finder = {}
    setmetatable(finder,find)
    finder.id = id
-   finder:resetStateMachine()
    finder:resetAlgorithmCache()
+   finder:resetStateMachine()
    if cutorch.hasHalf then
       finder.fallback = defaultFallback
    end
    return finder
 end
 
--- FindEx State Machine cycle works as follows:
--- iteration #0(useDefaultWorkspaceSize) : call FindEx with default WS size (let everybody allocate I/O, weights etc)
--- iteration #1(useMaxWorkspaceSize) : call FindEx with maximum WS size, calculate common target WS using largest WS requested
--- iteration #2+(useCalculatedWorkspaceSize) : set calculated WS. call FindEx again with calculated WS size, cache the result
--- note: calculatedWorkspaceSize array is attribute of the cache (maximum WS of the cached algos) and reset separately
-
--- This resets SM of particular device to cycle 0 : useDefaultWorkspaceSize
 function find:resetStateMachine()
-   self.useDefaultWorkspaceSize = true
-   self.useMaxWorkspaceSize = false
-   self.useCalculatedWorkspaceSize = false
    self.iteration = 0
 end
 
@@ -122,14 +151,15 @@ local finders = nil
 -- this resets algorithm cache for device
 function find:resetAlgorithmCache()
    self.calculatedWorkspaceSize  = {}
-   self.maxWorkspaceSize = 0
+   self:calculateMaxWorkspaceSize()
    self.useFindEx = cudnn.useFindEx and (cudnn.benchmark or cudnn.fastest)
    self.autotunerCache = {{}, {}, {}}
 end
 
-function find.reset()
+function find.reset(warmup)
    cutorch:synchronizeAll()
    finders = {}
+   warmupIterations = warmup or 0
 end
 
 function find.get()
@@ -143,80 +173,68 @@ function find.get()
 end
 
 function find:lookup(layer, findAPI_idx)
-   if self.useFindEx and not self.useCalculatedWorkspaceSize then
-      return nil
-   else
-      return  self.autotunerCache[findAPI_idx][layer.autotunerHash]
-   end
+   return  self.autotunerCache[findAPI_idx][layer.autotunerHash]
 end
 
 -- record algo, memory in cache
 function find:store(layer, findAPI_idx, cachedAlgo)
-   self.autotunerCache[findAPI_idx][layer.autotunerHash] = cachedAlgo
+   if warmupIterations==0 then
+      self.autotunerCache[findAPI_idx][layer.autotunerHash] = cachedAlgo
+   end
 end
 
-function find:setMaxWorkspaceSize(reserve, fraction)
+function find:calculateMaxWorkspaceSize(reserve, fraction)
    if not reserve or reserve < cudnn.reservedGPUBytes then reserve = cudnn.reservedGPUBytes end
    local max_fraction =  cudnn.maxWorkspaceGPUMemPercent/100
    if not fraction or fraction > max_fraction then fraction = max_fraction end
+   local buf, curSize = cudnn.getSharedWorkspace()
    -- check current usage
    local freeMemory, totalMemory = cutorch.getMemoryUsage(self.id)
-
-   local ws, curSize = cudnn.getSharedWorkspace()
    local newSize= (freeMemory+curSize-reserve) * fraction
-   if (newSize > curSize) then
-      self.maxWorkspaceSize = newSize
-      cudnn.setSharedWorkspaceSize(newSize)
-   else
-      self.maxWorkspaceSize = curSize
-   end
-   self.useMaxWorkspaceSize = true
-   if cudnn.verbose then
-      print("setMaxWorkspaceSize Memory: ", freeMemory, totalMemory, self.maxWorkspaceSize)
+   self.maxWorkspaceSize = newSize
+   if find.verbose then
+      print("calculateMaxWorkspaceSize Memory: ", freeMemory/Meg, "M free, " , totalMemory/Meg, "M total, " , self.maxWorkspaceSize/Meg, "M Workspace" )
    end
 end
 
 function find:setCalculatedWorkspaceSize(greater)
-   for i,bytes in pairs (self.calculatedWorkspaceSize) do
-      cudnn.setSharedWorkspaceSize(bytes, greater)
+   local device = cutorch.getDevice()
+   for stream,bytes in pairs (self.calculatedWorkspaceSize) do
+      cudnn.setSharedWorkspaceSize(bytes, greater, device, stream)
    end
-   self.useCalculatedWorkspaceSize = true
 end
 
--- adjusts workspace immediately in no FindEx
 function find:registerWorkspaceSize(cachedAlgo)
-    local stream = cutorch.getStream()
-    if self.useFindEx then
-       if not self.calculatedWorkspaceSize[stream] then
-          self.calculatedWorkspaceSize[stream] = 0
-       end
-       -- find algo with a size that keeps the sum of stream sizes within ws size
-       for a=1,#cachedAlgo do
-          local algoSize = cachedAlgo[a].memory
-          local delta = algoSize - self.calculatedWorkspaceSize[stream]
-          if delta > 0 then
-             -- check if we still fit
-             local totalWS = 0
-             for s,sz in pairs(self.calculatedWorkspaceSize) do
-                totalWS = totalWS + sz
-             end
-             if totalWS + delta < self.maxWorkspaceSize then
-                self.calculatedWorkspaceSize[stream] = algoSize + delta
-                   if cudnn.verbose then
-                      print("find:registerWorkspaceSize: calculated ", self.calculatedWorkspaceSize[stream], " delta = ", delta, "max : " , self.maxWorkspaceSize)
-                   end
-                return cachedAlgo[a].algo
-             end
-          else
-                return cachedAlgo[a].algo
-          end  -- delta
-       end
-       return nil
-   else
-       -- no FindEx - do not rely on find stored data
-       cudnn.setSharedWorkspaceSize(cachedAlgo[1].memory, true)
-       return cachedAlgo[1].algo
-    end
+   local stream = cutorch.getStream()
+
+   if not self.calculatedWorkspaceSize[stream] then
+      self.calculatedWorkspaceSize[stream] = 0
+   end
+
+   if self.calculatedWorkspaceSize[stream] > self.maxWorkspaceSize then
+      self.calculatedWorkspaceSize[stream] = self.maxWorkspaceSize
+   end
+
+   -- find algo with a size that keeps the sum of stream sizes within ws size
+   for a=1,#cachedAlgo do
+      local algoSize = cachedAlgo[a].memory
+      local delta = algoSize - self.calculatedWorkspaceSize[stream]
+      if delta > 0 then
+         -- check if we still fit
+         local totalWS = 0
+         for s,sz in pairs(self.calculatedWorkspaceSize) do
+            totalWS = totalWS + sz
+         end
+         if totalWS + delta < self.maxWorkspaceSize then
+            self.calculatedWorkspaceSize[stream] = algoSize
+            return a
+         end
+      else
+         -- keep previously calculated WS size for the stream
+         return a
+      end  -- delta
+   end
+   return 0
 end
 
 function find:reserveBytes(layer)
@@ -226,8 +244,7 @@ function find:reserveBytes(layer)
    return reserve
 end
 
-
-function find:verifyWorkspaceSize(layer)
+function find:verifyReserveForWeights(layer)
    local freeMemory, totalMemory = cutorch.getMemoryUsage(self.id)
    local reserve =  self:reserveBytes(layer)
    if freeMemory < reserve then
@@ -236,12 +253,11 @@ function find:verifyWorkspaceSize(layer)
    end
 end
 
-function find:newIteration(layer)
-   if self.useCalculatedWorkspaceSize or not self.useFindEx then
-      --- end state
-      return false
-   end
+
+function find:advanceStateMachine(layer, findAPI_idx)
+   if warmupIterations == 0 then return end
    if not layer.iteration then layer.iteration = {0,0,0} end
+
    -- find last iteration
    local max_iter = 0
    for k,v in pairs(layer.iteration) do
@@ -250,33 +266,9 @@ function find:newIteration(layer)
 
    if (self.iteration < max_iter and max_iter > 1) then
       self.iteration = max_iter
-      if cudnn.verbose then  print ("CUDNN Find SM: iteration ", self.iteration) end
-      return true
-   else
-     return false
+      if find.verbose then  print ("CUDNN Find SM: iteration #", self.iteration) end
+      if warmupIterations > 0 then warmupIterations = warmupIterations -1 end
   end
-end
-
-function find:advanceStateMachine(layer, findAPI_idx)
-   if not self.useFindEx then return end
-   if self:newIteration(layer) then
-      -- iteration changed, advance state machine
-      if self.useMaxWorkspaceSize then
-         if cudnn.verbose then  print ("CUDNN Find SM: max->calculated ", self.calculatedWorkspaceSize) end
-         self:setCalculatedWorkspaceSize()
-         self.useMaxWorkspaceSize = false
-      end
-      if self.useDefaultWorkspaceSize then
-         if self.useFindEx then
-            if cudnn.verbose then print ("CUDNN Find SM: default->max") end
-            self:setMaxWorkspaceSize(self:reserveBytes(layer))
-         else
-            if cudnn.verbose then print ("CUDNN Find SM: default->calculated ", self.calculatedWorkspaceSize) end
-            self:setCalculatedWorkspaceSize(true)
-         end
-         self.useDefaultWorkspaceSize = false
-      end
-   end
    layer.iteration[findAPI_idx] = layer.iteration[findAPI_idx] + 1
 end
 
@@ -301,7 +293,7 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
 
         local extraBuffer, extraBufferSize = cudnn.getSharedWorkspace()
         local validResults = 0
-        local API = cudnn.useFindEx and findExAlgos[findAPI_idx]
+        local API = self.useFindEx and findExAlgos[findAPI_idx]
            or ( (cudnn.benchmark or cudnn.fastest) and
                   findNoExAlgos[findAPI_idx] or getAlgos[findAPI_idx])
         local perfResults = perfResultsArray[findAPI_idx]
@@ -312,7 +304,7 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
            validResults = #cachedAlgo
            useFallback = cachedAlgo[1].fallback
            -- need to replay fallback on cache hit
-           if useFallback then self.fallback(layer) end
+           if useFallback then self.fallback(layer, true) end
         else
            cacheHit = ''
            cachedAlgo = {}
@@ -322,13 +314,15 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
               if findAPI_idx == BwdFilter then
                  params[7] = params[7]:clone()
               end
+              self:calculateMaxWorkspaceSize()
+              cudnn.setSharedWorkspaceSize(self.maxWorkspaceSize)
            end
 
            local function callCudnn(layer)
               local ret = 0
               validResults = 0
               if cudnn.benchmark or cudnn.fastest then
-                 if cudnn.useFindEx then
+                 if self.useFindEx then
                     ret =  call(layer, API,
                                 cudnn.getHandle(),
                                 params[1], params[2]:data(), params[3], params[4]:data(), layer.convDesc[0], params[6], params[7]:data(),
@@ -349,9 +343,9 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
                                   params[1], params[3], layer.convDesc[0], params[6],
                                   algSearchMode, algWorkspaceLimit, algType[findAPI_idx])
                  local retAlgo = algType[findAPI_idx][0]
-                 if cudnn.verbose then
+                 if find.verbose then
                     print(string.format(
-                             "\n" .. getAPI .. ": %d (ws limit: %d) mode = %s",
+                             "\n" .. API .. ": %d (ws limit: %d) mode = %s",
                              tonumber(retAlgo),
                              algWorkspaceLimit,
                              algSearchMode))
@@ -361,9 +355,9 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
                                   cudnn.getHandle(),
                                   params[1], params[3], layer.convDesc[0], params[6],
                                   retAlgo, bufSize:data())
-                 if cudnn.verbose then
+                 if find.verbose then
                     print(string.format(
-                             "\n" .. wsAPI  .. ": bufSize: %d, current ws: %d",
+                             "\n" .. getWSAlgos[findAPI_idx]  .. ": bufSize: %d, current ws: %d",
                              tonumber(bufSize[1]), tonumber(extraBufferSize)))
                  end
                  perfResults[0].algo = retAlgo
@@ -371,11 +365,11 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
                  perfResults[0].status = ret
               end
 
-              if cudnn.verbose then
+              if find.verbose then
                  print("\ncallCudnn: ", API, "returned ",  numPerfResults[0], " results , status = " , ret, "status[0] = " , perfResults[0].status, "\n")
               end
 
-              if ret ~= 0 or numPerfResults[0] < 1 then
+              if ret ~= 0 then
                  return ret
               end
 
@@ -388,22 +382,23 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
                                                  time = tonumber(res.time),
                                                  status = tonumber(res.status),
                                                  fallback = useFallback}
-                    if cudnn.verbose and find.verbose then
+                    if find.verbose then
                        local fallback = ''
                        if (useFallback) then fallback = "[FALLBACK]"  end
                        print(string.format(
-                                "\n" .. API .. " algo: %d (status: %d), memory: %8d, count: %d"
+                                "\n" .. API .. " algo: %s (%d, status: %d), memory: %8d, count: %d"
                                    .. " hash: %45s " .. cacheHit .. fallback,
-                                cachedAlgo[validResults].algo,  cachedAlgo[validResults].status,
+                                algoNames[findAPI_idx][cachedAlgo[validResults].algo+1], cachedAlgo[validResults].algo,  cachedAlgo[validResults].status,
                                 cachedAlgo[validResults].memory, r, layer.autotunerHash))
                     end
                  end
               end
-              if validResults < 1  and cudnn.verbose then
+              if validResults < 1  and find.verbose then
                  print("Could not find any valid convolution algorithms for sizes: " .. layer.autotunerHash)
                  -- todo: add case of multi-stream not fitting in size
+                 return 1
               end
-              return ret
+              return 0
            end
 
            -- do the actual call
@@ -419,32 +414,43 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
               end
            end
            self:store(layer, findAPI_idx, cachedAlgo)
+           if self.useFindEx then
+              cudnn.setSharedWorkspaceSize(extraBufferSize)
+           end
         end
         -- this may return different algo if size does not fit
         retAlgo = self:registerWorkspaceSize(cachedAlgo)
-
-
-        -- this may return different algo if size does not fit
-        retAlgo = self:registerWorkspaceSize(cachedAlgo)
-
-        if cudnn.verbose then
+        if retAlgo==0 then
+           -- TODO: fallback to recalculate
+           error("No algorithms found that would fit in free memory")
+           return -1
+        end
+        if cudnn.verbose or find.verbose then
            local freeMemory, totalMemory = cutorch.getMemoryUsage(self.id)
            local fallback = ""
            if (useFallback) then fallback = "[FALLBACK]"  end
            print(string.format(
-                    "\n" .. API  .. ": %d(%d) Workspace: %8d (current ws size %d, free: %d)  hash: %45s" .. cacheHit .. fallback,
-                    retAlgo, #cachedAlgo, tonumber(cachedAlgo[1].memory), extraBufferSize, freeMemory, layer.autotunerHash))
+                    "\n" .. API  .. ": %s(%d)[%d of %d] Workspace: %8fM (current ws size %fM, max: %dM free: %dM)  hash: %45s" .. cacheHit .. fallback,
+                    algoNames[findAPI_idx][cachedAlgo[retAlgo].algo+1], cachedAlgo[retAlgo].algo, retAlgo, #cachedAlgo,
+                    tonumber(cachedAlgo[retAlgo].memory)/Meg, extraBufferSize/Meg, self.maxWorkspaceSize/Meg, freeMemory/Meg, layer.autotunerHash))
         end
-        return retAlgo
+        return cachedAlgo[retAlgo].algo
 end
 
 function find:prepare(layer, input_slice, output_slice)
    local function shape(x)
-      return table.concat(x:size():totable(),'x')
+      return table.concat(x:size():totable(),',')
    end
-   layer.autotunerHash = shape(layer.weight) .. ';'
-      .. shape(input_slice) .. ';'
-      .. shape(output_slice) .. "[" .. layer.padH .. ":" .. layer.padW .. ']' .. cudnn.configmap(torch.type(layer.weight))
+   local function vals(x)
+      return table.concat(x:totable(),',')
+   end
+   layer.autotunerHash =
+      '-dimA' .. shape(input_slice)
+      ..' -filtA' .. shape(layer.weight)
+      ..' '       .. shape(output_slice)
+      ..' -padA'   .. vals(layer.pad)
+      ..' -convStrideA' .. vals(layer.stride)
+      .. ' ' .. cudnn.configmap(torch.type(layer.weight))
 
    layer:resetMode()
    layer.iteration = nil

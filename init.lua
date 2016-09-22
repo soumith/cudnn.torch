@@ -190,12 +190,6 @@ end
 local sharedBuffer = {}
 local nextBufferSize = {}
 
-local function setNextSize(buf, size, ifGreater)
-   if size > buf.nextSize or not ifGreater then
-      buf.nextSize = size
-   end
-end
-
 -- may reassign currentSize
 local function allocateStorage(buf, ifGreater)
 
@@ -210,9 +204,6 @@ local function allocateStorage(buf, ifGreater)
    if buf.storage then
       if (newelem == buf.storage:size()) or (ifGreater and newelem < buf.storage:size()) then
       else
-         if cudnn.verbose then
-            print( "allocateStorage: new WS size is ", buf.nextSize)
-         end
          -- resize to just to make sure we return memory
          buf.storage:resize(0)
          buf.storage:resize(newelem)
@@ -228,24 +219,26 @@ local function allocateStorage(buf, ifGreater)
    buf.nextSize = -1
 end
 
-local function sharedBufForCurrentStream()
-    local device = cutorch.getDevice()
-    local stream = cutorch.getStream() -- starts from 0
-    if not sharedBuffer[device] then sharedBuffer[device] = {} end
-    local buf = sharedBuffer[device][stream]
-    if not buf then
-       buf = {
-          currentSize = cudnn.initialWorkspaceBytes,
-          nextSize = -1
-       }
-       allocateStorage(buf)
-       sharedBuffer[device][stream] = buf
-    end
-    return buf
+local function sharedBufForStream(device, stream)
+   device = device or cutorch.getDevice()
+   stream = stream or cutorch.getStream() -- starts from 0
+   if not sharedBuffer[device] then sharedBuffer[device] = {} end
+   local buf = sharedBuffer[device][stream]
+   if not buf then
+      buf = {
+         currentSize = cudnn.initialWorkspaceBytes,
+         nextSize = -1
+      }
+      allocateStorage(buf)
+      sharedBuffer[device][stream] = buf
+   end
+   return buf
 end
 
-function cudnn.getSharedWorkspace()
-   local buf = sharedBufForCurrentStream()
+function cudnn.getSharedWorkspace(device, stream)
+   device = device or cutorch.getDevice()
+   stream = stream or cutorch.getStream()
+   local buf = sharedBufForStream(device, stream)
    return buf.data, buf.currentSize
 end
 
@@ -257,21 +250,25 @@ function cudnn.externalizeString(luaStr)
     return cStr
 end
 
-function cudnn.adjustSharedWorkspaceSize(bytesDelta)
-   local buf = sharedBufForCurrentStream()
-   setNextSize(buf, buf.currentSize + bytesDelta)
+function cudnn.adjustSharedWorkspaceSize(bytesDelta, device, stream)
+   local buf = sharedBufForStream(device, stream)
+   buf.nextSize = buf.currentSize + bytesDelta
    allocateStorage(buf)
 end
 
-function cudnn.setSharedWorkspaceSize(bytes, ifGreater)
-   local buf = sharedBufForCurrentStream()
-   ifGreater = ifGreater or false
+function cudnn.setNextWorkspaceSize(bytes, device, stream)
+   local buf = sharedBufForStream(device, stream)
+   buf.nextSize = bytes
+   return buf
+end
+
+function cudnn.setSharedWorkspaceSize(bytes, ifGreater, device, stream)
    bytes = bytes or cudnn.initialWorkspaceBytes
-   setNextSize(buf, bytes, ifGreater)
+   local buf = cudnn.setNextWorkspaceSize(bytes, device, stream)
    allocateStorage(buf, ifGreater)
 end
 
-local find = require('cudnn.find')
+cudnn.find = require('cudnn.find')
 
 require('cudnn.SpatialConvolution')
 require('cudnn.VolumetricConvolution')
@@ -307,7 +304,6 @@ require('cudnn.BLSTM')
 require('cudnn.LSTM')
 require('cudnn.BGRU')
 require('cudnn.GRU')
-require('cudnn.functional')
 require('cudnn.convert')
 
 function cudnn.reset()
@@ -322,7 +318,7 @@ function cudnn.reset()
    end
    collectgarbage()
    -- this resets internal algorithm finder state machine and cache
-   find.reset()
+   cudnn.find.reset()
 end
 
 return cudnn

@@ -52,7 +52,6 @@ local function inputview(input)
 end
 
 function TemporalConvolution:updateOutput(input)
-   find.get():verifyWorkspaceSize(self)
    local _input = inputview(input)
    assert(_input:size(4) == self.inputFrameSize,'invalid input frame size')
    self.buffer = self.buffer or input.new()
@@ -86,7 +85,6 @@ end
 
 function TemporalConvolution:updateGradInput(input, gradOutput)
    if not self.gradInput then return end
-   find.get():verifyWorkspaceSize(self)
    local _gradOutput = transposeGradOutput(gradOutput,self.buffer)
    local _input = inputview(input)
    self.gradInput = Convolution.updateGradInput(self, _input, _gradOutput)
@@ -99,7 +97,6 @@ function TemporalConvolution:updateGradInput(input, gradOutput)
 end
 
 function TemporalConvolution:accGradParameters(input,gradOutput,scale)
-   find.get():verifyWorkspaceSize(self)
 --2d (4d) view of input
     local _input = inputview(input)
 -- transpose gradOutput (it will likely be transposed twice, hopefully, no big deal

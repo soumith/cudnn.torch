@@ -126,20 +126,20 @@ function cudnntest.SpatialConvolution()
    local bs = math.random(1,32)
    local from = math.random(1,32)
    local to = math.random(1,64)
-   local ki = math.random(1,9)
-   local kj = math.random(1,9)
+   local ki = math.random(1,15)
+   local kj = math.random(1,15)
    local si = math.random(1,ki)
    local sj = math.random(1,kj)
    local outi = math.random(1,64)
    local outj = math.random(1,64)
    local ini = (outi-1)*si+ki
    local inj = (outj-1)*sj+kj
+   local scale = math.random()
 
    local input = torch.randn(bs,from,inj,ini):cuda()
    local gradOutput = torch.randn(bs,to,outj,outi):cuda()
    local sconv = nn.SpatialConvolution(from,to,ki,kj,si,sj):cuda()
-   local gconv = cast(cudnn.SpatialConvolution(from,to,ki,kj,si,sj))
-
+   local gconv = cast(cudnn.SpatialConvolution(from,to,ki,kj,si,sj)):fastest()
    gconv.weight:copy(sconv.weight)
    gconv.bias:copy(sconv.bias)
 
@@ -154,12 +154,11 @@ function cudnntest.SpatialConvolution()
 end
 
 function cudnntest.SpatialFullConvolution()
-
    local bs = math.random(1,32)
    local from = math.random(1,32)
    local to = math.random(1,64)
-   local ki = math.random(1,9)
-   local kj = math.random(1,9)
+   local ki = math.random(1,15)
+   local kj = math.random(1,15)
    local si = math.random(1,ki)
    local sj = math.random(1,kj)
    local ini = math.random(1,64)
@@ -186,12 +185,12 @@ function cudnntest.SpatialFullConvolution()
 end
 
 function cudnntest.TemporalConvolution()
-   local bs = math.random(2,32)
+   local bs = math.random(1,32)
    local inputFrameSize = math.random(1,64)
    local outputFrameSize = math.random(1,64)
-   local ki = math.random(2,6)
-   local si = math.random(2,ki)
-   local outi = math.random(2,9)
+   local ki = math.random(1,15)
+   local si = math.random(1,ki)
+   local outi = math.random(1,15)
    local ini = (outi - 1) * si + ki
    local scale = math.random()
 
@@ -208,13 +207,13 @@ function cudnntest.TemporalConvolution()
 end
 
 function cudnntest.TemporalConvolution_padding_batch()
-   local bs = math.random(2,32)
-   local inputFrameSize = math.random(2,64)
-   local outputFrameSize = math.random(2,64)
-   local ki = math.random(2,9)
+   local bs = math.random(1,32)
+   local inputFrameSize = math.random(1,64)
+   local outputFrameSize = math.random(1,64)
+   local ki = math.random(2,15)
    local pad_h = math.floor(ki/2)
-   local si = math.random(1,ki,1)
-   local outi = math.random(2,9)
+   local si = math.random(1,ki)
+   local outi = math.random(2,15)
    local ini = (outi-1)*si+ki
    local scale = math.random()
 
@@ -264,9 +263,9 @@ end
 function cudnntest.TemporalConvolution_reduceBatchSize()
    local inputFrameSize = math.random(1,64)
    local outputFrameSize = math.random(1,64)
-   local ki = math.random(1,9)
+   local ki = math.random(1,15)
    local si = math.random(1,ki)
-   local outi = math.random(2,9)
+   local outi = math.random(1,15)
    local ini = (outi-1)*si+ki
    local batchSize = 128
    local smallerBatchSize = batchSize/2
@@ -288,9 +287,9 @@ function cudnntest.VolumetricConvolution()
    local bs = math.random(1,32)
    local from = math.random(1,16)
    local to = math.random(1,16)
-   local ki = math.random(3,5,3)
-   local kj = math.random(3,5,3)
-   local kk = math.random(3,5,3)
+   local ki = math.random(3,5)
+   local kj = math.random(3,5)
+   local kk = math.random(3,5)
    local si = math.random(1,ki-1)
    local sj = math.random(1,kj-1)
    local sk = math.random(1,kk-1)
@@ -298,18 +297,10 @@ function cudnntest.VolumetricConvolution()
    local outj = math.random(1,17)
    local outk = math.random(1,5)
 
-   if testparams.test_type == 'torch.CudaHalfTensor' then
-      --- CUDNN causes some corruption here
-      si, sj, sk = 1,1,1
-      ki, kj, kk = 3,3,3
-      outi, outj, outk = 1,1,1
-      --- was not able to restrict parameters so that CUDNN would behave ...
-      return
-   end
+   local ini = outi*si+ki-1
+   local inj = outj*sj+kj-1
+   local ink = outk*sk+kk-1
 
-   local ini = (outi-1)*si+ki
-   local inj = (outj-1)*sj+kj
-   local ink = (outk-1)*sk+kk
    local scale = math.random()
 
    local input = torch.randn(bs,from,ink,inj,ini):cuda()
@@ -472,7 +463,7 @@ function cudnntest.SpatialCrossMapLRN_batch()
    local inputSize = math.random(6,9)
    local size = math.random(1,3)*2+1
    local nbfeatures = math.random(3,8)
-   local alpha = math.random(1,100)/100
+   local alpha = math.random(0,100)/100
    local beta  = math.random(1,100)/100
    local k = math.random(1,3)
 
@@ -773,90 +764,6 @@ function cudnntest.VolumetricCrossEntropyCriterion()
                       'error in difference between central difference and :backward')
 end
 
-function cudnntest.functional_bias2D()
-   local bs = math.random(1,32)
-   local from = math.random(1,32)
-   local to = math.random(1,64)
-   local ki = math.random(1,15)
-   local kj = math.random(1,15)
-   local si = math.random(1,ki)
-   local sj = math.random(1,kj)
-   local outi = math.random(1,64)
-   local outj = math.random(1,64)
-   local ini = (outi-1)*si+ki
-   local inj = (outj-1)*sj+kj
-   local scale = torch.uniform()
-   local input = torch.zeros(bs,from,inj,ini):cuda()
-   local mod = cudnn.SpatialConvolution(from,to,ki,kj,si,sj):cuda()
-   mod.weight:zero()
-   local groundtruth = mod:forward(input)
-   local result = groundtruth:clone():zero()
-   cudnn.functional.bias2D_updateOutput(cudnn.getHandle(), mod.bias, result)
-   local error = result:float() - groundtruth:float()
-   mytester:assertlt(error:abs():max(),
-                     testparams.precision_forward, 'error on forward ')
-
-   mod:zeroGradParameters()
-   local gradOutput = groundtruth:clone():normal()
-   mod:backward(input, gradOutput, scale)
-   local groundtruth = mod.gradBias
-   local result = groundtruth:clone():zero()
-   cudnn.functional.bias2D_accGradParameters(cudnn.getHandle(), gradOutput, result, scale)
-   error = result:float() - groundtruth:float()
-   mytester:assertlt(error:abs():max(),
-                     testparams.precision_backward, 'error on accGradParameters ')
-end
-
-function cudnntest.functional_convolution2d()
-    local a=cudnn.SpatialConvolution(3,16,5,5):cuda()
-    a.bias:zero();
-    local input = torch.randn(10,3,10,10):cuda()
-    a:zeroGradParameters()
-    a:forward(input);
-    local output = a.output:clone():normal()
-    local gradOutput = a.output:clone():normal()
-    local gradInput = a:backward(input, gradOutput):clone():normal()
-    local gradWeight = a.gradWeight:clone():zero()
-    cudnn.functional.Convolution2D_updateOutput(cudnn.getHandle(), input,
-                                                a.weight, output, a.dH,
-                                                a.dW, a.padH, a.padW)
-    mytester:assertlt((output - a.output):abs():max(),
-                     testparams.precision_forward, 'error on forward ')
-
-    cudnn.functional.Convolution2D_updateGradInput(cudnn.getHandle(), input,
-                                                   a.weight, output, gradOutput,
-                                                   gradInput,
-                                                   a.dH, a.dW, a.padH, a.padW)
-    mytester:assertlt((gradInput - a.gradInput):abs():max(),
-                     testparams.precision_forward, 'error on updateGradInput ')
-
-    cudnn.functional.Convolution2D_accGradParameters(cudnn.getHandle(), input,
-                                                   gradWeight, gradOutput,
-                                                   a.dH, a.dW, a.padH, a.padW)
-    mytester:assertlt((gradWeight - a.gradWeight):abs():max(),
-                     testparams.precision_forward, 'error on accGradParameters ')
-end
-
-function cudnntest.functional_maxpooling2d()
-    local a=cudnn.SpatialMaxPooling(2,2,2,2):cuda()
-    local input = torch.randn(10,3,10,10):cuda()
-    a:forward(input);
-    local output = a.output:clone():normal()
-    local gradOutput = a.output:clone():normal()
-    local gradInput = a:backward(input, gradOutput):clone():normal()
-    cudnn.functional.MaxPooling2D_updateOutput(cudnn.getHandle(), input,
-                                               output, a.kH, a.kW,
-                                               a.dH, a.dW, a.padH, a.padW)
-    mytester:assertlt((output - a.output):abs():max(),
-                     testparams.precision_forward, 'error on forward ')
-
-    cudnn.functional.MaxPooling2D_updateGradInput(cudnn.getHandle(), input,
-                                                   output, gradOutput, gradInput,
-                                                   a.kH, a.kW, a.dH, a.dW,
-                                                   a.padH, a.padW)
-    mytester:assertlt((gradInput - a.gradInput):abs():max(),
-                     testparams.precision_forward, 'error on updateGradInput ')
-end
 
 torch.setdefaulttensortype('torch.FloatTensor')
 math.randomseed(os.time())
@@ -864,15 +771,14 @@ mytester = torch.Tester()
 mytester:add(cudnntest)
 
 -- cudnn.verbose=true
-
--- Developers, do not commit uncommented regions until bindings fixed
--- TODO: adapt tests for FindEx
+-- cudnn.find.verbose=true
 -- cudnn.useFindEx=true
 
 for i = 1, cutorch.getDeviceCount() do
 
    for _, benchmark in ipairs({false, true}) do
       cudnn.benchmark = benchmark
+--       cudnn.reset()
       local prop = cutorch.getDeviceProperties(i)
 
       print('Running test on device: #' .. i .. ' : ' .. prop.name
@@ -891,6 +797,7 @@ for i = 1, cutorch.getDeviceCount() do
       print'Testing torch.CudaDoubleTensor'
       testparams = testparams_double
       mytester:run()
+
    end
 end
 

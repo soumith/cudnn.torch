@@ -37,13 +37,18 @@ function VolumetricConvolution:createIODescriptors(input)
          -- create conv descriptor
          self.convDesc = cudnn.createDescriptors(1, 'struct cudnnConvolutionStruct*[?]',
                                                  'cudnnCreateConvolutionDescriptor', 'cudnnDestroyConvolutionDescriptor')
-         local pad = torch.IntTensor({self.padT, self.padH, self.padW})
-         local stride = torch.IntTensor({self.dT, self.dH, self.dW})
+         self.pad = torch.IntTensor({self.padT, self.padH, self.padW})
+         self.stride = torch.IntTensor({self.dT, self.dH, self.dW})
          local upscale = torch.IntTensor({1,1,1})
+         local mathtype=cudnn.configmap(torch.type(self.weight))
+         -- 3D convolutions do not work in 16 bits
+         if mathtype == 'CUDNN_DATA_HALF' then
+            mathtype = 'CUDNN_DATA_FLOAT'
+         end
          errcheck(self,'cudnnSetConvolutionNdDescriptor', self.convDesc[0],
-                  3, pad:data(),
-                  stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
-                  cudnn.configmap(torch.type(self.weight)));
+                  3, self.pad:data(),
+                  self.stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
+                  mathtype);
          -- create output descriptor and resize output
 
          local oSize = torch.IntTensor(5)

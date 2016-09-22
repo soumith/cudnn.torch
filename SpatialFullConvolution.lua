@@ -45,12 +45,12 @@ function SpatialFullConvolution:createIODescriptors(input)
         -- create conv descriptor
         self.convDesc = cudnn.createDescriptors(1, 'struct cudnnConvolutionStruct*[?]',
                                                 'cudnnCreateConvolutionDescriptor', 'cudnnDestroyConvolutionDescriptor')
-        local pad = torch.IntTensor({self.padH, self.padW})
-        local stride = torch.IntTensor({self.dH, self.dW})
+        self.pad = torch.IntTensor({self.padH, self.padW})
+        self.stride = torch.IntTensor({self.dH, self.dW})
         local upscale = torch.IntTensor({1,1})
         errcheck(self,'cudnnSetConvolutionNdDescriptor', self.convDesc[0],
-                 2, pad:data(),
-                 stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
+                 2, self.pad:data(),
+                 self.stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
                  cudnn.configmap(torch.type(self.weight)));
 
         -- get output shape, resize output
@@ -83,12 +83,11 @@ end
 function SpatialFullConvolution:updateOutput(input)
     self:createIODescriptors(input)
     local finder = find.get()
-    if not (finder.useCalculatedWorkspaceSize and self.bdmode) then
-       self.bdmode = finder:backwardDataAlgorithm(self, {self.weightDesc[0], self.weight,
+    self.bdmode = finder:backwardDataAlgorithm(self, {self.weightDesc[0], self.weight,
                                                          self.iDesc[0],self.input_slice,
                                                          self.convDesc[0], self.oDesc[0], self.output_slice})
-    end
 
+    finder:setCalculatedWorkspaceSize(true)
     local extraBuffer, extraBufferSize = cudnn.getSharedWorkspace()
 
     -- Because SpatialFullConvolution is performing the adjoint of the forward
@@ -120,11 +119,10 @@ function SpatialFullConvolution:updateGradInput(input, gradOutput)
     assert(gradOutput:isContiguous(), 'gradOutput has to be contiguous')
     self:createIODescriptors(input)
     local finder = find.get()
-    if not (finder.useCalculatedWorkspaceSize and self.fmode) then
-       self.fmode = finder:forwardAlgorithm(self, {self.oDesc[0], self.output_slice,
-                                                   self.weightDesc[0], self.weight,
-                                                   self.convDesc[0], self.iDesc[0], self.input_slice})
-    end
+    self.fmode = finder:forwardAlgorithm(self, {self.oDesc[0], self.output_slice,
+                                                self.weightDesc[0], self.weight,
+                                                self.convDesc[0], self.iDesc[0], self.input_slice})
+    finder:setCalculatedWorkspaceSize(true)
     local extraBuffer, extraBufferSize = cudnn.getSharedWorkspace()
     errcheck(self,'cudnnConvolutionForward', cudnn.getHandle(),
              cudnn.scalar(input, 1),
@@ -151,11 +149,9 @@ function SpatialFullConvolution:accGradParameters(input, gradOutput, scale)
     assert(gradOutput:isContiguous(), 'gradOutput has to be contiguous')
     self:createIODescriptors(input)
     local finder = find.get()
-    if not (finder.useCalculatedWorkspaceSize and self.bmode) then
-       self.bmode = finder:backwardFilterAlgorithm(self, {self.oDesc[0], self.output_slice,
-                                                          self.iDesc[0], self.input_slice,
-                                                          self.convDesc[0], self.weightDesc[0], self.weight})
-    end
+    self.bmode = finder:backwardFilterAlgorithm(self, {self.oDesc[0], self.output_slice,
+                                                       self.iDesc[0], self.input_slice,
+                                                       self.convDesc[0], self.weightDesc[0], self.weight})
     -- gradBias
     if self.bias then
         errcheck(self,'cudnnConvolutionBackwardBias', cudnn.getHandle(),
@@ -164,6 +160,7 @@ function SpatialFullConvolution:accGradParameters(input, gradOutput, scale)
                  cudnn.scalar(input, 1),
                  self.biasDesc[0], self.gradBias:data())
     end
+    finder:setCalculatedWorkspaceSize(true)
     local extraBuffer, extraBufferSize = cudnn.getSharedWorkspace()
     -- gradWeight
     errcheck(self,'cudnnConvolutionBackwardFilter', cudnn.getHandle(),
