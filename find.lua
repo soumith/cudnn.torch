@@ -6,6 +6,9 @@ find.__index = find
 -- constants to index array tables below
 local Fwd, BwdFilter, BwdData = 1, 2, 3
 
+-- constants to select algo family, to index algoFamilies
+local GetFamily, FindFamily, FindExFamily = 1,2,3
+
 local warmupIterations = 0
 
 local Meg = 1024*1024
@@ -19,15 +22,16 @@ local getWSAlgos = {'cudnnGetConvolutionForwardWorkspaceSize',
                     'cudnnGetConvolutionBackwardDataWorkspaceSize'}
 
 -- cudnnFindxxx APIs: default, when cudnn.benchmark == true
-local findNoExAlgos = {'cudnnFindConvolutionForwardAlgorithm',
-                       'cudnnFindConvolutionBackwardFilterAlgorithm',
-                       'cudnnFindConvolutionBackwardDataAlgorithm'}
+local findAlgos = {'cudnnFindConvolutionForwardAlgorithm',
+                   'cudnnFindConvolutionBackwardFilterAlgorithm',
+                   'cudnnFindConvolutionBackwardDataAlgorithm'}
 
 -- cudnnFindxxxEx APIs: default, when cudnn.benchmark == true and cudnn.useFindEx == true
 local findExAlgos = {'cudnnFindConvolutionForwardAlgorithmEx',
                      'cudnnFindConvolutionBackwardFilterAlgorithmEx',
                      'cudnnFindConvolutionBackwardDataAlgorithmEx'}
 
+local algoFamilies = { getAlgos, findAlgos, findExAlgos}
 
 local fwdAlgoNames = {
    "IMPLICIT_GEMM",
@@ -152,7 +156,11 @@ local finders = nil
 function find:resetAlgorithmCache()
    self.calculatedWorkspaceSize  = {}
    self:calculateMaxWorkspaceSize()
-   self.useFindEx = cudnn.useFindEx and (cudnn.benchmark or cudnn.fastest)
+   --
+   self.algoFamily = (cudnn.benchmark or cudnn.fastest)
+      and (cudnn.useFindEx and FindExFamily or FindFamily)
+      or GetFamily
+
    self.autotunerCache = {{}, {}, {}}
 end
 
@@ -204,7 +212,7 @@ function find:setCalculatedWorkspaceSize(greater)
    end
 end
 
-function find:registerWorkspaceSize(cachedAlgo)
+function find:pickAlgoAndCalculateWorkspaceSize(cachedAlgo)
    local stream = cutorch.getStream()
 
    if not self.calculatedWorkspaceSize[stream] then
@@ -254,7 +262,7 @@ function find:verifyReserveForWeights(layer)
 end
 
 
-function find:advanceStateMachine(layer, findAPI_idx)
+function find:checkIteration(layer, findAPI_idx)
    if warmupIterations == 0 then return end
    if not layer.iteration then layer.iteration = {0,0,0} end
 
@@ -288,14 +296,12 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
         local cacheHit = '[found in cache]'
         local useFallback = false
 
-        -- advance state machine
-        self:advanceStateMachine(layer, findAPI_idx)
+        -- Check if it's a new iteration, decrement warmup
+        self:checkIteration(layer, findAPI_idx)
 
-        local extraBuffer, extraBufferSize = cudnn.getSharedWorkspace()
+        local curWorkspace, curWorkspaceSize = cudnn.getSharedWorkspace()
         local validResults = 0
-        local API = self.useFindEx and findExAlgos[findAPI_idx]
-           or ( (cudnn.benchmark or cudnn.fastest) and
-                  findNoExAlgos[findAPI_idx] or getAlgos[findAPI_idx])
+        local API = algoFamilies[self.algoFamily][findAPI_idx]
         local perfResults = perfResultsArray[findAPI_idx]
         -- try to find algo in the cache first
         cachedAlgo =  self:lookup(layer, findAPI_idx)
@@ -309,60 +315,69 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
            cacheHit = ''
            cachedAlgo = {}
 
-           if self.useFindEx then
+           if self.algoFamily == FindExFamily then
               -- use clone for weights when looking for backward filter algo
               if findAPI_idx == BwdFilter then
                  params[7] = params[7]:clone()
               end
+              -- temporarily set WS size to the max
               self:calculateMaxWorkspaceSize()
               cudnn.setSharedWorkspaceSize(self.maxWorkspaceSize)
+           else
+              if self.algoFamily == FindFamily then
+                 -- Find() APIs use free GPU memory to find algo, release our WS bytes
+                 cudnn.setSharedWorkspaceSize(0)
+              end
            end
 
            local function callCudnn(layer)
               local ret = 0
               validResults = 0
-              if cudnn.benchmark or cudnn.fastest then
-                 if self.useFindEx then
-                    ret =  call(layer, API,
-                                cudnn.getHandle(),
-                                params[1], params[2]:data(), params[3], params[4]:data(), layer.convDesc[0], params[6], params[7]:data(),
-                                nAlgos, numPerfResults, perfResults, extraBuffer, extraBufferSize)
-                 else
-                    ret = call(layer, API,
-                                    cudnn.getHandle(),
-                                    params[1], params[3], layer.convDesc[0], params[6],
-                                    nAlgos, numPerfResults, perfResults)
-                 end
+              if self.algoFamily == FindExFamily then
+                 -- query temp workspace size
+                 local tempWorkspace, tempWorkspaceSize = cudnn.getSharedWorkspace()
+                 ret =  call(layer, API,
+                             cudnn.getHandle(),
+                             params[1], params[2]:data(), params[3], params[4]:data(), layer.convDesc[0], params[6], params[7]:data(),
+                             nAlgos, numPerfResults, perfResults, tempWorkspace, tempWorkspaceSize)
               else
-                 numPerfResults[0]=1
-                 local algWorkspaceLimit = layer.workspace_limit
-                    or (layer.nInputPlane * layer.kH * layer.kW * layer.weight.elementSize())
+                 if self.algoFamily == FindFamily then
+                    ret = call(layer, API,
+                               cudnn.getHandle(),
+                               params[1], params[3], layer.convDesc[0], params[6],
+                               nAlgos, numPerfResults, perfResults)
+                 else
+                    -- GetFamily: emulate findXXX results layout
+                    numPerfResults[0]=1
+                    local algWorkspaceLimit = layer.workspace_limit
+                       or (layer.nInputPlane * layer.kH * layer.kW * layer.weight.elementSize())
 
-                 ret = cudnn.call(API,
-                                  cudnn.getHandle(),
-                                  params[1], params[3], layer.convDesc[0], params[6],
-                                  algSearchMode, algWorkspaceLimit, algType[findAPI_idx])
-                 local retAlgo = algType[findAPI_idx][0]
-                 if find.verbose then
-                    print(string.format(
-                             "\n" .. API .. ": %d (ws limit: %d) mode = %s",
-                             tonumber(retAlgo),
-                             algWorkspaceLimit,
-                             algSearchMode))
+                    ret = cudnn.call(API,
+                                     cudnn.getHandle(),
+                                     params[1], params[3], layer.convDesc[0], params[6],
+                                     algSearchMode, algWorkspaceLimit, algType[findAPI_idx])
+                    local retAlgo = algType[findAPI_idx][0]
+                    if find.verbose then
+                       print(string.format(
+                                "\n" .. API .. ": %d (ws limit: %d) mode = %s",
+                                tonumber(retAlgo),
+                                algWorkspaceLimit,
+                                algSearchMode))
+                    end
+                    local bufSize = torch.LongTensor(1)
+                    ret = cudnn.call(getWSAlgos[findAPI_idx],
+                                     cudnn.getHandle(),
+                                     params[1], params[3], layer.convDesc[0], params[6],
+                                     retAlgo, bufSize:data())
+                    if find.verbose then
+                       print(string.format(
+                                "\n" .. getWSAlgos[findAPI_idx]  .. ": bufSize: %d, current ws: %d",
+                                tonumber(bufSize[1]), tonumber(curWorkspaceSize)))
+                    end
+                    perfResults[0].algo = retAlgo
+                    perfResults[0].memory = bufSize[1]
+                    perfResults[0].status = ret
                  end
-                 local bufSize = torch.LongTensor(1)
-                 ret = cudnn.call(getWSAlgos[findAPI_idx],
-                                  cudnn.getHandle(),
-                                  params[1], params[3], layer.convDesc[0], params[6],
-                                  retAlgo, bufSize:data())
-                 if find.verbose then
-                    print(string.format(
-                             "\n" .. getWSAlgos[findAPI_idx]  .. ": bufSize: %d, current ws: %d",
-                             tonumber(bufSize[1]), tonumber(extraBufferSize)))
-                 end
-                 perfResults[0].algo = retAlgo
-                 perfResults[0].memory = bufSize[1]
-                 perfResults[0].status = ret
               end
 
               if find.verbose then
@@ -414,17 +429,21 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
               end
            end
            self:store(layer, findAPI_idx, cachedAlgo)
-           if self.useFindEx then
-              cudnn.setSharedWorkspaceSize(extraBufferSize)
+           -- restore WS size if we fiddled with it
+           if self.algoFamily ~= GetFamily then
+              cudnn.setSharedWorkspaceSize(curWorkspaceSize)
            end
         end
         -- this may return different algo if size does not fit
-        retAlgo = self:registerWorkspaceSize(cachedAlgo)
-        if retAlgo==0 then
+        retAlgo = self:pickAlgoAndCalculateWorkspaceSize(cachedAlgo)
+        if retAlgo > 0 then
+           self:setCalculatedWorkspaceSize(true)
+        else
            -- TODO: fallback to recalculate
-           error("No algorithms found that would fit in free memory")
+           error("No algorithms found that would fit in free GPU memory")
            return -1
         end
+
         if cudnn.verbose or find.verbose then
            local freeMemory, totalMemory = cutorch.getMemoryUsage(self.id)
            local fallback = ""
@@ -432,7 +451,7 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
            print(string.format(
                     "\n" .. API  .. ": %s(%d)[%d of %d] Workspace: %8fM (current ws size %fM, max: %dM free: %dM)  hash: %45s" .. cacheHit .. fallback,
                     algoNames[findAPI_idx][cachedAlgo[retAlgo].algo+1], cachedAlgo[retAlgo].algo, retAlgo, #cachedAlgo,
-                    tonumber(cachedAlgo[retAlgo].memory)/Meg, extraBufferSize/Meg, self.maxWorkspaceSize/Meg, freeMemory/Meg, layer.autotunerHash))
+                    tonumber(cachedAlgo[retAlgo].memory)/Meg, curWorkspaceSize/Meg, self.maxWorkspaceSize/Meg, freeMemory/Meg, layer.autotunerHash))
         end
         return cachedAlgo[retAlgo].algo
 end
@@ -459,15 +478,17 @@ function find:prepare(layer, input_slice, output_slice)
 end
 
 function find:forwardAlgorithm(layer, params)
+   if layer.fmode then return layer.fmode end
    local algSearchMode = 'CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT'
    if layer.fastest_mode  or cudnn.benchmark == true or cudnn.fastest == true then
       algSearchMode = 'CUDNN_CONVOLUTION_FWD_PREFER_FASTEST'
    end
-   -- supply a temporary for findEx
    return self:setupAlgo(layer, Fwd, algSearchMode, params)
 end
 
 function find:backwardFilterAlgorithm(layer, params)
+   -- Check if we are in "sticky" mode
+   if layer.bwmode then return layer.bwmode end
    local algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_NO_WORKSPACE'
    if layer.fastest_mode or cudnn.benchmark == true or cudnn.fastest == true then
       algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST'
@@ -477,12 +498,13 @@ function find:backwardFilterAlgorithm(layer, params)
 end
 
 function find:backwardDataAlgorithm(layer, params)
+   -- Check if we are in "sticky" mode
+   if layer.bdmode then return layer.bdmode end
    local algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_NO_WORKSPACE'
    if layer.fastest_mode  or cudnn.fastest == true then
       algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST'
    end
    return self:setupAlgo(layer, BwdData, algSearchMode, params)
-
 end
 
 find.reset()

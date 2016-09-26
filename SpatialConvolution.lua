@@ -187,16 +187,15 @@ function SpatialConvolution:updateOutput(input)
     input = makeContiguous(self, input)
     self:createIODescriptors(input)
     local finder = find.get()
-    -- force recalculation
-    self.fmode = finder:forwardAlgorithm(self, { self.iDesc[0], self.input_slice, self.weightDesc[0], self.weight, self.convDesc[0], self.oDesc[0], self.output_slice})
-    finder:setCalculatedWorkspaceSize(true)
+    local fwdAlgo = finder:forwardAlgorithm(self, { self.iDesc[0], self.input_slice, self.weightDesc[0],
+                                                    self.weight, self.convDesc[0], self.oDesc[0], self.output_slice})
     local extraBuffer, extraBufferSize = cudnn.getSharedWorkspace()
     for g = 0, self.groups - 1 do
         errcheck(self,'cudnnConvolutionForward', cudnn.getHandle(),
                  cudnn.scalar(input, 1),
                  self.iDesc[0], input:data() + g*self.input_offset,
                  self.weightDesc[0], self.weight:data() + g*self.weight_offset,
-                 self.convDesc[0], self.fmode,
+                 self.convDesc[0], fwdAlgo,
                  extraBuffer, extraBufferSize,
                  cudnn.scalar(input, 0),
                  self.oDesc[0], self.output:data() + g*self.output_offset);
@@ -220,8 +219,8 @@ function SpatialConvolution:updateGradInput(input, gradOutput)
     input, gradOutput = makeContiguous(self, input, gradOutput)
     self:createIODescriptors(input)
     local finder = find.get()
-    self.bdmode = finder:backwardDataAlgorithm(self, { self.weightDesc[0], self.weight, self.oDesc[0], self.output_slice, self.convDesc[0], self.iDesc[0], self.input_slice })
-    finder:setCalculatedWorkspaceSize(true)
+    local bwdDataAlgo = finder:backwardDataAlgorithm(self, { self.weightDesc[0], self.weight, self.oDesc[0],
+                                                             self.output_slice, self.convDesc[0], self.iDesc[0], self.input_slice })
     local extraBuffer, extraBufferSize = cudnn.getSharedWorkspace()
     for g = 0,self.groups - 1 do
         errcheck(self,'cudnnConvolutionBackwardData', cudnn.getHandle(),
@@ -229,7 +228,7 @@ function SpatialConvolution:updateGradInput(input, gradOutput)
                  self.weightDesc[0], self.weight:data() + g*self.weight_offset,
                  self.oDesc[0], gradOutput:data() + g*self.output_offset,
                  self.convDesc[0],
-                 self.bdmode,
+                 bwdDataAlgo,
                  extraBuffer, extraBufferSize,
                  cudnn.scalar(input, 0),
                  self.iDesc[0], self.gradInput:data() + g*self.input_offset)
@@ -247,8 +246,9 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
     input, gradOutput = makeContiguous(self, input, gradOutput)
     self:createIODescriptors(input)
     local finder = find.get()
-    self.bmode=finder:backwardFilterAlgorithm(self, { self.iDesc[0], self.input_slice, self.oDesc[0], self.output_slice, self.convDesc[0], self.weightDesc[0], self.weight})
-    finder:setCalculatedWorkspaceSize(true)
+    local bwdFilterAlgo = finder:backwardFilterAlgorithm(self, { self.iDesc[0], self.input_slice, self.oDesc[0],
+                                                               self.output_slice, self.convDesc[0], self.weightDesc[0], self.weight})
+
     -- gradBias
     if self.bias then
         errcheck(self,'cudnnConvolutionBackwardBias', cudnn.getHandle(),
@@ -257,7 +257,7 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
                  cudnn.scalar(input, 1),
                  self.biasDesc[0], self.gradBias:data())
     end
-    finder:setCalculatedWorkspaceSize(true)
+
     local extraBuffer, extraBufferSize = cudnn.getSharedWorkspace()
     for g = 0, self.groups - 1 do
         -- gradWeight
@@ -266,7 +266,7 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
                  self.iDesc[0], input:data() + g*self.input_offset,
                  self.oDesc[0], gradOutput:data() + g*self.output_offset,
                  self.convDesc[0],
-                 self.bmode,
+                 bwdFilterAlgo,
                  extraBuffer, extraBufferSize,
                  cudnn.scalar(input, 1),
                  self.weightDesc[0], self.gradWeight:data() + g*self.weight_offset);
