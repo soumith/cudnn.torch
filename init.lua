@@ -16,6 +16,9 @@ cudnn.fastest = false
 -- Warning: this option is experimental and assumes at least 2 warmup iterations!
 cudnn.useFindEx = false
 
+-- if true, use 'pseudo-fp16' (half storage, float math) even if true fp16 math is available
+cudnn.useFloatMathForHalf = false
+
 -- amount of memory to use on 1st iteration for FindEx
 cudnn.initialWorkspaceBytes = 1024
 
@@ -67,11 +70,13 @@ function cudnn.sizeof(t)
    return sizeofmap[torch.type(t)]
 end
 
+
 local onemap = {
    ['torch.CudaHalfTensor']   = torch.FloatTensor({1}),
    ['torch.CudaTensor']       = torch.FloatTensor({1}),
    ['torch.CudaDoubleTensor'] = torch.DoubleTensor({1}),
 }
+
 local zeromap = {
    ['torch.CudaHalfTensor']   = torch.FloatTensor({0}),
    ['torch.CudaTensor']       = torch.FloatTensor({0}),
@@ -99,6 +104,7 @@ local function determineHalfCapability(dev)
 end
 
 local configmaps = {}
+
 for i=1,cutorch.getDeviceCount() do
    configmaps[i] = {
       ['torch.CudaHalfTensor']   = determineHalfCapability(i),
@@ -108,7 +114,10 @@ for i=1,cutorch.getDeviceCount() do
 end
 
 cudnn.configmap = function(tensortype)
-   return configmaps[cutorch.getDevice()][tensortype]
+   local ret = configmaps[cutorch.getDevice()][tensortype]
+   -- override option
+   if cudnn.useFloatMathForHalf and ret == 'CUDNN_DATA_HALF' then ret = 'CUDNN_DATA_FLOAT' end
+   return ret
 end
 
 function cudnn.getHandle()
