@@ -28,6 +28,7 @@ function RNN:__init(inputSize, hiddenSize, numLayers, batchFirst, dropout, remem
    self.seed = 0x01234567
    self.batchFirst = batchFirst or false -- Set to true for batch x time x inputdim.
    self.rememberStates = rememberStates or false
+   self.sync = false 
 
    self.gradInput = torch.CudaTensor()
    self.output = torch.CudaTensor()
@@ -38,10 +39,14 @@ function RNN:__init(inputSize, hiddenSize, numLayers, batchFirst, dropout, remem
    self.cellOutput = torch.CudaTensor()
    self.gradHiddenInput = torch.CudaTensor()
    self.gradCellInput = torch.CudaTensor()
-
    self:training()
    self:reset()
 end
+
+function RNN:setSync(sync)
+   self.sync = sync
+end
+
 
 function RNN:reset(stdv)
    stdv = stdv or 1.0 / math.sqrt(self.hiddenSize)
@@ -370,6 +375,7 @@ function RNN:updateOutput(input)
                self.cyDesc[0], cy:data(),
                self.workspace:data(), self.workspace:size(1) * 4) -- sizeof(float)
    end
+   if self.sync then cutorch.synchronize() end
    if self.rememberStates then
 	self.hiddenInput = self.hiddenOutput:clone()
 	if self.cellOutput then
@@ -459,6 +465,7 @@ function RNN:updateGradInput(input, gradOutput)
             self.cxDesc[0], dcx:data(),
             self.workspace:data(), self.workspace:size(1) * 4, -- sizeof(float)
             self.reserve:data(), self.reserve:size(1) * 4) -- sizeof(float)
+    if self.sync then cutorch.synchronize() end
     if (self.batchFirst) then
         self.gradInput = self.gradInput:transpose(1, 2)
         self.output = self.output:transpose(1, 2)
