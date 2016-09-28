@@ -156,11 +156,9 @@ local finders = nil
 function find:resetAlgorithmCache()
    self.calculatedWorkspaceSize  = {}
    self:calculateMaxWorkspaceSize()
-   --
-   self.algoFamily = (cudnn.benchmark or cudnn.fastest)
+   self.algoFamily = cudnn.benchmark
       and (cudnn.useFindEx and FindExFamily or FindFamily)
       or GetFamily
-
    self.autotunerCache = {{}, {}, {}}
 end
 
@@ -480,7 +478,7 @@ end
 function find:forwardAlgorithm(layer, params)
    if layer.fmode then return layer.fmode end
    local algSearchMode = 'CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT'
-   if layer.fastest_mode  or cudnn.benchmark == true or cudnn.fastest == true then
+   if layer.fastest_mode or cudnn.fastest == true then
       algSearchMode = 'CUDNN_CONVOLUTION_FWD_PREFER_FASTEST'
    end
    return self:setupAlgo(layer, Fwd, algSearchMode, params)
@@ -490,7 +488,7 @@ function find:backwardFilterAlgorithm(layer, params)
    -- Check if we are in "sticky" mode
    if layer.bwmode then return layer.bwmode end
    local algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_NO_WORKSPACE'
-   if layer.fastest_mode or cudnn.benchmark == true or cudnn.fastest == true then
+   if layer.fastest_mode or cudnn.fastest == true then
       algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST'
    end
    local ret = self:setupAlgo(layer, BwdFilter, algSearchMode, params)
