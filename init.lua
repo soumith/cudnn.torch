@@ -5,10 +5,31 @@ require('cudnn.ffi')
 local C = cudnn.C
 local ffi = require 'ffi'
 
+--------------------------------------------------------------------
+-- defaults, each should be overrideable via env var:
+--------------------------------------------------------------------
+
 cudnn.benchmark = false
 cudnn.fastest = false
 
+-- use new cudnn FindEx APIs
+-- Warning: this option is experimental and assumes at least 2 warmup iterations!
+cudnn.useFindEx = false
+
+-- amount of memory to use on 1st iteration for FindEx
+cudnn.initialWorkspaceBytes = 1024
+
+--
+cudnn.reservedGPUBytes = 1024*1024
+
+cudnn.maxWorkspaceGPUMemPercent = 95
+
 local maxStreamsPerDevice = 1024
+
+--------------------------------------------------------------------
+-- end defaults
+--------------------------------------------------------------------
+
 local numDevices = cutorch.getDeviceCount()
 -- this tensor keeps track of whether a handle has been initialized or not
 local handleStatus = torch.ByteTensor(numDevices,
@@ -109,14 +130,20 @@ function cudnn.getHandle()
     return cudnn.handle[(((device-1)*maxStreamsPerDevice) + stream)]
 end
 
-local errcheck = function(f, ...)
+function cudnn.call(f, ...)
     C.cudnnSetStream(cudnn.getHandle(),
                      ffi.C.THCState_getCurrentStream(cutorch.getState()))
-   local status = C[f](...)
+    return C[f](...)
+end
+
+local errcheck = function(f, ...)
+   local status = cudnn.call(f, ...)
    if status ~= ffi.C.CUDNN_STATUS_SUCCESS then
       local str = ffi.string(C.cudnnGetErrorString(status))
       error('Error in CuDNN: ' .. str .. ' ('..f..')')
+      return false
    end
+   return true
 end
 cudnn.errcheck = errcheck
 
@@ -146,19 +173,80 @@ function cudnn.toDescriptor(t)
    return descriptor
 end
 
+function cudnn.createDescriptors(count, descs_type, create_func, destroy_func)
+   local ds = ffi.new(descs_type, count)
+   for i = 0, count - 1 do
+      errcheck(create_func, ds + i)
+   end
+   local function destroyDescriptors(ds)
+      for i = 0, count - 1 do
+         errcheck(destroy_func, ds[i])
+      end
+   end
+   ffi.gc(ds, destroyDescriptors)
+   return ds
+end
 
 local sharedBuffer = {}
-for i=1,numDevices do
-    sharedBuffer[i] = {}
+local nextBufferSize = {}
+
+local function setNextSize(buf, size, ifGreater)
+   if size > buf.nextSize or not ifGreater then
+      buf.nextSize = size
+   end
+end
+
+-- may reassign currentSize
+local function allocateStorage(buf, ifGreater)
+
+   if buf.nextSize < 0 then
+      buf.nextSize = buf.currentSize
+   end
+
+   local elSize = 8
+   -- get number of elements in the buf, rounded up
+   local newelem = math.floor((buf.nextSize+elSize-1)/elSize)
+
+   if buf.storage then
+      if (newelem == buf.storage:size()) or (ifGreater and newelem < buf.storage:size()) then
+      else
+         if cudnn.verbose then
+            print( "allocateStorage: new WS size is ", buf.nextSize)
+         end
+         -- resize to just to make sure we return memory
+         buf.storage:resize(0)
+         buf.storage:resize(newelem)
+      end
+   else
+      -- this is to be replaced with new cutorch tempbuf stuff
+      -- may reassign currentSize again
+      buf.storage = torch.CudaDoubleStorage(newelem)
+   end
+
+   buf.currentSize = buf.storage:size()*elSize
+   buf.data = buf.storage:data()
+   buf.nextSize = -1
+end
+
+local function sharedBufForCurrentStream()
+    local device = cutorch.getDevice()
+    local stream = cutorch.getStream() -- starts from 0
+    if not sharedBuffer[device] then sharedBuffer[device] = {} end
+    local buf = sharedBuffer[device][stream]
+    if not buf then
+       buf = {
+          currentSize = cudnn.initialWorkspaceBytes,
+          nextSize = -1
+       }
+       allocateStorage(buf)
+       sharedBuffer[device][stream] = buf
+    end
+    return buf
 end
 
 function cudnn.getSharedWorkspace()
-    local device = cutorch.getDevice()
-    local stream = cutorch.getStream() -- starts from 0
-    if not sharedBuffer[device][stream] then
-       sharedBuffer[device][stream] = torch.CudaTensor(1)
-    end
-    return sharedBuffer[device][stream]
+   local buf = sharedBufForCurrentStream()
+   return buf.data, buf.currentSize
 end
 
 -- Creates a clone of luaStr that can be used to prevent side
@@ -168,6 +256,22 @@ function cudnn.externalizeString(luaStr)
     ffi.copy(cStr, luaStr)
     return cStr
 end
+
+function cudnn.adjustSharedWorkspaceSize(bytesDelta)
+   local buf = sharedBufForCurrentStream()
+   setNextSize(buf, buf.currentSize + bytesDelta)
+   allocateStorage(buf)
+end
+
+function cudnn.setSharedWorkspaceSize(bytes, ifGreater)
+   local buf = sharedBufForCurrentStream()
+   ifGreater = ifGreater or false
+   bytes = bytes or cudnn.initialWorkspaceBytes
+   setNextSize(buf, bytes, ifGreater)
+   allocateStorage(buf, ifGreater)
+end
+
+local find = require('cudnn.find')
 
 require('cudnn.SpatialConvolution')
 require('cudnn.VolumetricConvolution')
@@ -206,5 +310,19 @@ require('cudnn.GRU')
 require('cudnn.functional')
 require('cudnn.convert')
 
+function cudnn.reset()
+-- this resets everything
+   if cudnn.verbose then
+      print("cudnn::reset for device #", cutorch.getDevice())
+   end
+   cutorch.synchronize()
+   -- make sure shared buffers that may have been cached, have 0 size
+   for i=1,numDevices do
+      sharedBuffer[i] = {}
+   end
+   collectgarbage()
+   -- this resets internal algorithm finder state machine and cache
+   find.reset()
+end
 
 return cudnn
