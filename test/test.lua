@@ -849,7 +849,7 @@ end
 
 local function test_functional_activation(mode, module)
    local a = module:cuda()
-   local input = torch.randn(10,3,10,10):cuda()
+   local input = torch.randn(10,12):cuda()
    a:forward(input)
    local output = a.output:clone():normal()
    local gradOutput = a.output:clone():normal()
@@ -882,6 +882,20 @@ function cudnntest.functional_sigmoid()
       forward = 'Sigmoid_updateOutput',
       backward = 'Sigmoid_updateGradInput',
    }, cudnn.Sigmoid())
+end
+
+function cudnntest.functional_logsoftmax()
+   test_functional_activation({
+      forward = 'LogSoftMax_updateOutput',
+      backward = 'LogSoftMax_updateGradInput',
+   }, cudnn.LogSoftMax())
+end
+
+function cudnntest.functional_softmax()
+   test_functional_activation({
+      forward = 'SoftMax_updateOutput',
+      backward = 'SoftMax_updateGradInput',
+   }, cudnn.SoftMax())
 end
 
 torch.setdefaulttensortype('torch.FloatTensor')

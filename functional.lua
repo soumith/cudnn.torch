@@ -394,8 +394,7 @@ local function createPointwiseDescriptors(mode, input, output)
    end
    ffi.gc(activDesc, destroyADesc)
 
-   local nElem = input:nElement()
-   local iDesc = cudnn.toDescriptor(input:view(1,1,1,nElem))
+   local iDesc = cudnn.toDescriptor(input:view(1,1,1,-1))
    return activDesc, iDesc
 end
 
@@ -449,5 +448,61 @@ end
 cudnn.functional.Sigmoid_updateGradInput = function(handle, input, output, gradOutput, gradInput)
    gradInput:resizeAs(input)
    pointwise_updateGradInput(handle, 'CUDNN_ACTIVATION_SIGMOID', input, output, gradOutput, gradInput)
+end
+
+
+local function softmax_updateOutput(handle, mode, algorithm, input, output)
+   output:resizeAs(input)
+   local iDesc = cudnn.toDescriptor(input)
+   local oDesc = cudnn.toDescriptor(output)
+   errcheck('cudnnSoftmaxForward',
+            handle,
+            mode, algorithm,
+            cudnn.scalar(input, 1),
+            iDesc[0], input:data(),
+            cudnn.scalar(input, 0),
+            oDesc[0], output:data());
+end
+
+local function softmax_updateGradInput(handle, mode, algorithm, input, output, gradOutput, gradInput)
+   gradInput:resizeAs(input)
+   local iDesc = cudnn.toDescriptor(input)
+   local oDesc = cudnn.toDescriptor(output)
+   errcheck('cudnnSoftmaxBackward',
+            handle,
+            mode, algorithm,
+            cudnn.scalar(input, 1),
+            oDesc[0], output:data(),
+            oDesc[0], gradOutput:data(),
+            cudnn.scalar(input, 0),
+            iDesc[0], gradInput:data());
+end
+
+cudnn.functional.LogSoftMax_updateOutput = function(handle, input, output)
+   softmax_updateOutput(handle,
+                        'CUDNN_SOFTMAX_LOG',
+                        'CUDNN_SOFTMAX_MODE_INSTANCE',
+                        input, output)
+end
+
+cudnn.functional.LogSoftMax_updateGradInput = function(handle, input, output, gradOutput, gradInput)
+   softmax_updateGradInput(handle,
+                           'CUDNN_SOFTMAX_LOG',
+                           'CUDNN_SOFTMAX_MODE_INSTANCE',
+                           input, output, gradOutput, gradInput)
+end
+
+cudnn.functional.SoftMax_updateOutput = function(handle, input, output)
+   softmax_updateOutput(handle,
+                        'CUDNN_SOFTMAX_ACCURATE',
+                        'CUDNN_SOFTMAX_MODE_INSTANCE',
+                        input, output)
+end
+
+cudnn.functional.SoftMax_updateGradInput = function(handle, input, output, gradOutput, gradInput)
+   softmax_updateGradInput(handle,
+                           'CUDNN_SOFTMAX_ACCURATE',
+                           'CUDNN_SOFTMAX_MODE_INSTANCE',
+                           input, output, gradOutput, gradInput)
 end
 
