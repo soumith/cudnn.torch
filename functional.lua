@@ -380,3 +380,129 @@ cudnn.functional.AveragePooling2D_updateGradInput = function(handle, input, outp
     cudnn.functional.Pooling_updateGradInput(handle, 'CUDNN_POOLING_AVERAGE', input, output, gradOutput, gradInput,
                                           kH, kW, dH, dW, padH, padW, ceil_mode);
 end
+
+local function createPointwiseDescriptors(mode, input, output)
+   local activDesc = ffi.new('struct cudnnActivationStruct*[1]')
+   errcheck('cudnnCreateActivationDescriptor', activDesc)
+   errcheck('cudnnSetActivationDescriptor', activDesc[0], mode, 'CUDNN_PROPAGATE_NAN', 0.0);
+
+   local function destroyADesc(a)
+      if (a[0]) then
+         errcheck('cudnnDestroyActivationDescriptor', a[0]);
+         a[0] = nil
+      end
+   end
+   ffi.gc(activDesc, destroyADesc)
+
+   local iDesc = cudnn.toDescriptor(input:view(1,1,1,-1))
+   return activDesc, iDesc
+end
+
+local function pointwise_updateOutput(handle, mode, input, output)
+   local activDesc, iDesc = createPointwiseDescriptors(mode, input, output)
+   errcheck('cudnnActivationForward',
+            handle, activDesc[0],
+            cudnn.scalar(input, 1),
+            iDesc[0], input:data(),
+            cudnn.scalar(input, 0),
+            iDesc[0], output:data());
+end
+
+local function pointwise_updateGradInput(handle, mode, input, output, gradOutput, gradInput)
+   local activDesc, iDesc = createPointwiseDescriptors(mode, input, output)
+   errcheck('cudnnActivationBackward',
+            handle, activDesc[0],
+            cudnn.scalar(input, 1),
+            iDesc[0], output:data(),
+            iDesc[0], gradOutput:data(),
+            iDesc[0], input:data(),
+            cudnn.scalar(input, 0),
+            iDesc[0], gradInput:data());
+end
+
+cudnn.functional.ReLU_updateOutput = function(handle, input, output)
+   output:resizeAs(input)
+   pointwise_updateOutput(handle, 'CUDNN_ACTIVATION_RELU', input, output)
+end
+
+cudnn.functional.ReLU_updateGradInput = function(handle, input, output, gradOutput, gradInput)
+   gradInput:resizeAs(input)
+   pointwise_updateGradInput(handle, 'CUDNN_ACTIVATION_RELU', input, output, gradOutput, gradInput)
+end
+
+cudnn.functional.Tanh_updateOutput = function(handle, input, output)
+   output:resizeAs(input)
+   pointwise_updateOutput(handle, 'CUDNN_ACTIVATION_TANH', input, output)
+end
+
+cudnn.functional.Tanh_updateGradInput = function(handle, input, output, gradOutput, gradInput)
+   gradInput:resizeAs(input)
+   pointwise_updateGradInput(handle, 'CUDNN_ACTIVATION_TANH', input, output, gradOutput, gradInput)
+end
+
+cudnn.functional.Sigmoid_updateOutput = function(handle, input, output)
+   output:resizeAs(input)
+   pointwise_updateOutput(handle, 'CUDNN_ACTIVATION_SIGMOID', input, output)
+end
+
+cudnn.functional.Sigmoid_updateGradInput = function(handle, input, output, gradOutput, gradInput)
+   gradInput:resizeAs(input)
+   pointwise_updateGradInput(handle, 'CUDNN_ACTIVATION_SIGMOID', input, output, gradOutput, gradInput)
+end
+
+
+local function softmax_updateOutput(handle, mode, algorithm, input, output)
+   output:resizeAs(input)
+   local iDesc = cudnn.toDescriptor(input)
+   local oDesc = cudnn.toDescriptor(output)
+   errcheck('cudnnSoftmaxForward',
+            handle,
+            mode, algorithm,
+            cudnn.scalar(input, 1),
+            iDesc[0], input:data(),
+            cudnn.scalar(input, 0),
+            oDesc[0], output:data());
+end
+
+local function softmax_updateGradInput(handle, mode, algorithm, input, output, gradOutput, gradInput)
+   gradInput:resizeAs(input)
+   local iDesc = cudnn.toDescriptor(input)
+   local oDesc = cudnn.toDescriptor(output)
+   errcheck('cudnnSoftmaxBackward',
+            handle,
+            mode, algorithm,
+            cudnn.scalar(input, 1),
+            oDesc[0], output:data(),
+            oDesc[0], gradOutput:data(),
+            cudnn.scalar(input, 0),
+            iDesc[0], gradInput:data());
+end
+
+cudnn.functional.LogSoftMax_updateOutput = function(handle, input, output)
+   softmax_updateOutput(handle,
+                        'CUDNN_SOFTMAX_LOG',
+                        'CUDNN_SOFTMAX_MODE_INSTANCE',
+                        input, output)
+end
+
+cudnn.functional.LogSoftMax_updateGradInput = function(handle, input, output, gradOutput, gradInput)
+   softmax_updateGradInput(handle,
+                           'CUDNN_SOFTMAX_LOG',
+                           'CUDNN_SOFTMAX_MODE_INSTANCE',
+                           input, output, gradOutput, gradInput)
+end
+
+cudnn.functional.SoftMax_updateOutput = function(handle, input, output)
+   softmax_updateOutput(handle,
+                        'CUDNN_SOFTMAX_ACCURATE',
+                        'CUDNN_SOFTMAX_MODE_INSTANCE',
+                        input, output)
+end
+
+cudnn.functional.SoftMax_updateGradInput = function(handle, input, output, gradOutput, gradInput)
+   softmax_updateGradInput(handle,
+                           'CUDNN_SOFTMAX_ACCURATE',
+                           'CUDNN_SOFTMAX_MODE_INSTANCE',
+                           input, output, gradOutput, gradInput)
+end
+

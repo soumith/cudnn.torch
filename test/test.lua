@@ -847,6 +847,57 @@ function cudnntest.functional_maxpooling2d()
                      testparams.precision_forward, 'error on updateGradInput ')
 end
 
+local function test_functional_activation(mode, module)
+   local a = module:cuda()
+   local input = torch.randn(10,12):cuda()
+   a:forward(input)
+   local output = a.output:clone():normal()
+   local gradOutput = a.output:clone():normal()
+   local gradInput = a:updateGradInput(input, gradOutput):clone():normal()
+   cudnn.functional[mode.forward](cudnn.getHandle(), input, output)
+   mytester:assertlt((output - a.output):abs():max(),
+                     testparams.precision_forward, 'error on forward ')
+   cudnn.functional[mode.backward](cudnn.getHandle(), input, output,
+                                   gradOutput, gradInput)
+   mytester:assertlt((gradInput - a.gradInput):abs():max(),
+                     testparams.precision_forward, 'error on updateGradInput ')
+end
+
+function cudnntest.functional_relu()
+   test_functional_activation({
+      forward = 'ReLU_updateOutput',
+      backward = 'ReLU_updateGradInput',
+   }, cudnn.ReLU())
+end
+
+function cudnntest.functional_tanh()
+   test_functional_activation({
+      forward = 'Tanh_updateOutput',
+      backward = 'Tanh_updateGradInput',
+   }, cudnn.Tanh())
+end
+
+function cudnntest.functional_sigmoid()
+   test_functional_activation({
+      forward = 'Sigmoid_updateOutput',
+      backward = 'Sigmoid_updateGradInput',
+   }, cudnn.Sigmoid())
+end
+
+function cudnntest.functional_logsoftmax()
+   test_functional_activation({
+      forward = 'LogSoftMax_updateOutput',
+      backward = 'LogSoftMax_updateGradInput',
+   }, cudnn.LogSoftMax())
+end
+
+function cudnntest.functional_softmax()
+   test_functional_activation({
+      forward = 'SoftMax_updateOutput',
+      backward = 'SoftMax_updateGradInput',
+   }, cudnn.SoftMax())
+end
+
 torch.setdefaulttensortype('torch.FloatTensor')
 math.randomseed(os.time())
 mytester = torch.Tester()
