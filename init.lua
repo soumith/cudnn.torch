@@ -69,8 +69,8 @@ end
 -- TODO: determine if device supports true half and use true half on it
 -- so far use float for half and float, double for double
 local function determineHalfCapability(dev)
-   local prop = cutorch.getDeviceProperties(dev)
-   if prop.major >= 6 or prop.name:find'X1' then
+   -- pick half math option (with possible override) from cutorch
+   if cutorch.hasHalfInstructions then
       return 'CUDNN_DATA_HALF'
    else
       return 'CUDNN_DATA_FLOAT'

@@ -11,7 +11,7 @@ local jac = nn.Jacobian
 local testparams_half = {
    test_type = 'torch.CudaHalfTensor',
    precision_forward = 2e-1,
-   precision_backward = 6,
+   precision_backward = 8,
    precision_jac = 1e-3,
    precision_io = 1e-1,
 }
@@ -296,9 +296,11 @@ function cudnntest.VolumetricConvolution()
    local outi = math.random(1,17)
    local outj = math.random(1,17)
    local outk = math.random(1,5)
-   local ini = (outi-1)*si+ki
-   local inj = (outj-1)*sj+kj
-   local ink = (outk-1)*sk+kk
+
+   local ini = outi*si+ki-1
+   local inj = outj*sj+kj-1
+   local ink = outk*sk+kk-1
+
    local scale = math.random()
 
    local input = torch.randn(bs,from,ink,inj,ini):cuda()
@@ -496,8 +498,8 @@ function cudnntest.SpatialCrossMapLRN_batch()
    local inputSize = math.random(6,9)
    local size = math.random(1,3)*2+1
    local nbfeatures = math.random(3,8)
-   local alpha = math.random(1,100)/100
-   local beta  = math.random(0,100)/100
+   local alpha = math.random(0,100)/100
+   local beta  = math.random(1,100)/100
    local k = math.random(1,3)
 
    local input = torch.rand(bs, nbfeatures, inputSize, inputSize):cuda()
@@ -957,15 +959,10 @@ for i = 1, 1 do -- cutorch.getDeviceCount() do
       testparams = testparams_double
       mytester:run()
 
-      print(
-         [[Half Tensor tests are disabled due to missing functionality.
-They will be enabled once fully fixed and functional.
-See https://github.com/soumith/cudnn.torch/issues/225 for progress
-]])
-      -- Developers, do not commit uncommented regions until bindings fixed
-      -- print'Testing torch.CudaHalfTensor'
-      -- testparams = testparams_half
-      -- mytester:run()
+      print( 'Testing torch.CudaHalfTensor, torch.cudnn fp16 math is : ', cudnn.configmap('torch.CudaHalfTensor' ),
+             ', cutorch.hasHalfInstructions is ', cutorch.hasHalfInstructions)
+      testparams = testparams_half
+      mytester:run()
 
    end
 end
