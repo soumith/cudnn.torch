@@ -14,6 +14,7 @@ local layer_list = {
   'LogSoftMax',
   'VolumetricBatchNormalization',
   'VolumetricConvolution',
+  'VolumetricFullConvolution',
   'VolumetricMaxPooling',
   'VolumetricAveragePooling',
 }
