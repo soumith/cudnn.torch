@@ -37,7 +37,8 @@ end
 cudnn.functional.bias2D_accGradParameters = function(handle, gradOutput, gradBias, scale)
     gradOutput = gradOutput:dim() == 3 and Batch2D(gradOutput) or gradOutput
     scale = scale or 1.0
-    local scaleT = torch.FloatTensor({scale})
+    local scaleT = torch.type(gradBias) == 'torch.CudaDoubleTensor'
+       and torch.DoubleTensor({scale}) or torch.FloatTensor({scale})
     local oDesc = cudnn.toDescriptor(gradOutput)
     local biasDesc = cudnn.toDescriptor(gradBias:view(1, gradBias:nElement(),1,1))
     errcheck('cudnnConvolutionBackwardBias', handle,
@@ -123,9 +124,9 @@ cudnn.functional.Convolution2D_updateOutput = function(handle, input, weight, ou
    local maxBufSize = bufSize[1]
 
    local extraBuffer = workspace or cudnn.getSharedWorkspace()
-   local extraBufferSizeInBytes = extraBuffer:nElement() * 4 -- extraBuffer is always float
+   local extraBufferSizeInBytes = extraBuffer:nElement() * extraBuffer:elementSize()
    if maxBufSize > extraBufferSizeInBytes then
-      extraBuffer:resize(math.ceil(maxBufSize / 4))
+      extraBuffer:resize(math.ceil(maxBufSize / extraBuffer:elementSize()))
       extraBufferSizeInBytes = maxBufSize
    end
 
@@ -203,9 +204,9 @@ cudnn.functional.Convolution2D_updateGradInput = function(handle, input, weight,
    local maxBufSize = bufSize[1]
 
    local extraBuffer = cudnn.getSharedWorkspace()
-   local extraBufferSizeInBytes = extraBuffer:nElement() * 4 -- extraBuffer is always float
+   local extraBufferSizeInBytes = extraBuffer:nElement() * extraBuffer:elementSize()
    if maxBufSize > extraBufferSizeInBytes then
-      extraBuffer:resize(math.ceil(maxBufSize / 4))
+      extraBuffer:resize(math.ceil(maxBufSize / extraBuffer:elementSize()))
       extraBufferSizeInBytes = maxBufSize
    end
 
@@ -223,14 +224,14 @@ end
 
 -- accumulates the gradients into gradWeight.
 -- gradWeight is assumed to be allocated and given.
-local scaleT = torch.FloatTensor(1):fill(1.0)
 cudnn.functional.Convolution2D_accGradParameters = function(handle, input, gradWeight, gradOutput,
                                                    strideH, strideW, padH, padW, scale)
     input = input:dim() == 3 and Batch2D(input) or input
     gradOutput = gradOutput:dim() == 3 and Batch2D(gradOutput) or gradOutput
 
     scale = scale or 1.0
-    scaleT[1] = scale
+    local scaleT = torch.type(gradWeight) == 'torch.CudaDoubleTensor'
+       and torch.DoubleTensor({scale}) or torch.FloatTensor({scale})
     -- create a weight descriptor
     local weightDesc = ffi.new('struct cudnnFilterStruct*[1]')
     errcheck('cudnnCreateFilterDescriptor', weightDesc)
@@ -285,9 +286,9 @@ cudnn.functional.Convolution2D_accGradParameters = function(handle, input, gradW
     local maxBufSize = bufSize[1]
 
     local extraBuffer = cudnn.getSharedWorkspace()
-    local extraBufferSizeInBytes = extraBuffer:nElement() * 4 -- extraBuffer is always float
+    local extraBufferSizeInBytes = extraBuffer:nElement() * extraBuffer:elementSize()
     if maxBufSize > extraBufferSizeInBytes then
-       extraBuffer:resize(math.ceil(maxBufSize / 4))
+       extraBuffer:resize(math.ceil(maxBufSize / extraBuffer:elementSize()))
        extraBufferSizeInBytes = maxBufSize
     end
 

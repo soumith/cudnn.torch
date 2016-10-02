@@ -48,16 +48,8 @@ function torch.CudaHalfTensor:abs()
    return self:cuda():abs():cudaHalf()
 end
 
-function torch.CudaDoubleTensor:abs()
-   return self:cuda():abs():cudaDouble()
-end
-
 function torch.CudaHalfTensor:mean()
    return self:cuda():mean()
-end
-
-function torch.CudaDoubleTensor:__sub(b)
-   return self:cuda() - b:cuda()
 end
 
 function torch.CudaDoubleTensor:mean()
@@ -810,8 +802,8 @@ function cudnntest.functional_bias2D()
    local ini = (outi-1)*si+ki
    local inj = (outj-1)*sj+kj
    local scale = torch.uniform()
-   local input = torch.zeros(bs,from,inj,ini):cuda()
-   local mod = cudnn.SpatialConvolution(from,to,ki,kj,si,sj):cuda()
+   local input = cast(torch.zeros(bs,from,inj,ini))
+   local mod = cast(cudnn.SpatialConvolution(from,to,ki,kj,si,sj))
    mod.weight:zero()
    local groundtruth = mod:forward(input)
    local result = groundtruth:clone():zero()
@@ -821,7 +813,7 @@ function cudnntest.functional_bias2D()
                      testparams.precision_forward, 'error on forward ')
 
    mod:zeroGradParameters()
-   local gradOutput = groundtruth:clone():normal()
+   local gradOutput = cast(groundtruth:clone():double():normal())
    mod:backward(input, gradOutput, scale)
    local groundtruth = mod.gradBias
    local result = groundtruth:clone():zero()
@@ -832,16 +824,16 @@ function cudnntest.functional_bias2D()
 end
 
 function cudnntest.functional_convolution2d()
-    local a=cudnn.SpatialConvolution(3,16,5,5):cuda()
+    local a = cast(cudnn.SpatialConvolution(3,16,5,5))
     a.bias:zero();
-    local input = torch.randn(10,3,10,10):cuda()
+    local input = cast(torch.randn(10,3,10,10))
     a:zeroGradParameters()
     a:forward(input);
-    local output = a.output:clone():normal()
-    local gradOutput = a.output:clone():normal()
-    local gradInput = a:backward(input, gradOutput):clone():normal()
-    local gradWeight = a.gradWeight:clone():zero()
-    cudnn.functional.Convolution2D_updateOutput(cudnn.getHandle(), input,
+    local output = cast(a.output:clone():double():normal())
+    local gradOutput = cast(a.output:clone():double():normal())
+    local gradInput = cast(a:backward(input, gradOutput):clone():double():normal())
+    local gradWeight = cast(a.gradWeight:clone():zero())
+    cudnn.functional.Convolution2D_updateOutput(cudnn.getHandle(), input, 
                                                 a.weight, output, a.dH,
                                                 a.dW, a.padH, a.padW)
     mytester:assertlt((output - a.output):abs():max(),
@@ -862,12 +854,12 @@ function cudnntest.functional_convolution2d()
 end
 
 function cudnntest.functional_maxpooling2d()
-    local a=cudnn.SpatialMaxPooling(2,2,2,2):cuda()
-    local input = torch.randn(10,3,10,10):cuda()
+    local a = cast(cudnn.SpatialMaxPooling(2,2,2,2))
+    local input = cast(torch.randn(10,3,10,10))
     a:forward(input);
-    local output = a.output:clone():normal()
-    local gradOutput = a.output:clone():normal()
-    local gradInput = a:backward(input, gradOutput):clone():normal()
+    local output = cast(a.output:clone():double():normal())
+    local gradOutput = cast(a.output:clone():double():normal())
+    local gradInput = cast(a:backward(input, gradOutput):clone():double():normal())
     cudnn.functional.MaxPooling2D_updateOutput(cudnn.getHandle(), input,
                                                output, a.kH, a.kW,
                                                a.dH, a.dW, a.padH, a.padW)
