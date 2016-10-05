@@ -320,6 +320,41 @@ function cudnntest.VolumetricConvolution()
    testLayer(sconv, gconv, input, gradOutput, scale, true, false)
 end
 
+function cudnntest.VolumetricFullConvolution()
+   local bs = math.random(1,32)
+   local from = math.random(1,32)
+   local to = math.random(1,64)
+   local ki = math.random(1,7)
+   local kj = math.random(1,7)
+   local kk = math.random(1,5)
+   local si = math.random(1,ki)
+   local sj = math.random(1,kj)
+   local sk = math.random(1,kk)
+   local ini = math.random(1,32)
+   local inj = math.random(1,32)
+   local ink = math.random(1,10)
+   local outi = (ini-1)*si+ki
+   local outj = (inj-1)*sj+kj
+   local outk = (ink-1)*sk+kk
+   local scale = math.random()
+
+   local input = torch.randn(bs,from,ink,inj,ini):cuda()
+   local gradOutput = torch.randn(bs,to,outk,outj,outi):cuda()
+   local sconv = nn.VolumetricFullConvolution(from,to,kk,ki,kj,sk,si,sj):cuda()
+   local gconv = cast(cudnn.VolumetricFullConvolution(from,to,kk,ki,kj,sk,si,sj):cuda():fastest())
+   gconv.weight:copy(sconv.weight)
+   gconv.bias:copy(sconv.bias)
+
+   testLayer(sconv, gconv, input, gradOutput, scale, true, true) -- batch
+   testLayer(sconv, gconv, input, gradOutput, scale, true, false) -- non-batch
+   local originalTypename = torch.typename(gconv)
+   local gconv = cast(cudnn.convert(sconv, cudnn))
+   mytester:asserteq(torch.typename(gconv),
+                     originalTypename, 'conversion type check')
+   testLayer(sconv, gconv, input, gradOutput, scale, true, true)
+   testLayer(sconv, gconv, input, gradOutput, scale, true, false)
+end
+
 function cudnntest.VolumetricMaxPooling()
    local bs = math.random(1,4)
    local from = math.random(1,4)
@@ -764,6 +799,57 @@ function cudnntest.VolumetricCrossEntropyCriterion()
                       'error in difference between central difference and :backward')
 end
 
+
+local function test_functional_activation(mode, module)
+   local a = module:cuda()
+   local input = torch.randn(10,12):cuda()
+   a:forward(input)
+   local output = a.output:clone():normal()
+   local gradOutput = a.output:clone():normal()
+   local gradInput = a:updateGradInput(input, gradOutput):clone():normal()
+   cudnn.functional[mode.forward](cudnn.getHandle(), input, output)
+   mytester:assertlt((output - a.output):abs():max(),
+                     testparams.precision_forward, 'error on forward ')
+   cudnn.functional[mode.backward](cudnn.getHandle(), input, output,
+                                   gradOutput, gradInput)
+   mytester:assertlt((gradInput - a.gradInput):abs():max(),
+                     testparams.precision_forward, 'error on updateGradInput ')
+end
+
+function cudnntest.functional_relu()
+   test_functional_activation({
+      forward = 'ReLU_updateOutput',
+      backward = 'ReLU_updateGradInput',
+   }, cudnn.ReLU())
+end
+
+function cudnntest.functional_tanh()
+   test_functional_activation({
+      forward = 'Tanh_updateOutput',
+      backward = 'Tanh_updateGradInput',
+   }, cudnn.Tanh())
+end
+
+function cudnntest.functional_sigmoid()
+   test_functional_activation({
+      forward = 'Sigmoid_updateOutput',
+      backward = 'Sigmoid_updateGradInput',
+   }, cudnn.Sigmoid())
+end
+
+function cudnntest.functional_logsoftmax()
+   test_functional_activation({
+      forward = 'LogSoftMax_updateOutput',
+      backward = 'LogSoftMax_updateGradInput',
+   }, cudnn.LogSoftMax())
+end
+
+function cudnntest.functional_softmax()
+   test_functional_activation({
+      forward = 'SoftMax_updateOutput',
+      backward = 'SoftMax_updateGradInput',
+   }, cudnn.SoftMax())
+end
 
 torch.setdefaulttensortype('torch.FloatTensor')
 math.randomseed(os.time())
