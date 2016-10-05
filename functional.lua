@@ -44,6 +44,21 @@ cudnn.functional.bias2D_accGradParameters = function(handle, gradOutput, gradBia
              biasDesc[0], gradBias:data())
 end
 
+
+local function getWsPtrAndSize(workspace, maxBufSize)
+  local wsPtr, extraBufferSizeInBytes
+  if workspace then
+    if maxBufSize > workspace:nElement()*workspace:elementSize() then
+       local nElems = math.ceil(maxBufSize/workspace:elementSize())
+       workspace:resize(nElems)
+    end
+  else
+    cudnn.setSharedWorkspaceSize(maxBufSize,true)
+    wsPtr, extraBufferSizeInBytes = cudnn.getSharedWorkspace()
+  end
+  return wsPtr, extraBufferSizeInBytes
+end
+
 -- Does a 2D Convolution (updateOutput) on input, weight
 -- output is assumed to be allocated and given.
 cudnn.functional.Convolution2D_updateOutput = function(handle, input, weight, output,
@@ -118,21 +133,22 @@ cudnn.functional.Convolution2D_updateOutput = function(handle, input, weight, ou
               convDesc[0], oDesc[0],
               algType[0], bufSize:data())
    local maxBufSize = bufSize[1]
+   local wsPtr, extraBufferSizeInBytes = getWsPtrAndSize(workspace, maxBufSize)
 
-   local extraBuffer = workspace or cudnn.getSharedWorkspace()
+--[[   local extraBuffer = workspace or cudnn.getSharedWorkspace()
    local extraBufferSizeInBytes = extraBuffer:nElement() * 4 -- extraBuffer is always float
    if maxBufSize > extraBufferSizeInBytes then
       extraBuffer:resize(math.ceil(maxBufSize / 4))
       extraBufferSizeInBytes = maxBufSize
    end
-
+--]]
    -- do convolution
    errcheck('cudnnConvolutionForward', handle,
             cudnn.scalar(input, 1),
             iDesc[0], input:data(),
             weightDesc[0], weight:data(),
             convDesc[0], algType[0],
-            extraBuffer:data(), extraBufferSizeInBytes,
+            wsPtr, extraBufferSizeInBytes,
             cudnn.scalar(input, 0),
             oDesc[0], output:data());
 end
@@ -198,14 +214,15 @@ cudnn.functional.Convolution2D_updateGradInput = function(handle, input, weight,
            convDesc[0], iDesc[0],
            algType[0], bufSize:data())
    local maxBufSize = bufSize[1]
+   local wsPtr, extraBufferSizeInBytes = getWsPtrAndSize(workspace, maxBufSize)
 
-   local extraBuffer = cudnn.getSharedWorkspace()
+--[[   local extraBuffer = cudnn.getSharedWorkspace()
    local extraBufferSizeInBytes = extraBuffer:nElement() * 4 -- extraBuffer is always float
    if maxBufSize > extraBufferSizeInBytes then
       extraBuffer:resize(math.ceil(maxBufSize / 4))
       extraBufferSizeInBytes = maxBufSize
    end
-
+--]]
    -- do convolution
    errcheck('cudnnConvolutionBackwardData', handle,
                cudnn.scalar(input, 1),
@@ -213,7 +230,7 @@ cudnn.functional.Convolution2D_updateGradInput = function(handle, input, weight,
                oDesc[0], gradOutput:data(),
                convDesc[0],
                algType[0],
-               extraBuffer:data(), extraBufferSizeInBytes,
+               wsPtr, extraBufferSizeInBytes,
                cudnn.scalar(input, 0),
                iDesc[0], gradInput:data());
 end
@@ -280,14 +297,15 @@ cudnn.functional.Convolution2D_accGradParameters = function(handle, input, gradW
               convDesc[0], weightDesc[0],
               algType[0], bufSize:data())
     local maxBufSize = bufSize[1]
+    local wsPtr, extraBufferSizeInBytes = getWsPtrAndSize(workspace, maxBufSize)
 
-    local extraBuffer = cudnn.getSharedWorkspace()
+--[[    local extraBuffer = cudnn.getSharedWorkspace()
     local extraBufferSizeInBytes = extraBuffer:nElement() * 4 -- extraBuffer is always float
     if maxBufSize > extraBufferSizeInBytes then
        extraBuffer:resize(math.ceil(maxBufSize / 4))
        extraBufferSizeInBytes = maxBufSize
     end
-
+--]]
     -- do convolution
     errcheck('cudnnConvolutionBackwardFilter', handle,
              scaleT:data(),
@@ -295,7 +313,7 @@ cudnn.functional.Convolution2D_accGradParameters = function(handle, input, gradW
              oDesc[0], gradOutput:data(),
              convDesc[0],
              algType[0],
-             extraBuffer:data(), extraBufferSizeInBytes,
+             wsPtr, extraBufferSizeInBytes,
              cudnn.scalar(input, 1),
              weightDesc[0], gradWeight:data());
 end

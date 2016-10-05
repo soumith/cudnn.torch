@@ -314,6 +314,7 @@ require('cudnn.BLSTM')
 require('cudnn.LSTM')
 require('cudnn.BGRU')
 require('cudnn.GRU')
+require('cudnn.functional')
 require('cudnn.convert')
 
 function cudnn.reset()
