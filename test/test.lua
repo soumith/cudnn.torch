@@ -944,7 +944,7 @@ mytester:add(cudnntest)
 
 -- cudnn.verbose=true
 -- cudnn.find.verbose=true
-cudnn.useFindEx=true
+cudnn.useFindEx=false
 
 for i = 1, cutorch.getDeviceCount() do
 
