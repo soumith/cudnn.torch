@@ -321,10 +321,9 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
            self.algoFamily = setAlgoFamily()
            local API = algoFamilies[self.algoFamily][findAPI_idx]
            if self.algoFamily == FindExFamily then
-              -- use clone for weights when looking for backward filter algo
-              if findAPI_idx == BwdFilter then
-                 params[7] = params[7]:clone()
-              end
+              -- clone output tensor
+                 local paramstmp = params[7]
+                 params[7] = paramstmp:clone()
               -- temporarily set WS size to the max
               self:calculateMaxWorkspaceSize()
               cudnn.setSharedWorkspaceSize(self.maxWorkspaceSize)
@@ -345,6 +344,7 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
                              cudnn.getHandle(),
                              params[1], params[2]:data(), params[3], params[4]:data(), layer.convDesc[0], params[6], params[7]:data(),
                              nAlgos, numPerfResults, perfResults, tempWorkspace, tempWorkspaceSize)
+                   params[7]=paramstmp
               else
                  if self.algoFamily == FindFamily then
                     ret = call(layer, API,
