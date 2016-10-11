@@ -34,7 +34,8 @@ end
 cudnn.functional.bias2D_accGradParameters = function(handle, gradOutput, gradBias, scale)
     gradOutput = gradOutput:dim() == 3 and Batch2D(gradOutput) or gradOutput
     scale = scale or 1.0
-    local scaleT = torch.FloatTensor({scale})
+    local scaleT = torch.type(gradBias) == 'torch.CudaDoubleTensor'
+       and torch.DoubleTensor({scale}) or torch.FloatTensor({scale})
     local oDesc = cudnn.toDescriptor(gradOutput)
     local biasDesc = cudnn.toDescriptor(gradBias:view(1, gradBias:nElement(),1,1))
     errcheck('cudnnConvolutionBackwardBias', handle,
@@ -85,10 +86,17 @@ cudnn.functional.Convolution2D_updateOutput = function(handle, input, weight, ou
    local pad = torch.IntTensor({padH, padW})
    local stride = torch.IntTensor({strideH, strideW})
    local upscale = torch.IntTensor({1,1})
+   local mathType = cudnn.configmap(torch.type(weight))
+   if mathType == 'CUDNN_DATA_HALF' then
+      -- explicitly set math type to fp32 to avoid possible failures with fp16 and exotic sizes
+      -- this can be changed back when ported to find() as it has built-in fallback mechanism
+      mathType = 'CUDNN_DATA_FLOAT'
+   end
    errcheck('cudnnSetConvolutionNdDescriptor', convDesc[0],
             2, pad:data(),
             stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
-            cudnn.configmap(torch.type(weight)));
+            mathType
+   );
    local function destroyConvDesc(d)
        errcheck('cudnnDestroyConvolutionDescriptor', d[0]);
    end
@@ -119,7 +127,7 @@ cudnn.functional.Convolution2D_updateOutput = function(handle, input, weight, ou
       algSearchMode = 'CUDNN_CONVOLUTION_FWD_PREFER_FASTEST'
    end
    local algWorkspaceLimit = nInputPlane * kH * kW * cudnn.sizeof(weight)
-   
+
    errcheck('cudnnGetConvolutionForwardAlgorithm',
             handle,
             iDesc[0], weightDesc[0],
@@ -135,13 +143,11 @@ cudnn.functional.Convolution2D_updateOutput = function(handle, input, weight, ou
    local maxBufSize = bufSize[1]
    local wsPtr, extraBufferSizeInBytes = getWsPtrAndSize(workspace, maxBufSize)
 
---[[   local extraBuffer = workspace or cudnn.getSharedWorkspace()
-   local extraBufferSizeInBytes = extraBuffer:nElement() * 4 -- extraBuffer is always float
    if maxBufSize > extraBufferSizeInBytes then
-      extraBuffer:resize(math.ceil(maxBufSize / 4))
+      extraBuffer:resize(math.ceil(maxBufSize / extraBuffer:elementSize()))
       extraBufferSizeInBytes = maxBufSize
    end
---]]
+
    -- do convolution
    errcheck('cudnnConvolutionForward', handle,
             cudnn.scalar(input, 1),
@@ -181,10 +187,16 @@ cudnn.functional.Convolution2D_updateGradInput = function(handle, input, weight,
    local pad = torch.IntTensor({padH, padW})
    local stride = torch.IntTensor({strideH, strideW})
    local upscale = torch.IntTensor({1,1})
+   local mathType = cudnn.configmap(torch.type(weight))
+   if mathType == 'CUDNN_DATA_HALF' then
+      -- explicitly set math type to fp32 to avoid possible failures with fp16 and exotic sizes
+      -- this can be changed back when ported to find() as it has built-in fallback mechanism
+      mathType = 'CUDNN_DATA_FLOAT'
+   end
    errcheck('cudnnSetConvolutionNdDescriptor', convDesc[0],
             2, pad:data(),
             stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
-            cudnn.configmap(torch.type(weight)));
+            mathType)
    local function destroyConvDesc(d)
        errcheck('cudnnDestroyConvolutionDescriptor', d[0]);
    end
@@ -216,13 +228,11 @@ cudnn.functional.Convolution2D_updateGradInput = function(handle, input, weight,
    local maxBufSize = bufSize[1]
    local wsPtr, extraBufferSizeInBytes = getWsPtrAndSize(workspace, maxBufSize)
 
---[[   local extraBuffer = cudnn.getSharedWorkspace()
-   local extraBufferSizeInBytes = extraBuffer:nElement() * 4 -- extraBuffer is always float
    if maxBufSize > extraBufferSizeInBytes then
-      extraBuffer:resize(math.ceil(maxBufSize / 4))
+      extraBuffer:resize(math.ceil(maxBufSize / extraBuffer:elementSize()))
       extraBufferSizeInBytes = maxBufSize
    end
---]]
+
    -- do convolution
    errcheck('cudnnConvolutionBackwardData', handle,
                cudnn.scalar(input, 1),
@@ -237,14 +247,14 @@ end
 
 -- accumulates the gradients into gradWeight.
 -- gradWeight is assumed to be allocated and given.
-local scaleT = torch.FloatTensor(1):fill(1.0)
 cudnn.functional.Convolution2D_accGradParameters = function(handle, input, gradWeight, gradOutput,
                                                    strideH, strideW, padH, padW, scale)
     input = input:dim() == 3 and Batch2D(input) or input
     gradOutput = gradOutput:dim() == 3 and Batch2D(gradOutput) or gradOutput
 
     scale = scale or 1.0
-    scaleT[1] = scale
+    local scaleT = torch.type(gradWeight) == 'torch.CudaDoubleTensor'
+       and torch.DoubleTensor({scale}) or torch.FloatTensor({scale})
     -- create a weight descriptor
     local weightDesc = ffi.new('struct cudnnFilterStruct*[1]')
     errcheck('cudnnCreateFilterDescriptor', weightDesc)
@@ -264,10 +274,16 @@ cudnn.functional.Convolution2D_accGradParameters = function(handle, input, gradW
     local pad = torch.IntTensor({padH, padW})
     local stride = torch.IntTensor({strideH, strideW})
     local upscale = torch.IntTensor({1,1})
+    local mathType = cudnn.configmap(torch.type(gradWeight))
+    if mathType == 'CUDNN_DATA_HALF' then
+       -- explicitly set math type to fp32 to avoid possible failures with fp16 and exotic sizes
+       -- this can be changed back when ported to find() as it has built-in fallback mechanism
+       mathType = 'CUDNN_DATA_FLOAT'
+    end
     errcheck('cudnnSetConvolutionNdDescriptor', convDesc[0],
              2, pad:data(),
              stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
-             cudnn.configmap(torch.type(gradWeight)));
+             mathType)
     local function destroyConvDesc(d)
         errcheck('cudnnDestroyConvolutionDescriptor', d[0]);
     end
@@ -299,13 +315,11 @@ cudnn.functional.Convolution2D_accGradParameters = function(handle, input, gradW
     local maxBufSize = bufSize[1]
     local wsPtr, extraBufferSizeInBytes = getWsPtrAndSize(workspace, maxBufSize)
 
---[[    local extraBuffer = cudnn.getSharedWorkspace()
-    local extraBufferSizeInBytes = extraBuffer:nElement() * 4 -- extraBuffer is always float
     if maxBufSize > extraBufferSizeInBytes then
-       extraBuffer:resize(math.ceil(maxBufSize / 4))
+       extraBuffer:resize(math.ceil(maxBufSize / extraBuffer:elementSize()))
        extraBufferSizeInBytes = maxBufSize
     end
---]]
+
     -- do convolution
     errcheck('cudnnConvolutionBackwardFilter', handle,
              scaleT:data(),
@@ -570,5 +584,3 @@ cudnn.functional.SoftMax_updateGradInput = function(handle, input, output, gradO
                            'CUDNN_SOFTMAX_MODE_INSTANCE',
                            input, output, gradOutput, gradInput)
 end
-
-
