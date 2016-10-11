@@ -308,6 +308,7 @@ end
 function SpatialFullConvolution:updateOutput(input)
     if not self.weightDesc then self:resetWeightDescriptors() end
     self:createIODescriptors(input)
+    self:backCompatibility()
 
     -- Because SpatialFullConvolution is performing the adjoint of the forward
     -- convolution operator, we need to swap the forward and backward passes.
@@ -333,6 +334,7 @@ end
 function SpatialFullConvolution:updateGradInput(input, gradOutput)
     if not self.gradInput then return end
     self.gradInput:resizeAs(input)
+    self:backCompatibility()
 
     assert(gradOutput:dim() == 3 or gradOutput:dim() == 4, 'gradOutput has to be 3D or 4D');
     assert(gradOutput:isContiguous(), 'gradOutput has to be contiguous')
@@ -352,6 +354,7 @@ function SpatialFullConvolution:updateGradInput(input, gradOutput)
 end
 
 function SpatialFullConvolution:accGradParameters(input, gradOutput, scale)
+    self:backCompatibility()
     self.scaleT = self.scaleT or self.weight.new(1)
     -- this line forces this member to always be on CPU (needed for cudnn)
     self.scaleT = torch.type(self.weight) == 'torch.CudaDoubleTensor'
