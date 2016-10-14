@@ -66,29 +66,37 @@ function cudnn.scalar(t, val)
    end
 end
 
--- TODO: determine if device supports true half and use true half on it
--- so far use float for half and float, double for double
-local function determineHalfCapability(dev)
-   local prop = cutorch.getDeviceProperties(dev)
-   if prop.major >= 6 or prop.name:find'X1' then
+local function fasterHalfMathTypeForCurrentDevice()
+   -- get info from cutorc
+   if cutorch.hasFastHalfInstructions() then
       return 'CUDNN_DATA_HALF'
    else
       return 'CUDNN_DATA_FLOAT'
    end
 end
 
-local configmaps = {}
-for i=1,cutorch.getDeviceCount() do
-   configmaps[i] = {
-      ['torch.CudaHalfTensor']   = determineHalfCapability(i),
-      ['torch.CudaTensor']       = 'CUDNN_DATA_FLOAT',
-      ['torch.CudaDoubleTensor'] = 'CUDNN_DATA_DOUBLE',
-   }
+local configMaths = {}
+
+local function configureFloatMath()
+   local currentDevice = cutorch.getDevice()
+   for i=1,cutorch.getDeviceCount() do
+      cutorch.setDevice(i)
+      configMaths[i] = {
+         ['torch.CudaHalfTensor']   = fasterHalfMathTypeForCurrentDevice(),
+         ['torch.CudaTensor']       = 'CUDNN_DATA_FLOAT',
+         ['torch.CudaDoubleTensor'] = 'CUDNN_DATA_DOUBLE',
+      }
+   end
+   cutorch.setDevice(currentDevice)
 end
 
+-- TODO: rename to something like "configuredMathType" on next refactor
+-- also, should move torch.type() inside
 cudnn.configmap = function(tensortype)
-   return configmaps[cutorch.getDevice()][tensortype]
+   return configMaths[cutorch.getDevice()][tensortype]
 end
+
+configureFloatMath()
 
 function cudnn.getHandle()
     local device = cutorch.getDevice()
