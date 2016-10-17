@@ -836,7 +836,7 @@ function cudnntest.functional_convolution2d()
     local gradOutput = cast(a.output:clone():double():normal())
     local gradInput = cast(a:backward(input, gradOutput):clone():double():normal())
     local gradWeight = cast(a.gradWeight:clone():zero())
-    cudnn.functional.Convolution2D_updateOutput(cudnn.getHandle(), input, 
+    cudnn.functional.Convolution2D_updateOutput(cudnn.getHandle(), input,
                                                 a.weight, output, a.dH,
                                                 a.dW, a.padH, a.padW)
     mytester:assertlt((output - a.output):abs():max(),

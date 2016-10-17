@@ -2,7 +2,8 @@ local SpatialConvolution, parent =
     torch.class('cudnn.SpatialConvolution', 'nn.SpatialConvolution')
 local ffi = require 'ffi'
 local find = require 'cudnn.find'
-local errcheck = find.errcheck
+local errcheck = cudnn.errcheck
+local checkedCall = find.checkedCall
 
 function SpatialConvolution:__init(nInputPlane, nOutputPlane,
                             kW, kH, dW, dH, padW, padH, groups)
@@ -45,7 +46,7 @@ function SpatialConvolution:resetWeightDescriptors(desc)
                                     self.nInputPlane/self.groups,
                                     self.kH, self.kW})
 
-    errcheck(self,'cudnnSetFilterNdDescriptor', self.weightDesc[0],
+    errcheck('cudnnSetFilterNdDescriptor', self.weightDesc[0],
              cudnn.typemap[torch.typename(self.weight)], 'CUDNN_TENSOR_NCHW', desc:nElement(),
              desc:data());
     return self
@@ -129,7 +130,7 @@ function SpatialConvolution:createIODescriptors(input)
         self.pad = torch.IntTensor({self.padH, self.padW})
         self.stride = torch.IntTensor({self.dH, self.dW})
         local upscale = torch.IntTensor({1,1})
-        errcheck(self,'cudnnSetConvolutionNdDescriptor', self.convDesc[0],
+        errcheck('cudnnSetConvolutionNdDescriptor', self.convDesc[0],
                  2, self.pad:data(),
                  self.stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
                  cudnn.configmap(torch.type(self.weight)));
@@ -137,7 +138,7 @@ function SpatialConvolution:createIODescriptors(input)
 
         -- get output shape, resize output
         local oSize = torch.IntTensor(4)
-        errcheck(self,'cudnnGetConvolutionNdForwardOutputDim',
+        errcheck('cudnnGetConvolutionNdForwardOutputDim',
                  self.convDesc[0], self.iDesc[0],
                  self.weightDesc[0], 4, oSize:data())
         oSize[2] = oSize[2] * self.groups
@@ -191,19 +192,19 @@ function SpatialConvolution:updateOutput(input)
                                                     self.weight, self.convDesc[0], self.oDesc[0], self.output_slice})
     local extraBuffer, extraBufferSize = cudnn.getSharedWorkspace()
     for g = 0, self.groups - 1 do
-        errcheck(self,'cudnnConvolutionForward', cudnn.getHandle(),
-                 cudnn.scalar(input, 1),
-                 self.iDesc[0], input:data() + g*self.input_offset,
-                 self.weightDesc[0], self.weight:data() + g*self.weight_offset,
-                 self.convDesc[0], fwdAlgo,
-                 extraBuffer, extraBufferSize,
-                 cudnn.scalar(input, 0),
-                 self.oDesc[0], self.output:data() + g*self.output_offset);
+        checkedCall(self,'cudnnConvolutionForward', cudnn.getHandle(),
+                    cudnn.scalar(input, 1),
+                    self.iDesc[0], input:data() + g*self.input_offset,
+                    self.weightDesc[0], self.weight:data() + g*self.weight_offset,
+                    self.convDesc[0], fwdAlgo,
+                    extraBuffer, extraBufferSize,
+                    cudnn.scalar(input, 0),
+                    self.oDesc[0], self.output:data() + g*self.output_offset);
     end
 
     -- add bias
     if self.bias then
-        errcheck(self,'cudnnAddTensor', cudnn.getHandle(),
+        errcheck('cudnnAddTensor', cudnn.getHandle(),
                  cudnn.scalar(input, 1), self.biasDesc[0], self.bias:data(),
                  cudnn.scalar(input, 1), self.oDescForBias[0], self.output:data())
     end
@@ -223,15 +224,15 @@ function SpatialConvolution:updateGradInput(input, gradOutput)
                                                              self.output_slice, self.convDesc[0], self.iDesc[0], self.input_slice })
     local extraBuffer, extraBufferSize = cudnn.getSharedWorkspace()
     for g = 0,self.groups - 1 do
-        errcheck(self,'cudnnConvolutionBackwardData', cudnn.getHandle(),
-                 cudnn.scalar(input, 1),
-                 self.weightDesc[0], self.weight:data() + g*self.weight_offset,
-                 self.oDesc[0], gradOutput:data() + g*self.output_offset,
-                 self.convDesc[0],
-                 bwdDataAlgo,
-                 extraBuffer, extraBufferSize,
-                 cudnn.scalar(input, 0),
-                 self.iDesc[0], self.gradInput:data() + g*self.input_offset)
+        checkedCall(self,'cudnnConvolutionBackwardData', cudnn.getHandle(),
+                    cudnn.scalar(input, 1),
+                    self.weightDesc[0], self.weight:data() + g*self.weight_offset,
+                    self.oDesc[0], gradOutput:data() + g*self.output_offset,
+                    self.convDesc[0],
+                    bwdDataAlgo,
+                    extraBuffer, extraBufferSize,
+                    cudnn.scalar(input, 0),
+                    self.iDesc[0], self.gradInput:data() + g*self.input_offset)
     end
     return self.gradInput
 end
@@ -251,7 +252,7 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
 
     -- gradBias
     if self.bias then
-        errcheck(self,'cudnnConvolutionBackwardBias', cudnn.getHandle(),
+        errcheck('cudnnConvolutionBackwardBias', cudnn.getHandle(),
                  self.scaleT:data(),
                  self.oDescForBias[0], gradOutput:data(),
                  cudnn.scalar(input, 1),
@@ -261,15 +262,15 @@ function SpatialConvolution:accGradParameters(input, gradOutput, scale)
     local extraBuffer, extraBufferSize = cudnn.getSharedWorkspace()
     for g = 0, self.groups - 1 do
         -- gradWeight
-        errcheck(self,'cudnnConvolutionBackwardFilter', cudnn.getHandle(),
-                 self.scaleT:data(),
-                 self.iDesc[0], input:data() + g*self.input_offset,
-                 self.oDesc[0], gradOutput:data() + g*self.output_offset,
-                 self.convDesc[0],
-                 bwdFilterAlgo,
-                 extraBuffer, extraBufferSize,
-                 cudnn.scalar(input, 1),
-                 self.weightDesc[0], self.gradWeight:data() + g*self.weight_offset);
+       checkedCall(self,'cudnnConvolutionBackwardFilter', cudnn.getHandle(),
+                   self.scaleT:data(),
+                   self.iDesc[0], input:data() + g*self.input_offset,
+                   self.oDesc[0], gradOutput:data() + g*self.output_offset,
+                   self.convDesc[0],
+                   bwdFilterAlgo,
+                   extraBuffer, extraBufferSize,
+                   cudnn.scalar(input, 1),
+                   self.weightDesc[0], self.gradWeight:data() + g*self.weight_offset);
     end
 
     return self.gradOutput

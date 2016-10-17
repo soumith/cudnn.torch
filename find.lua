@@ -64,10 +64,9 @@ local bwdDataAlgoNames = {
 
 local algoNames = {fwdAlgoNames, bwdFilterAlgoNames, bwdDataAlgoNames}
 
-local function call(layer, f, ...)
+local function verboseCall(layer, f, ...)
    if find.verbose then
-
-        print("find:call: calling " .. f .. ", hash: ",  layer.autotunerHash)
+        print("find:verboseCall: calling " .. f .. ", hash: ",  layer.autotunerHash)
    end
    local status = cudnn.call(f, ...)
    if status ~= ffi.C.CUDNN_STATUS_SUCCESS and (find.verbose or find.verboseError) then
@@ -79,27 +78,27 @@ local function call(layer, f, ...)
       cudnn.call('cudnnGetConvolutionNdDescriptor', layer.convDesc[0],
                  4, dim, pad, stride,
                  upscale, mode, datatype)
-      print("find:call:" .. f .. " failed: ", tonumber(status) , ' mode : ', tonumber(mode[0]), ' datatype : ', tonumber(datatype[0]))
+      print("find:verboseCall:" .. f .. " failed: ", tonumber(status) , ' mode : ', tonumber(mode[0]), ' datatype : ', tonumber(datatype[0]))
    end
    if find.verbose then
-      print("find:call: success, " .. f )
+      print("find:verboseCall: success, " .. f )
    end
    return status
 end
-find.call = call
+find.verboseCall = verboseCall
 
-local function errcheck(layer, f, ...)
-   local status = call(layer, f, ...)
+local function checkedCall(layer, f, ...)
+   local status = verboseCall(layer, f, ...)
    if status ~= ffi.C.CUDNN_STATUS_SUCCESS then
       local str = ffi.string(cudnn.C.cudnnGetErrorString(status))
       error('Error in CuDNN: ' .. str .. ' ('..f..')')
    end
 end
-find.errcheck = errcheck
+find.checkedCall = checkedCall
 
 local function noFallback(layer)
    if find.verbose then
-      print("find.defaultFallback: call failed for:  ", layer.autotunerHash)
+      print("find.defaultFallback: verboseCall failed for:  ", layer.autotunerHash)
    end
    return false
 end
@@ -113,7 +112,7 @@ local function defaultFallback(layer, replay)
    local mode = ffi.new('cudnnConvolutionMode_t[8]')
    local datatype = ffi.new('cudnnDataType_t[8]')
 
-   errcheck(layer,'cudnnGetConvolutionNdDescriptor', layer.convDesc[0],
+   checkedCall(layer,'cudnnGetConvolutionNdDescriptor', layer.convDesc[0],
             5, dim, pad, stride,
             upscale, mode, datatype)
 
@@ -125,30 +124,26 @@ local function defaultFallback(layer, replay)
             print("find.defaultFallback: no 16-bit float algo found, will try 32 bits for ", layer.autotunerHash)
          end
       end
-      errcheck(layer,'cudnnSetConvolutionNdDescriptor', layer.convDesc[0],
-               dim[0], pad, stride,
-               upscale, mode[0], ffi.C.CUDNN_DATA_FLOAT)
+      checkedCall(layer,'cudnnSetConvolutionNdDescriptor', layer.convDesc[0],
+                  dim[0], pad, stride,
+                  upscale, mode[0], ffi.C.CUDNN_DATA_FLOAT)
       return true
    else
       return false
    end
 end
 
--- FindEx State Machine and Cache (per device)
-function find.create(id)
+-- Find State and Cache (per device)
+function initState(id)
    local finder = {}
    setmetatable(finder,find)
    finder.id = id
    finder:resetAlgorithmCache()
-   finder:resetStateMachine()
+   finder.iteration = 0
    if cutorch.hasHalf then
       finder.fallback = defaultFallback
    end
    return finder
-end
-
-function find:resetStateMachine()
-   self.iteration = 0
 end
 
 local finders = nil
@@ -163,7 +158,7 @@ end
 function find:resetAlgorithmCache()
    self.calculatedWorkspaceSize  = {}
    self:calculateMaxWorkspaceSize()
-   self.algoFamily = setAlgoFamily()   
+   self.algoFamily = setAlgoFamily()
    self.autotunerCache = {{}, {}, {}}
 end
 
@@ -177,7 +172,7 @@ function find.get()
    local device = cutorch.getDevice()
    local it = finders[device]
    if not it then
-      it = find.create(device)
+      it = initState(device)
       finders[device] = it
    end
    return it
@@ -340,17 +335,17 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
               if self.algoFamily == FindExFamily then
                  -- query temp workspace size
                  local tempWorkspace, tempWorkspaceSize = cudnn.getSharedWorkspace()
-                 ret =  call(layer, API,
-                             cudnn.getHandle(),
-                             params[1], params[2]:data(), params[3], params[4]:data(), layer.convDesc[0], params[6], params[7]:data(),
-                             nAlgos, numPerfResults, perfResults, tempWorkspace, tempWorkspaceSize)
-                   params[7]=paramstmp
+                 ret =  verboseCall(layer, API,
+                                    cudnn.getHandle(),
+                                    params[1], params[2]:data(), params[3], params[4]:data(), layer.convDesc[0], params[6], params[7]:data(),
+                                    nAlgos, numPerfResults, perfResults, tempWorkspace, tempWorkspaceSize)
+                 params[7]=paramstmp
               else
                  if self.algoFamily == FindFamily then
-                    ret = call(layer, API,
-                               cudnn.getHandle(),
-                               params[1], params[3], layer.convDesc[0], params[6],
-                               nAlgos, numPerfResults, perfResults)
+                    ret = verboseCall(layer, API,
+                                      cudnn.getHandle(),
+                                      params[1], params[3], layer.convDesc[0], params[6],
+                                      nAlgos, numPerfResults, perfResults)
                  else
                     -- GetFamily: emulate findXXX results layout
                     numPerfResults[0]=1

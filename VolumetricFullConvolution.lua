@@ -2,7 +2,8 @@ local VolumetricFullConvolution, parent
    = torch.class('cudnn.VolumetricFullConvolution', 'nn.VolumetricFullConvolution')
 local ffi = require 'ffi'
 local find = require 'cudnn.find'
-local errcheck = find.errcheck
+local errcheck = cudnn.errcheck
+local checkedCall = find.checkedCall
 
 local Convolution = cudnn.SpatialConvolution
 
@@ -47,7 +48,7 @@ function VolumetricFullConvolution:createIODescriptors(input)
          self.pad = torch.IntTensor({self.padT, self.padH, self.padW})
          self.stride = torch.IntTensor({self.dT, self.dH, self.dW})
          local upscale = torch.IntTensor({1,1,1})
-         errcheck(self, 'cudnnSetConvolutionNdDescriptor', self.convDesc[0],
+         errcheck('cudnnSetConvolutionNdDescriptor', self.convDesc[0],
                   3, self.pad:data(),
                   self.stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
                   cudnn.configmap(torch.type(self.weight)));
@@ -113,18 +114,18 @@ function VolumetricFullConvolution:updateOutput(input)
                                                             self.convDesc[0], self.oDesc[0], self.output_slice})
     local extraBuffer, extraBufferSize = cudnn.getSharedWorkspace()
 
-    errcheck(self, 'cudnnConvolutionBackwardData', cudnn.getHandle(),
-             cudnn.scalar(input, 1),
-             self.weightDesc[0], self.weight:data(),
-             self.iDesc[0], input:data(),
-             self.convDesc[0], bwdDataAlgo,
-             extraBuffer, extraBufferSize,
-             cudnn.scalar(input, 0),
-             self.oDesc[0], self.output:data())
+    checkedCall(self, 'cudnnConvolutionBackwardData', cudnn.getHandle(),
+                cudnn.scalar(input, 1),
+                self.weightDesc[0], self.weight:data(),
+                self.iDesc[0], input:data(),
+                self.convDesc[0], bwdDataAlgo,
+                extraBuffer, extraBufferSize,
+                cudnn.scalar(input, 0),
+                self.oDesc[0], self.output:data())
 
     -- add bias
     if self.bias then
-        errcheck(self, 'cudnnAddTensor', cudnn.getHandle(),
+        errcheck('cudnnAddTensor', cudnn.getHandle(),
                  cudnn.scalar(input, 1), self.biasDesc[0], self.bias:data(),
                  cudnn.scalar(input, 1), self.oDescForBias[0], self.output:data())
     end
@@ -146,15 +147,15 @@ function VolumetricFullConvolution:updateGradInput(input, gradOutput)
                                  self.convDesc[0], self.iDesc[0], self.input_slice})
     local extraBuffer, extraBufferSize = cudnn.getSharedWorkspace()
 
-    errcheck(self,'cudnnConvolutionForward', cudnn.getHandle(),
-             cudnn.scalar(input, 1),
-             self.oDesc[0], gradOutput:data(),
-             self.weightDesc[0], self.weight:data(),
-             self.convDesc[0],
-             fwdAlgo,
-             extraBuffer, extraBufferSize,
-             cudnn.scalar(input, 0),
-             self.iDesc[0], self.gradInput:data());
+    checkedCall(self,'cudnnConvolutionForward', cudnn.getHandle(),
+                cudnn.scalar(input, 1),
+                self.oDesc[0], gradOutput:data(),
+                self.weightDesc[0], self.weight:data(),
+                self.convDesc[0],
+                fwdAlgo,
+                extraBuffer, extraBufferSize,
+                cudnn.scalar(input, 0),
+                self.iDesc[0], self.gradInput:data());
     return self.gradInput
 end
 
@@ -177,22 +178,22 @@ function VolumetricFullConvolution:accGradParameters(input, gradOutput, scale)
    local bwdFilterAlgo = finder:backwardFilterAlgorithm(self, {self.oDesc[0], self.output_slice,
                                                                 self.iDesc[0], self.input_slice,
                                                   self.convDesc[0], self.weightDesc[0], self.weight})
-   errcheck(self, 'cudnnConvolutionBackwardBias', cudnn.getHandle(),
+   errcheck('cudnnConvolutionBackwardBias', cudnn.getHandle(),
             self.scaleT:data(),
             self.oDescForBias[0], gradOutput:data(),
             cudnn.scalar(input, 1),
             self.biasDesc[0], self.gradBias:data());
    local extraBuffer, extraBufferSize = cudnn.getSharedWorkspace()
    -- gradWeight
-   errcheck(self, 'cudnnConvolutionBackwardFilter', cudnn.getHandle(),
-        self.scaleT:data(),
-        self.oDesc[0], gradOutput:data(),
-        self.iDesc[0], input:data(),
-        self.convDesc[0],
-        bwdFilterAlgo,
-        extraBuffer, extraBufferSize,
-        cudnn.scalar(input, 1),
-        self.weightDesc[0], self.gradWeight:data());
+   checkedCall(self, 'cudnnConvolutionBackwardFilter', cudnn.getHandle(),
+               self.scaleT:data(),
+               self.oDesc[0], gradOutput:data(),
+               self.iDesc[0], input:data(),
+               self.convDesc[0],
+               bwdFilterAlgo,
+               extraBuffer, extraBufferSize,
+               cudnn.scalar(input, 1),
+               self.weightDesc[0], self.gradWeight:data());
 end
 
 function VolumetricFullConvolution:clearDesc()
