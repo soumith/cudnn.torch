@@ -196,6 +196,55 @@ function cudnn.createDescriptors(count, descs_type, create_func, destroy_func)
    return ds
 end
 
+
+function cudnn.getConvolutionDescriptor(desc)
+   local CUDNN_DIM_MAX=4
+   local data = {
+      dim_p = ffi.new('int[1]'),
+      padA = ffi.new('int[?]', CUDNN_DIM_MAX),
+      filterStrideA = ffi.new('int[?]', CUDNN_DIM_MAX),
+      upscaleA = ffi.new('int[?]', CUDNN_DIM_MAX),
+      mode_p = ffi.new('cudnnConvolutionMode_t[1]'),
+      math_p = ffi.new('cudnnDataType_t[1]')
+   }
+
+   errcheck('cudnnGetConvolutionNdDescriptor', desc[0], CUDNN_DIM_MAX,
+            data.dim_p, data.padA, data.filterStrideA,
+            data.upscaleA, data.mode_p, data.math_p)
+
+   data.arrayLength = data.dim_p[0]
+   data.mode =     data.mode_p[0]
+   data.dataType = data.math_p[0]
+   return data
+end
+
+function cudnn.setConvolutionDescriptor(data, desc)
+   local dim  = data.arrayLength or #data.padA
+   local upscale = data.upscaleA or torch.IntStorage(dim):fill(1)
+   local myDesc = desc or cudnn.createDescriptors(
+      1, 'struct cudnnConvolutionStruct*[?]',
+      'cudnnCreateConvolutionDescriptor', 'cudnnDestroyConvolutionDescriptor')
+   errcheck('cudnnSetConvolutionNdDescriptor', myDesc[0],
+            dim,
+            torch.IntTensor(data.padA):data(),
+            torch.IntTensor(data.filterStrideA):data(),
+            torch.IntTensor(upscale):data(),
+            data.mode or 'CUDNN_CROSS_CORRELATION',
+            data.dataType)
+   return myDesc
+end
+
+function cudnn.setFilterDescriptor(data, filterDesc)
+   local myDesc = filterDesc or cudnn.createDescriptors(
+      1, 'struct cudnnFilterStruct*[?]',
+      'cudnnCreateFilterDescriptor', 'cudnnDestroyFilterDescriptor')
+   local dims = data.nbDims or #data.filterDimA
+   errcheck('cudnnSetFilterNdDescriptor', myDesc[0],
+            data.dataType, data.format or 'CUDNN_TENSOR_NCHW',
+            dims, torch.IntTensor(data.filterDimA):data());
+   return myDesc
+end
+
 local sharedBuffer = {}
 local nextBufferSize = {}
 

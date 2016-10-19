@@ -25,30 +25,27 @@ function SpatialConvolution:__init(nInputPlane, nOutputPlane,
     self.reset = nil
 end
 
-function SpatialConvolution:createWeightDescriptors()
-    assert(cudnn.typemap[torch.typename(self.weight)], 'Only Cuda supported duh!')
-    assert(cudnn.typemap[torch.typename(self.bias)] or not self.bias, 'Only Cuda supported duh!')
-    -- create descriptor for bias
-    if self.bias then
-        self.biasDesc = cudnn.toDescriptor(self.bias:view(1, self.nOutputPlane,1,1))
-    end
-    -- create filterDescriptor for weight
-    return cudnn.createDescriptors(1, 'struct cudnnFilterStruct*[?]',
-                                   'cudnnCreateFilterDescriptor', 'cudnnDestroyFilterDescriptor')
-end
-
 -- if you change the configuration of the module manually, call this
 function SpatialConvolution:resetWeightDescriptors(desc)
     -- for compatibility
     self.groups = self.groups or 1
-    self.weightDesc = SpatialConvolution.createWeightDescriptors(self)
-    desc = desc or torch.IntTensor({self.nOutputPlane/self.groups,
-                                    self.nInputPlane/self.groups,
-                                    self.kH, self.kW})
+    assert(cudnn.typemap[torch.typename(self.weight)], 'Only Cuda supported duh!')
+    assert(cudnn.typemap[torch.typename(self.bias)] or not self.bias, 'Only Cuda supported duh!')
 
-    errcheck('cudnnSetFilterNdDescriptor', self.weightDesc[0],
-             cudnn.typemap[torch.typename(self.weight)], 'CUDNN_TENSOR_NCHW', desc:nElement(),
-             desc:data());
+    -- create descriptor for bias
+    if self.bias then
+        self.biasDesc = cudnn.toDescriptor(self.bias:view(1, self.nOutputPlane,1,1))
+    end
+
+    self.weightDesc = cudnn.setFilterDescriptor(
+       { dataType = cudnn.typemap[torch.typename(self.weight)],
+         filterDimA = desc or
+            {self.nOutputPlane/self.groups,
+             self.nInputPlane/self.groups,
+             self.kH, self.kW}
+       }
+    )
+
     return self
 end
 
@@ -97,6 +94,7 @@ function SpatialConvolution:checkInputChanged(input)
     end
     self.groups = self.groups or 1
     if not self.weightDesc then self:resetWeightDescriptors() end
+    if not self.weightDesc then error "Weights not assigned!" end
 
     if not self.iDesc or not self.oDesc or input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
     or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] or (input:dim()==5 and input:size(5) ~= self.iSize[5]) then
@@ -124,17 +122,17 @@ function SpatialConvolution:createIODescriptors(input)
         local input_slice = input:narrow(2,1,self.nInputPlane/self.groups)
         self.iDesc = cudnn.toDescriptor(input_slice)
         -- create conv descriptor
-        self.convDesc = cudnn.createDescriptors(1, 'struct cudnnConvolutionStruct*[?]',
-                                                'cudnnCreateConvolutionDescriptor', 'cudnnDestroyConvolutionDescriptor')
         self.padH, self.padW = self.padH or 0, self.padW or 0
-        self.pad = torch.IntTensor({self.padH, self.padW})
-        self.stride = torch.IntTensor({self.dH, self.dW})
-        local upscale = torch.IntTensor({1,1})
-        errcheck('cudnnSetConvolutionNdDescriptor', self.convDesc[0],
-                 2, self.pad:data(),
-                 self.stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
-                 cudnn.configmap(torch.type(self.weight)));
+        -- those needed to calculate hash
+        self.pad = {self.padH, self.padW}
+        self.stride = {self.dH, self.dW}
 
+        self.convDesc = cudnn.setConvolutionDescriptor(
+           { padA = self.pad,
+             filterStrideA = self.stride,
+             upscaleA = {1,1},
+             dataType = cudnn.configmap(torch.type(self.weight))
+           })
 
         -- get output shape, resize output
         local oSize = torch.IntTensor(4)

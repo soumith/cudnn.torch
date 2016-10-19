@@ -75,12 +75,6 @@ function RNN:createDropoutDescriptors(count)
                             'cudnnDestroyDropoutDescriptor')
 end
 
-function RNN:createFilterDescriptors(count)
-   return cudnn.createDescriptors(count,
-                            'cudnnFilterDescriptor_t[?]',
-                            'cudnnCreateFilterDescriptor',
-                            'cudnnDestroyFilterDescriptor')
-end
 
 function RNN:createRNNDescriptors(count)
    return cudnn.createDescriptors(count,
@@ -131,18 +125,12 @@ function RNN:resetRNNDescriptor()
 end
 
 function RNN:resetWeightDescriptor()
-   if not self.wDesc then
-      self.wDesc = self:createFilterDescriptors(1)
-   end
-
-   local dim = torch.IntTensor({self.weight:size(1), 1, 1})
-
-   errcheck('cudnnSetFilterNdDescriptor',
-            self.wDesc[0],
-            self.datatype,
-            'CUDNN_TENSOR_NCHW',
-            3,
-            dim:data())
+   cudnn.setFilterDescriptor(
+      { dataType = self.datatype,
+        filterDimA = {self.weight:size(1), 1, 1}
+      },
+      self.wDesc
+   )
 end
 
 function RNN:resetIODescriptors()

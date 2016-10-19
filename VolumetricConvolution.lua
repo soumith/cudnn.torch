@@ -8,8 +8,8 @@ local Convolution = cudnn.SpatialConvolution
 
 -- if you change the configuration of the module manually, call this
 function VolumetricConvolution:resetWeightDescriptors()
-   local desc = torch.IntTensor({self.nOutputPlane, self.nInputPlane,
-                             self.kT, self.kH, self.kW})
+   local desc = {self.nOutputPlane, self.nInputPlane,
+                 self.kT, self.kH, self.kW}
    return Convolution.resetWeightDescriptors(self,desc)
 end
 
@@ -35,21 +35,18 @@ function VolumetricConvolution:createIODescriptors(input)
          -- create input descriptor
          self.iDesc = cudnn.toDescriptor(input)
          -- create conv descriptor
-         self.convDesc = cudnn.createDescriptors(1, 'struct cudnnConvolutionStruct*[?]',
-                                                 'cudnnCreateConvolutionDescriptor', 'cudnnDestroyConvolutionDescriptor')
-         self.pad = torch.IntTensor({self.padT, self.padH, self.padW})
-         self.stride = torch.IntTensor({self.dT, self.dH, self.dW})
-         local upscale = torch.IntTensor({1,1,1})
+         self.pad = {self.padT, self.padH, self.padW}
+         self.stride = {self.dT, self.dH, self.dW}
+
          local mathtype=cudnn.configmap(torch.type(self.weight))
          -- 3D convolutions do not work in 16 bits
          if mathtype == 'CUDNN_DATA_HALF' then
             mathtype = 'CUDNN_DATA_FLOAT'
          end
-         errcheck('cudnnSetConvolutionNdDescriptor', self.convDesc[0],
-                  3, self.pad:data(),
-                  self.stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
-                  mathtype);
-         -- create output descriptor and resize output
+         self.convDesc = cudnn.setConvolutionDescriptor(
+            { padA = self.pad, filterStrideA = self.stride,
+              dataType = mathtype
+            })
 
          local oSize = torch.IntTensor(5)
          errcheck('cudnnGetConvolutionNdForwardOutputDim',

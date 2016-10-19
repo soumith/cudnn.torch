@@ -70,15 +70,9 @@ local function verboseCall(layer, f, ...)
    end
    local status = cudnn.call(f, ...)
    if status ~= ffi.C.CUDNN_STATUS_SUCCESS and (find.verbose or find.verboseError) then
-      local stride = ffi.new('int[8]')
-      local upscale = ffi.new('int[8]')
-      local dim = ffi.new('int[8]')
-      local mode = ffi.new('cudnnConvolutionMode_t[8]')
-      local datatype = ffi.new('cudnnDataType_t[8]')
-      cudnn.call('cudnnGetConvolutionNdDescriptor', layer.convDesc[0],
-                 4, dim, pad, stride,
-                 upscale, mode, datatype)
-      print("find:verboseCall:" .. f .. " failed: ", tonumber(status) , ' mode : ', tonumber(mode[0]), ' datatype : ', tonumber(datatype[0]))
+      local desc= cudnn.getConvolutionDescriptor(layer.convDesc)
+      print("find:verboseCall:" .. f .. " failed: ", tonumber(status) , ' mode : ',
+            desc.mode, ' datatype : ', desc.datatype)
    end
    if find.verbose then
       print("find:verboseCall: success, " .. f )
@@ -105,18 +99,8 @@ end
 
 local function defaultFallback(layer, replay)
    -- read conv descriptor
-   local pad = ffi.new('int[8]')
-   local stride = ffi.new('int[8]')
-   local upscale = ffi.new('int[8]')
-   local dim = ffi.new('int[8]')
-   local mode = ffi.new('cudnnConvolutionMode_t[8]')
-   local datatype = ffi.new('cudnnDataType_t[8]')
-
-   checkedCall(layer,'cudnnGetConvolutionNdDescriptor', layer.convDesc[0],
-            5, dim, pad, stride,
-            upscale, mode, datatype)
-
-   if datatype[0] == ffi.C.CUDNN_DATA_HALF then
+   local convDescData = cudnn.getConvolutionDescriptor(layer.convDesc)
+   if data.math == ffi.C.CUDNN_DATA_HALF then
       if find.verbose then
          if replay then
             print("find.defaultFallback: replay for ", layer.autotunerHash)
@@ -124,9 +108,8 @@ local function defaultFallback(layer, replay)
             print("find.defaultFallback: no 16-bit float algo found, will try 32 bits for ", layer.autotunerHash)
          end
       end
-      checkedCall(layer,'cudnnSetConvolutionNdDescriptor', layer.convDesc[0],
-                  dim[0], pad, stride,
-                  upscale, mode[0], ffi.C.CUDNN_DATA_FLOAT)
+      data.math = ffi.C.CUDNN_DATA_FLOAT
+      cudnn.setConvolutionDescriptor(data, layer.convDesc)
       return true
    else
       return false
@@ -461,7 +444,7 @@ function find:prepare(layer, input_slice, output_slice)
       return table.concat(x:size():totable(),',')
    end
    local function vals(x)
-      return table.concat(x:totable(),',')
+      return table.concat(x,',')
    end
    layer.autotunerHash =
       '-dimA' .. shape(input_slice)

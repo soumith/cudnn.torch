@@ -7,11 +7,15 @@ local ffi = require 'ffi'
 local errcheck = cudnn.errcheck
 cudnn.functional = {}
 
-
-
-
-
-
+local function getMathType(weight)
+   local mathType = cudnn.configmap(torch.type(weight))
+   if mathType == 'CUDNN_DATA_HALF' then
+      -- explicitly set math type to fp32 to avoid possible failures with fp16 and exotic sizes
+      -- this can be changed back when ported to find() as it has built-in fallback mechanism
+      mathType = 'CUDNN_DATA_FLOAT'
+   end
+   return mathType
+end
 
 local function Batch2D(t)
     return t:view(1, t:size(1), t:size(2), t:size(3))
@@ -68,43 +72,21 @@ cudnn.functional.Convolution2D_updateOutput = function(handle, input, weight, ou
     output = output:dim() == 3 and Batch2D(output) or output
 
     -- create a weight descriptor
-    local weightDesc = ffi.new('struct cudnnFilterStruct*[1]')
-   errcheck('cudnnCreateFilterDescriptor', weightDesc)
    local nOutputPlane, nInputPlane, kH, kW
        = weight:size(1), weight:size(2), weight:size(3), weight:size(4)
-   local desc = torch.IntTensor({nOutputPlane, nInputPlane, kH, kW})
-   errcheck('cudnnSetFilterNdDescriptor', weightDesc[0], cudnn.typemap[torch.type(input)], 'CUDNN_TENSOR_NCHW', 4,
-            desc:data());
-   local function destroyWDesc(d)
-      errcheck('cudnnDestroyFilterDescriptor', d[0]);
-   end
-   ffi.gc(weightDesc, destroyWDesc)
+   local weightDesc = cudnn.setFilterDescriptor(
+      { dataType = cudnn.typemap[torch.type(input)],
+        filterDimA = {nOutputPlane, nInputPlane, kH, kW}})
 
    -- create a convolution descriptor
-   local convDesc = ffi.new('struct cudnnConvolutionStruct*[1]')
-   errcheck('cudnnCreateConvolutionDescriptor', convDesc)
-   local pad = torch.IntTensor({padH, padW})
-   local stride = torch.IntTensor({strideH, strideW})
-   local upscale = torch.IntTensor({1,1})
-   local mathType = cudnn.configmap(torch.type(weight))
-   if mathType == 'CUDNN_DATA_HALF' then
-      -- explicitly set math type to fp32 to avoid possible failures with fp16 and exotic sizes
-      -- this can be changed back when ported to find() as it has built-in fallback mechanism
-      mathType = 'CUDNN_DATA_FLOAT'
-   end
-   errcheck('cudnnSetConvolutionNdDescriptor', convDesc[0],
-            2, pad:data(),
-            stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
-            mathType
+   local convDesc = cudnn.setConvolutionDescriptor(
+      { padA = {padH, padW},
+        filterStrideA = {strideH, strideW},
+        dataType = getMathType(weight) }
    );
-   local function destroyConvDesc(d)
-       errcheck('cudnnDestroyConvolutionDescriptor', d[0]);
-   end
-   ffi.gc(convDesc, destroyConvDesc)
 
     -- create input descriptor
    local iDesc = cudnn.toDescriptor(input)
-
    -- create output descriptor
    local oSize = torch.IntTensor(4)
    errcheck('cudnnGetConvolutionNdForwardOutputDim',
@@ -169,39 +151,19 @@ cudnn.functional.Convolution2D_updateGradInput = function(handle, input, weight,
     gradInput = gradInput:dim() == 3 and Batch2D(gradInput) or gradInput
 
     -- create a weight descriptor
-    local weightDesc = ffi.new('struct cudnnFilterStruct*[1]')
-   errcheck('cudnnCreateFilterDescriptor', weightDesc)
    local nOutputPlane, nInputPlane, kH, kW
        = weight:size(1), weight:size(2), weight:size(3), weight:size(4)
-   local desc = torch.IntTensor({nOutputPlane, nInputPlane, kH, kW})
-   errcheck('cudnnSetFilterNdDescriptor', weightDesc[0], cudnn.typemap[torch.type(input)], 'CUDNN_TENSOR_NCHW', 4,
-            desc:data());
-   local function destroyWDesc(d)
-      errcheck('cudnnDestroyFilterDescriptor', d[0]);
-   end
-   ffi.gc(weightDesc, destroyWDesc)
+   local weightDesc = cudnn.setFilterDescriptor(
+      { dataType = cudnn.typemap[torch.type(input)],
+        filterDimA = {nOutputPlane, nInputPlane, kH, kW} })
 
    -- create a convolution descriptor
-   local convDesc = ffi.new('struct cudnnConvolutionStruct*[1]')
-   errcheck('cudnnCreateConvolutionDescriptor', convDesc)
-   local pad = torch.IntTensor({padH, padW})
-   local stride = torch.IntTensor({strideH, strideW})
-   local upscale = torch.IntTensor({1,1})
-   local mathType = cudnn.configmap(torch.type(weight))
-   if mathType == 'CUDNN_DATA_HALF' then
-      -- explicitly set math type to fp32 to avoid possible failures with fp16 and exotic sizes
-      -- this can be changed back when ported to find() as it has built-in fallback mechanism
-      mathType = 'CUDNN_DATA_FLOAT'
-   end
-   errcheck('cudnnSetConvolutionNdDescriptor', convDesc[0],
-            2, pad:data(),
-            stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
-            mathType)
-   local function destroyConvDesc(d)
-       errcheck('cudnnDestroyConvolutionDescriptor', d[0]);
-   end
-   ffi.gc(convDesc, destroyConvDesc)
-
+   local convDesc = cudnn.setConvolutionDescriptor(
+      { padA = {padH, padW},
+        filterStrideA = {strideH, strideW},
+        dataType = getMathType(weight)
+      }
+   );
     -- create input, output descriptor
    local iDesc = cudnn.toDescriptor(input)
    local oDesc = cudnn.toDescriptor(output)
@@ -256,38 +218,17 @@ cudnn.functional.Convolution2D_accGradParameters = function(handle, input, gradW
     local scaleT = torch.type(gradWeight) == 'torch.CudaDoubleTensor'
        and torch.DoubleTensor({scale}) or torch.FloatTensor({scale})
     -- create a weight descriptor
-    local weightDesc = ffi.new('struct cudnnFilterStruct*[1]')
-    errcheck('cudnnCreateFilterDescriptor', weightDesc)
     local nOutputPlane, nInputPlane, kH, kW
         = gradWeight:size(1), gradWeight:size(2), gradWeight:size(3), gradWeight:size(4)
-    local desc = torch.IntTensor({nOutputPlane, nInputPlane, kH, kW})
-    errcheck('cudnnSetFilterNdDescriptor', weightDesc[0], cudnn.typemap[torch.type(input)], 'CUDNN_TENSOR_NCHW', 4,
-             desc:data());
-    local function destroyWDesc(d)
-        errcheck('cudnnDestroyFilterDescriptor', d[0]);
-    end
-    ffi.gc(weightDesc, destroyWDesc)
 
+    local weightDesc =  cudnn.setFilterDescriptor({ dataType = cudnn.typemap[torch.type(input)],
+                                                    filterDimA = {nOutputPlane, nInputPlane, kH, kW}})
     -- create a convolution descriptor
-    local convDesc = ffi.new('struct cudnnConvolutionStruct*[1]')
-    errcheck('cudnnCreateConvolutionDescriptor', convDesc)
-    local pad = torch.IntTensor({padH, padW})
-    local stride = torch.IntTensor({strideH, strideW})
-    local upscale = torch.IntTensor({1,1})
-    local mathType = cudnn.configmap(torch.type(gradWeight))
-    if mathType == 'CUDNN_DATA_HALF' then
-       -- explicitly set math type to fp32 to avoid possible failures with fp16 and exotic sizes
-       -- this can be changed back when ported to find() as it has built-in fallback mechanism
-       mathType = 'CUDNN_DATA_FLOAT'
-    end
-    errcheck('cudnnSetConvolutionNdDescriptor', convDesc[0],
-             2, pad:data(),
-             stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
-             mathType)
-    local function destroyConvDesc(d)
-        errcheck('cudnnDestroyConvolutionDescriptor', d[0]);
-    end
-    ffi.gc(convDesc, destroyConvDesc)
+    local convDesc = cudnn.setConvolutionDescriptor(
+       { padA = {padH, padW},
+         filterStrideA = {strideH, strideW},
+         dataType = getMathType(gradWeight) }
+    );
 
     -- create input, output descriptor
     local iDesc = cudnn.toDescriptor(input)

@@ -8,9 +8,9 @@ local checkedCall = find.checkedCall
 local Convolution = cudnn.SpatialConvolution
 
 function SpatialFullConvolution:resetWeightDescriptors()
-   return Convolution.resetWeightDescriptors(self, torch.IntTensor({self.nInputPlane,
-                                                                    self.nOutputPlane,
-                                                                    self.kH, self.kW}))
+   return Convolution.resetWeightDescriptors(self, {self.nInputPlane,
+                                                    self.nOutputPlane,
+                                                    self.kH, self.kW})
 end
 
 function SpatialFullConvolution:fastest(mode)
@@ -44,15 +44,14 @@ function SpatialFullConvolution:createIODescriptors(input)
         self.iDesc = cudnn.toDescriptor(input_slice)
 
         -- create conv descriptor
-        self.convDesc = cudnn.createDescriptors(1, 'struct cudnnConvolutionStruct*[?]',
-                                                'cudnnCreateConvolutionDescriptor', 'cudnnDestroyConvolutionDescriptor')
-        self.pad = torch.IntTensor({self.padH, self.padW})
-        self.stride = torch.IntTensor({self.dH, self.dW})
-        local upscale = torch.IntTensor({1,1})
-        errcheck('cudnnSetConvolutionNdDescriptor', self.convDesc[0],
-                 2, self.pad:data(),
-                 self.stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
-                 cudnn.configmap(torch.type(self.weight)));
+        self.pad = {self.padH, self.padW}
+        self.stride = {self.dH, self.dW}
+
+        self.convDesc = cudnn.setConvolutionDescriptor(
+           { padA = self.pad,
+             filterStrideA = self.stride,
+             dataType = cudnn.configmap(torch.type(self.weight))
+           })
 
         -- get output shape, resize output
         local iwidth = input:size(4)

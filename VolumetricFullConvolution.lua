@@ -9,9 +9,10 @@ local Convolution = cudnn.SpatialConvolution
 
 -- if you change the configuration of the module manually, call this
 function VolumetricFullConvolution:resetWeightDescriptors()
-   local desc = torch.IntTensor({self.nInputPlane, self.nOutputPlane,
-                             self.kT, self.kH, self.kW})
-   return Convolution.resetWeightDescriptors(self,desc)
+   return Convolution.resetWeightDescriptors(
+      self,
+      {self.nInputPlane, self.nOutputPlane, self.kT, self.kH, self.kW}
+   )
 end
 
 function VolumetricFullConvolution:fastest(mode)
@@ -38,20 +39,16 @@ function VolumetricFullConvolution:createIODescriptors(input)
    assert(input:dim() == 5 and input:isContiguous());
    self.iSize = self.iSize or torch.LongStorage(5):fill(0)
    if Convolution.checkInputChanged(self, input) then
+         -- create input descriptor
          local input_slice = input[{{},{1,self.nInputPlane},{},{}}]
          self.iDesc = cudnn.toDescriptor(input_slice)
-         -- create input descriptor
---         self.iDesc = cudnn.toDescriptor(input)
          -- create conv descriptor
-         self.convDesc = cudnn.createDescriptors(1, 'struct cudnnConvolutionStruct*[?]',
-         'cudnnCreateConvolutionDescriptor', 'cudnnDestroyConvolutionDescriptor')
-         self.pad = torch.IntTensor({self.padT, self.padH, self.padW})
-         self.stride = torch.IntTensor({self.dT, self.dH, self.dW})
-         local upscale = torch.IntTensor({1,1,1})
-         errcheck('cudnnSetConvolutionNdDescriptor', self.convDesc[0],
-                  3, self.pad:data(),
-                  self.stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
-                  cudnn.configmap(torch.type(self.weight)));
+         self.pad = {self.padT, self.padH, self.padW}
+         self.stride = {self.dT, self.dH, self.dW}
+         self.convDesc = cudnn.setConvolutionDescriptor(
+            { padA = self.pad, filterStrideA = self.stride,
+              dataType = cudnn.configmap(torch.type(self.weight))
+            })
 
         -- get output shape, resize output
         local iwidth = input:size(5)

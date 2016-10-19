@@ -934,9 +934,10 @@ math.randomseed(os.time())
 mytester = torch.Tester()
 mytester:add(cudnntest)
 
--- cudnn.verbose=true
--- cudnn.find.verbose=true
+cudnn.verbose=false
+cudnn.find.verbose=false
 cudnn.useFindEx=false
+cudnn.useFloatMathForHalf = true
 
 for i = 1, cutorch.getDeviceCount() do
 
