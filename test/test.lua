@@ -939,10 +939,9 @@ cudnn.find.verbose=false
 cudnn.useFindEx=false
 
 for i = 1, cutorch.getDeviceCount() do
+   cudnn.configureMath()
 
---   cudnn.configureMath()
-
-   for _, benchmark in ipairs({false, true}) do
+   for _, benchmark in ipairs({true, false}) do
       cudnn.benchmark = benchmark
 --       cudnn.reset()
       local prop = cutorch.getDeviceProperties(i)
@@ -956,14 +955,11 @@ for i = 1, cutorch.getDeviceCount() do
       testparams = testparams_float
       mytester:run()
 
-      print'Testing torch.CudaHalfTensor'
-      if cudnn.configmap('torch.CudaHalfTensor') ~= 'CUDNN_DATA_FLOAT' then
---         if not cudnn.benchmark then
---            cudnn.configureMath({ ['torch.CudaHalfTensor']   = 'CUDNN_DATA_FLOAT'})
---         end
-      end
+      print( 'Testing torch.CudaHalfTensor, torch.cudnn fp16 math is : ', cudnn.configmap('torch.CudaHalfTensor' ),
+             ', cutorch.hasFastHalfInstructions() is ', cutorch.hasFastHalfInstructions())
       testparams = testparams_half
       mytester:run()
+
 
       print'Testing torch.CudaDoubleTensor'
       testparams = testparams_double

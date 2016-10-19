@@ -28,7 +28,6 @@ function RNN:__init(inputSize, hiddenSize, numLayers, batchFirst, dropout, remem
    self.batchFirst = batchFirst or false -- Set to true for batch x time x inputdim.
    self.rememberStates = rememberStates or false
    self.sync = true
-
    self.gradInput = torch.CudaTensor()
    self.output = torch.CudaTensor()
    self.weight = torch.CudaTensor()
@@ -45,7 +44,6 @@ end
 function RNN:setSync(sync)
    self.sync = sync
 end
-
 
 function RNN:reset(stdv)
    stdv = stdv or 1.0 / math.sqrt(self.hiddenSize)
@@ -66,6 +64,13 @@ function RNN:reset(stdv)
    self.weight:resize(weightSize[1])
    self.weight:uniform(-stdv, stdv)
    self.gradWeight:resizeAs(self.weight):zero()
+end
+
+function RNN:createFilterDescriptors(count)
+   return cudnn.createDescriptors(count,
+                                  'cudnnFilterDescriptor_t[?]',
+                                  'cudnnCreateFilterDescriptor',
+                                  'cudnnDestroyFilterDescriptor')
 end
 
 function RNN:createDropoutDescriptors(count)
@@ -99,7 +104,9 @@ function RNN:resetDropoutDescriptor()
    errcheck('cudnnDropoutGetStatesSize',
             cudnn.getHandle(),
             self.dropoutStatesSize:data())
-            self.dropoutStates = torch.CudaTensor(self.dropoutStatesSize[1])
+   self.dropoutStates = self.dropoutStates or torch.CudaTensor()
+   local nElem = ((self.dropoutStatesSize[1]-1)/self.dropoutStates:elementSize()+1)
+   self.dropoutStates:resize(nElem)
 
    errcheck('cudnnSetDropoutDescriptor',
             self.dropoutDesc[0],
@@ -125,11 +132,10 @@ function RNN:resetRNNDescriptor()
 end
 
 function RNN:resetWeightDescriptor()
-   cudnn.setFilterDescriptor(
+   self.wDesc =  cudnn.setFilterDescriptor(
       { dataType = self.datatype,
         filterDimA = {self.weight:size(1), 1, 1}
-      },
-      self.wDesc
+      }
    )
 end
 

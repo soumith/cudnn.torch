@@ -64,6 +64,28 @@ local bwdDataAlgoNames = {
 
 local algoNames = {fwdAlgoNames, bwdFilterAlgoNames, bwdDataAlgoNames}
 
+local function getConvolutionDescriptor(desc)
+   local CUDNN_DIM_MAX=4
+
+   local data = {
+      dim_p = ffi.new('int[1]'),
+      padA = ffi.new('int[?]', CUDNN_DIM_MAX),
+      filterStrideA = ffi.new('int[?]', CUDNN_DIM_MAX),
+      upscaleA = ffi.new('int[?]', CUDNN_DIM_MAX),
+      mode_p = ffi.new('cudnnConvolutionMode_t[1]'),
+      math_p = ffi.new('cudnnDataType_t[1]')
+   }
+
+   cudnn.errcheck('cudnnGetConvolutionNdDescriptor', desc[0], CUDNN_DIM_MAX,
+                  data.dim_p, data.padA, data.filterStrideA,
+                  data.upscaleA, data.mode_p, data.math_p)
+
+   data.arrayLength = data.dim_p[0]
+   data.mode =     data.mode_p[0]
+   data.dataType = data.math_p[0]
+   return data
+end
+
 local function verboseCall(layer, f, ...)
    if find.verbose then
         print("find:verboseCall: calling " .. f .. ", hash: ",  layer.autotunerHash)
@@ -99,8 +121,9 @@ end
 
 local function defaultFallback(layer, replay)
    -- read conv descriptor
-   local convDescData = cudnn.getConvolutionDescriptor(layer.convDesc)
-   if data.math == ffi.C.CUDNN_DATA_HALF then
+   local convDescData = getConvolutionDescriptor(layer.convDesc)
+
+   if convDescData.dataType == ffi.C.CUDNN_DATA_HALF then
       if find.verbose then
          if replay then
             print("find.defaultFallback: replay for ", layer.autotunerHash)
@@ -108,8 +131,13 @@ local function defaultFallback(layer, replay)
             print("find.defaultFallback: no 16-bit float algo found, will try 32 bits for ", layer.autotunerHash)
          end
       end
-      data.math = ffi.C.CUDNN_DATA_FLOAT
-      cudnn.setConvolutionDescriptor(data, layer.convDesc)
+      checkedCall(layer, 'cudnnSetConvolutionNdDescriptor', layer.convDesc[0],
+                  convDescData.arrayLength,
+                  convDescData.padA,
+                  convDescData.filterStrideA,
+                  convDescData.upscaleA,
+                  convDescData.mode,
+                  ffi.C.CUDNN_DATA_FLOAT)
       return true
    else
       return false

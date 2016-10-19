@@ -92,6 +92,7 @@ function cudnn.scalar(t, val)
    end
 end
 
+
 local function fasterHalfMathTypeForCurrentDevice()
    -- get info from cutorc
    if cutorch.hasFastHalfInstructions() then
@@ -103,7 +104,7 @@ end
 
 local configMaths = {}
 
-local function configureFloatMath()
+local function configureMath(overrides)
    local currentDevice = cutorch.getDevice()
    for i=1,cutorch.getDeviceCount() do
       cutorch.setDevice(i)
@@ -112,9 +113,14 @@ local function configureFloatMath()
          ['torch.CudaTensor']       = 'CUDNN_DATA_FLOAT',
          ['torch.CudaDoubleTensor'] = 'CUDNN_DATA_DOUBLE',
       }
+      -- apply overrides
+      if overrides then
+         for k,v in pairs(overrides) do configMaths[i][k] = v end
+      end
    end
    cutorch.setDevice(currentDevice)
 end
+cudnn.configureMath = configureMath
 
 -- TODO: rename to something like "configuredMathType" on next refactor
 -- also, should move torch.type() inside
@@ -122,7 +128,7 @@ cudnn.configmap = function(tensortype)
    return configMaths[cutorch.getDevice()][tensortype]
 end
 
-configureFloatMath()
+configureMath()
 
 function cudnn.getHandle()
     local device = cutorch.getDevice()
@@ -201,26 +207,6 @@ function cudnn.createDescriptors(count, descs_type, create_func, destroy_func)
 end
 
 
-function cudnn.getConvolutionDescriptor(desc)
-   local CUDNN_DIM_MAX=4
-   local data = {
-      dim_p = ffi.new('int[1]'),
-      padA = ffi.new('int[?]', CUDNN_DIM_MAX),
-      filterStrideA = ffi.new('int[?]', CUDNN_DIM_MAX),
-      upscaleA = ffi.new('int[?]', CUDNN_DIM_MAX),
-      mode_p = ffi.new('cudnnConvolutionMode_t[1]'),
-      math_p = ffi.new('cudnnDataType_t[1]')
-   }
-
-   errcheck('cudnnGetConvolutionNdDescriptor', desc[0], CUDNN_DIM_MAX,
-            data.dim_p, data.padA, data.filterStrideA,
-            data.upscaleA, data.mode_p, data.math_p)
-
-   data.arrayLength = data.dim_p[0]
-   data.mode =     data.mode_p[0]
-   data.dataType = data.math_p[0]
-   return data
-end
 
 function cudnn.setConvolutionDescriptor(data, desc)
    local dim  = data.arrayLength or #data.padA
