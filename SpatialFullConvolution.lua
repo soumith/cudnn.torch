@@ -81,6 +81,8 @@ function SpatialFullConvolution:createIODescriptors(input)
 end
 
 function SpatialFullConvolution:updateOutput(input)
+    self:backCompatibility()
+    if not self.weightDesc then self:resetWeightDescriptors() end
     self:createIODescriptors(input)
     local finder = find.get()
     local bwdDataAlgo = finder:backwardDataAlgorithm(self, {self.weightDesc[0], self.weight,
@@ -110,6 +112,7 @@ function SpatialFullConvolution:updateOutput(input)
 end
 
 function SpatialFullConvolution:updateGradInput(input, gradOutput)
+    self:backCompatibility()
     if not self.gradInput then return end
     self.gradInput:resizeAs(input)
 
@@ -134,6 +137,7 @@ function SpatialFullConvolution:updateGradInput(input, gradOutput)
 end
 
 function SpatialFullConvolution:accGradParameters(input, gradOutput, scale)
+    self:backCompatibility()
     self.scaleT = self.scaleT or self.weight.new(1)
     -- this line forces this member to always be on CPU (needed for cudnn)
     self.scaleT = torch.type(self.weight) == 'torch.CudaDoubleTensor'

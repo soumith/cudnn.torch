@@ -10,7 +10,8 @@ Conversion between `nn` and `cudnn` is available through `cudnn.convert` functio
 
 * Install cuDNN (version R5 EA)
 * Have at least CUDA 7.0
-* Have `libcudnn.so` in your library path (Install it from https://developer.nvidia.com/cuDNN )
+* Have `libcudnn.so` in your library path ($LD_LIBRARY_PATH) (Install cuDNN it from https://developer.nvidia.com/cuDNN )
+* Instead of the previous step, you can copy the library files into /usr/local/cuda/lib64/ or to the corresponding folders in CUDA directory
 
 #### Modules
 
@@ -89,6 +90,8 @@ network modules recursively substituting equivalents. No memory copy is done, ju
 If you don't want to convert all modules you can pass a function as the third argument to `cudnn.convert`.
 It will be called at each step, with a module that is currently converted.  It is meant to exclude
 modules i.e. if it returns `true`, they will be left untouched, otherwise they will be subject to conversion.
+
+`Note that you cannot do backward pass when using cuDNN and when your model has batch normaliation layers and is in evaluate mode.`
 
 ```lua
 net = nn.Sequential()
