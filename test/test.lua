@@ -1,8 +1,8 @@
 require 'cudnn'
 require 'cunn'
 
+
 local cudnntest = torch.TestSuite()
-local nloop = 1
 local times = {}
 local mytester
 local jac = nn.Jacobian
@@ -11,7 +11,7 @@ local jac = nn.Jacobian
 local testparams_half = {
    test_type = 'torch.CudaHalfTensor',
    precision_forward = 2e-1,
-   precision_backward = 6,
+   precision_backward = 8,
    precision_jac = 1e-3,
    precision_io = 1e-1,
 }
@@ -288,9 +288,11 @@ function cudnntest.VolumetricConvolution()
    local outi = math.random(1,17)
    local outj = math.random(1,17)
    local outk = math.random(1,5)
-   local ini = (outi-1)*si+ki
-   local inj = (outj-1)*sj+kj
-   local ink = (outk-1)*sk+kk
+
+   local ini = outi*si+ki-1
+   local inj = outj*sj+kj-1
+   local ink = outk*sk+kk-1
+
    local scale = math.random()
 
    local input = torch.randn(bs,from,ink,inj,ini):cuda()
@@ -488,8 +490,8 @@ function cudnntest.SpatialCrossMapLRN_batch()
    local inputSize = math.random(6,9)
    local size = math.random(1,3)*2+1
    local nbfeatures = math.random(3,8)
-   local alpha = math.random(1,100)/100
-   local beta  = math.random(0,100)/100
+   local alpha = math.random(0,100)/100
+   local beta  = math.random(1,100)/100
    local k = math.random(1,3)
 
    local input = torch.rand(bs, nbfeatures, inputSize, inputSize):cuda()
@@ -789,6 +791,7 @@ function cudnntest.VolumetricCrossEntropyCriterion()
                       'error in difference between central difference and :backward')
 end
 
+
 function cudnntest.functional_bias2D()
    local bs = math.random(1,32)
    local from = math.random(1,32)
@@ -833,7 +836,7 @@ function cudnntest.functional_convolution2d()
     local gradOutput = cast(a.output:clone():double():normal())
     local gradInput = cast(a:backward(input, gradOutput):clone():double():normal())
     local gradWeight = cast(a.gradWeight:clone():zero())
-    cudnn.functional.Convolution2D_updateOutput(cudnn.getHandle(), input, 
+    cudnn.functional.Convolution2D_updateOutput(cudnn.getHandle(), input,
                                                 a.weight, output, a.dH,
                                                 a.dW, a.padH, a.padW)
     mytester:assertlt((output - a.output):abs():max(),
@@ -873,6 +876,7 @@ function cudnntest.functional_maxpooling2d()
     mytester:assertlt((gradInput - a.gradInput):abs():max(),
                      testparams.precision_forward, 'error on updateGradInput ')
 end
+
 
 local function test_functional_activation(mode, module)
    local a = module:cuda()
@@ -930,11 +934,18 @@ math.randomseed(os.time())
 mytester = torch.Tester()
 mytester:add(cudnntest)
 
-for i = 1, 1 do -- cutorch.getDeviceCount() do
-   for _, benchmark in ipairs({false, true}) do
-      cudnn.benchmark = benchmark
+cudnn.verbose=false
+cudnn.find.verbose=false
+cudnn.useFindEx=false
 
+for i = 1, cutorch.getDeviceCount() do
+   cudnn.configureMath()
+
+   for _, benchmark in ipairs({true, false}) do
+      cudnn.benchmark = benchmark
+--       cudnn.reset()
       local prop = cutorch.getDeviceProperties(i)
+
       print('Running test on device: #' .. i .. ' : ' .. prop.name
                .. ' with benchmark = ' .. tostring(cudnn.benchmark))
 
@@ -944,20 +955,24 @@ for i = 1, 1 do -- cutorch.getDeviceCount() do
       testparams = testparams_float
       mytester:run()
 
-      --   double tensor may be broken at some places, gets NaNs.
+      print( 'Testing torch.CudaHalfTensor, torch.cudnn fp16 math is : ', cudnn.configmap('torch.CudaHalfTensor' ),
+             ', cutorch.hasFastHalfInstructions() is ', cutorch.hasFastHalfInstructions())
+
+      if cudnn.configmap('torch.CudaHalfTensor') ~= 'CUDNN_DATA_FLOAT' then
+         print([[ Warning: 32-bit float math is forced for CudaHalfTensor test
+            even though native fast 16-bit float math is available for this device.
+            The reason is cudnn convolution algo find methods for fp16 and certain size combinations may fail.
+            This should be fixed in next release.]])
+         cudnn.configureMath({ ['torch.CudaHalfTensor']   = 'CUDNN_DATA_FLOAT'})
+      end
+
+      testparams = testparams_half
+      mytester:run()
+
+
       print'Testing torch.CudaDoubleTensor'
       testparams = testparams_double
       mytester:run()
-
-      print(
-         [[Half Tensor tests are disabled due to missing functionality.
-They will be enabled once fully fixed and functional.
-See https://github.com/soumith/cudnn.torch/issues/225 for progress
-]])
-      -- Developers, do not commit uncommented regions until bindings fixed
-      -- print'Testing torch.CudaHalfTensor'
-      -- testparams = testparams_half
-      -- mytester:run()
 
    end
 end
