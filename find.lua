@@ -64,9 +64,12 @@ local bwdDataAlgoNames = {
 
 local algoNames = {fwdAlgoNames, bwdFilterAlgoNames, bwdDataAlgoNames}
 
-local function getConvolutionDescriptor(desc)
-   local CUDNN_DIM_MAX=4
-
+-- this function is here and not in init.lua (and has the suffix) as generic
+-- getConvolutionDescriptor methood should have native lua tables instead of FFI
+-- (like setConvolutionDescriptor does, to be used with it)
+-- However this is counterproductive for the purposes it's used in this module
+local function getConvolutionDescriptor_ffi(desc)
+   local CUDNN_DIM_MAX=8
    local data = {
       dim_p = ffi.new('int[1]'),
       padA = ffi.new('int[?]', CUDNN_DIM_MAX),
@@ -92,7 +95,7 @@ local function verboseCall(layer, f, ...)
    end
    local status = cudnn.call(f, ...)
    if status ~= ffi.C.CUDNN_STATUS_SUCCESS and (find.verbose or find.verboseError) then
-      local desc= cudnn.getConvolutionDescriptor(layer.convDesc)
+      local desc= cudnn.getConvolutionDescriptor_ffi(layer.convDesc)
       print("find:verboseCall:" .. f .. " failed: ", tonumber(status) , ' mode : ',
             desc.mode, ' datatype : ', desc.datatype)
    end
@@ -121,7 +124,7 @@ end
 
 local function defaultFallback(layer, replay)
    -- read conv descriptor
-   local convDescData = getConvolutionDescriptor(layer.convDesc)
+   local convDescData = getConvolutionDescriptor_ffi(layer.convDesc)
 
    if convDescData.dataType == ffi.C.CUDNN_DATA_HALF then
       if find.verbose then
@@ -131,6 +134,7 @@ local function defaultFallback(layer, replay)
             print("find.defaultFallback: no 16-bit float algo found, will try 32 bits for ", layer.autotunerHash)
          end
       end
+      -- using direct FFI call, not cudnn.setConvolutionDescriptor, for efficiency and clarity
       checkedCall(layer, 'cudnnSetConvolutionNdDescriptor', layer.convDesc[0],
                   convDescData.arrayLength,
                   convDescData.padA,
