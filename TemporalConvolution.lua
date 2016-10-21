@@ -24,11 +24,21 @@ function TemporalConvolution:__init(inputFrameSize, outputFrameSize,
 end
 
 function TemporalConvolution:createIODescriptors(input)
-   return Convolution.createIODescriptors(self, input)
+    local sizeChanged = false
+    if not self.iDesc or not self.oDesc or
+        input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
+    or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
+       sizeChanged = true
+    end
+    cudnn.SpatialConvolution.createIODescriptors(self,input)
+    if sizeChanged then
+       self.oSize = self.output:size()
+    end
 end
 
 function TemporalConvolution:fastest(mode)
-    return Convolution.fastest(self, mode)
+    self = cudnn.SpatialConvolution.fastest(self,mode)
+    return self
 end
 
 function TemporalConvolution:setMode(fmode, bdmode, bwmode)
@@ -125,5 +135,3 @@ function TemporalConvolution:clearState()
    nn.utils.clear(self, '_input', '_gradOutput')
    return parent.clearState(self)
 end
-
-return TemporalConvolution

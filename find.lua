@@ -79,9 +79,15 @@ local function getConvolutionDescriptor_ffi(desc)
       math_p = ffi.new('cudnnDataType_t[1]')
    }
 
-   cudnn.errcheck('cudnnGetConvolutionNdDescriptor', desc[0], CUDNN_DIM_MAX,
-                  data.dim_p, data.padA, data.filterStrideA,
-                  data.upscaleA, data.mode_p, data.math_p)
+   local status = cudnn.call('cudnnGetConvolutionNdDescriptor', desc[0], CUDNN_DIM_MAX,
+                             data.dim_p, data.padA, data.filterStrideA,
+                             data.upscaleA, data.mode_p, data.math_p)
+   if (status ~= ffi.C.CUDNN_STATUS_SUCCESS) then
+      if find.verbose or find.verboseError then
+         print("cudnnGetConvolutionNdDescriptor failed: ", tonumber(status))
+         return nil
+      end
+   end
 
    data.arrayLength = data.dim_p[0]
    data.mode =     data.mode_p[0]
@@ -94,10 +100,15 @@ local function verboseCall(layer, f, ...)
         print("find:verboseCall: calling " .. f .. ", hash: ",  layer.autotunerHash)
    end
    local status = cudnn.call(f, ...)
-   if status ~= ffi.C.CUDNN_STATUS_SUCCESS and (find.verbose or find.verboseError) then
-      local desc= cudnn.getConvolutionDescriptor_ffi(layer.convDesc)
-      print("find:verboseCall:" .. f .. " failed: ", tonumber(status) , ' mode : ',
-            desc.mode, ' datatype : ', desc.datatype)
+   if (status ~= ffi.C.CUDNN_STATUS_SUCCESS) and (find.verbose or find.verboseError) then
+      local prefix = "find:verboseCall:"
+      print( prefix .. f .. " failed: ", tonumber(status))
+      if layer.convDesc then
+         local desc = getConvolutionDescriptor_ffi(layer.convDesc)
+         if desc then
+            print (prefix .. ' conv desc mode : ', desc.mode, ' datatype : ', desc.datatype)
+         end
+      end
    end
    if find.verbose then
       print("find:verboseCall: success, " .. f )
@@ -126,7 +137,7 @@ local function defaultFallback(layer, replay)
    -- read conv descriptor
    local convDescData = getConvolutionDescriptor_ffi(layer.convDesc)
 
-   if convDescData.dataType == ffi.C.CUDNN_DATA_HALF then
+   if convDescData and convDescData.dataType == ffi.C.CUDNN_DATA_HALF then
       if find.verbose then
          if replay then
             print("find.defaultFallback: replay for ", layer.autotunerHash)
