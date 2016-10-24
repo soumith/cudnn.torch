@@ -43,11 +43,17 @@ function VolumetricFullConvolution:createIODescriptors(input)
          local input_slice = input[{{},{1,self.nInputPlane},{},{}}]
          self.iDesc = cudnn.toDescriptor(input_slice)
          -- create conv descriptor
+         local mathtype =  cudnn.configmap(torch.type(self.weight))
+         -- 3D convolutions do not work in 16 bits
+         if mathtype == 'CUDNN_DATA_HALF' then
+            mathtype = 'CUDNN_DATA_FLOAT'
+         end
+
          self.pad = {self.padT, self.padH, self.padW}
          self.stride = {self.dT, self.dH, self.dW}
          self.convDesc = cudnn.setConvolutionDescriptor(
             { padA = self.pad, filterStrideA = self.stride,
-              dataType = cudnn.configmap(torch.type(self.weight))
+              dataType = mathtype
             })
 
         -- get output shape, resize output
