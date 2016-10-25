@@ -7,6 +7,7 @@ local layer_list = {
   'SpatialFullConvolution',
   'SpatialMaxPooling',
   'SpatialAveragePooling',
+  'SpatialDilatedConvolution',
   'ReLU',
   'Tanh',
   'Sigmoid',
@@ -17,6 +18,7 @@ local layer_list = {
   'VolumetricFullConvolution',
   'VolumetricMaxPooling',
   'VolumetricAveragePooling',
+  'VolumetricDilatedConvolution',
 }
 
 -- goes over a given net and converts all layers to dst backend

@@ -145,6 +145,84 @@ function cudnntest.SpatialConvolution()
    testLayer(sconv, gconv, input, gradOutput, scale, true, false)
 end
 
+function cudnntest.SpatialDilatedConvolution()
+   local bs = math.random(1,32)
+   local from = math.random(1,32)
+   local to = math.random(1,64)
+   local ki = math.random(1,7)
+   local kj = math.random(1,7)
+   local di = math.random(1,7)
+   local dj = math.random(1,7)
+   local wi = (ki-1)*di+1
+   local wj = (kj-1)*dj+1
+   local si = math.random(1, wi )
+   local sj = math.random(1, wj)
+   local outi = math.random(1,64)
+   local outj = math.random(1,64)
+   local ini = (outi-1)*si+wi
+   local inj = (outj-1)*sj+wj
+
+   local scale = math.random()
+
+   local input = torch.randn(bs,from,inj,ini)
+   local gradOutput = torch.randn(bs,to,outj,outi)
+   local sconv = nn.SpatialDilatedConvolution(from,to,ki,kj,si,sj,0,0,di,dj)
+   local gconv = cast(cudnn.SpatialDilatedConvolution(from,to,ki,kj,si,sj,0,0,di,dj)):fastest()
+   gconv.weight:copy(sconv.weight)
+   gconv.bias:copy(sconv.bias)
+
+   testLayer(sconv, gconv, input, gradOutput, scale, true, true) -- batch
+   testLayer(sconv, gconv, input, gradOutput, scale, true, false) -- non-batch
+   local originalTypename = torch.typename(gconv)
+   local gconv = cast(cudnn.convert(sconv, cudnn))
+   mytester:asserteq(torch.typename(gconv),
+                     originalTypename, 'conversion type check')
+   testLayer(sconv, gconv, input, gradOutput, scale, true, true)
+   testLayer(sconv, gconv, input, gradOutput, scale, true, false)
+end
+
+function cudnntest.VolumetricDilatedConvolution()
+   local bs = math.random(1,32)
+   local from = math.random(1,16)
+   local to = math.random(1,16)
+   local ki = math.random(3,5)
+   local kj = math.random(3,5)
+   local kk = math.random(3,5)
+   local di = math.random(1,5)
+   local dj = math.random(1,5)
+   local dk = math.random(1,5)
+   local wi = (ki-1)*di+1
+   local wj = (kj-1)*dj+1
+   local wk = (kk-1)*dk+1
+   local si = math.random(1, wi )
+   local sj = math.random(1, wj)
+   local sk = math.random(1, wk)
+   local outi = math.random(1,17)
+   local outj = math.random(1,17)
+   local outk = math.random(1,5)
+   local ini = (outi-1)*si+wi
+   local inj = (outj-1)*sj+wj
+   local ink = (outk-1)*sk+wk
+
+   local scale = math.random()
+
+   local input = torch.randn(bs,from,ini,ink,inj)
+   local gradOutput = torch.randn(bs,to,outi,outk,outj)
+   local sconv = nn.VolumetricDilatedConvolution(from,to,ki,kj,kk,si,sj,sk,0,0,0,di,dj,dk)
+   local gconv = cast(cudnn.VolumetricDilatedConvolution(from,to,ki,kj,kk,si,sj,sk,0,0,0,di,dj,dk))
+   gconv.weight:copy(sconv.weight)
+   gconv.bias:copy(sconv.bias)
+
+   testLayer(sconv, gconv, input, gradOutput, scale, true, true) -- batch
+   testLayer(sconv, gconv, input, gradOutput, scale, true, false) -- non-batch
+   local originalTypename = torch.typename(gconv)
+   local gconv = cast(cudnn.convert(sconv, cudnn))
+   mytester:asserteq(torch.typename(gconv),
+                     originalTypename, 'conversion type check')
+   testLayer(sconv, gconv, input, gradOutput, scale, true, true)
+   testLayer(sconv, gconv, input, gradOutput, scale, true, false)
+end
+
 function cudnntest.SpatialFullConvolution()
    local bs = math.random(1,32)
    local from = math.random(1,32)

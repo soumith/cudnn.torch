@@ -130,7 +130,7 @@ function SpatialConvolution:createIODescriptors(input)
         self.convDesc = cudnn.setConvolutionDescriptor(
            { padA = self.pad,
              filterStrideA = self.stride,
-             upscaleA = {1,1},
+             dilationA = {1,1},
              dataType = cudnn.configmap(torch.type(self.weight))
            })
 
