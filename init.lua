@@ -4,6 +4,7 @@ cudnn = require 'cudnn.env'
 require('cudnn.ffi')
 local C = cudnn.C
 local ffi = require 'ffi'
+local ffiC = ffi.os == 'Windows' and ffi.load('THC') or ffi.C
 
 --------------------------------------------------------------------
 -- defaults, each should be overrideable via env var:
@@ -140,7 +141,7 @@ function cudnn.getHandle()
         local status = C['cudnnCreate'](cudnn.handle
                                         + (((device-1) * maxStreamsPerDevice)
                                                 + stream))
-        if status ~= ffi.C.CUDNN_STATUS_SUCCESS then
+        if status ~= ffiC.CUDNN_STATUS_SUCCESS then
             local str = ffi.string(C.cudnnGetErrorString(status))
             error('Error in CuDNN: ' .. str)
         end
@@ -151,13 +152,13 @@ end
 
 function cudnn.call(f, ...)
     C.cudnnSetStream(cudnn.getHandle(),
-                     ffi.C.THCState_getCurrentStream(cutorch.getState()))
+                     ffiC.THCState_getCurrentStream(cutorch.getState()))
     return C[f](...)
 end
 
 local errcheck = function(f, ...)
    local status = cudnn.call(f, ...)
-   if status ~= ffi.C.CUDNN_STATUS_SUCCESS then
+   if status ~= ffiC.CUDNN_STATUS_SUCCESS then
       local str = ffi.string(C.cudnnGetErrorString(status))
       error('Error in CuDNN: ' .. str .. ' ('..f..')')
       return false
