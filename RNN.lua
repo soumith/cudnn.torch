@@ -13,7 +13,6 @@ RNN.linearLayers = {
 
 function RNN:__init(inputSize, hiddenSize, numLayers, batchFirst, dropout, rememberStates)
    parent.__init(self)
-
    self.datatype = 'CUDNN_DATA_FLOAT'
    self.inputSize = inputSize
    self.hiddenSize = hiddenSize
@@ -28,7 +27,7 @@ function RNN:__init(inputSize, hiddenSize, numLayers, batchFirst, dropout, remem
    self.seed = 0x01234567
    self.batchFirst = batchFirst or false -- Set to true for batch x time x inputdim.
    self.rememberStates = rememberStates or false
-
+   self.sync = true
    self.gradInput = torch.CudaTensor()
    self.output = torch.CudaTensor()
    self.weight = torch.CudaTensor()
@@ -38,9 +37,12 @@ function RNN:__init(inputSize, hiddenSize, numLayers, batchFirst, dropout, remem
    self.cellOutput = torch.CudaTensor()
    self.gradHiddenInput = torch.CudaTensor()
    self.gradCellInput = torch.CudaTensor()
-
    self:training()
    self:reset()
+end
+
+function RNN:setSync(sync)
+   self.sync = sync
 end
 
 function RNN:reset(stdv)
@@ -57,10 +59,18 @@ function RNN:reset(stdv)
             self.xDescs[0],
             weightSize:data(),
 	    self.datatype)
-   weightSize[1] = torch.floor((weightSize[1] + 3) / 4) -- sizeof(float)
+   local elemSize = self.weight:elementSize()
+   weightSize[1] = torch.floor((weightSize[1] + elemSize - 1) / elemSize)
    self.weight:resize(weightSize[1])
    self.weight:uniform(-stdv, stdv)
    self.gradWeight:resizeAs(self.weight):zero()
+end
+
+function RNN:createFilterDescriptors(count)
+   return cudnn.createDescriptors(count,
+                                  'cudnnFilterDescriptor_t[?]',
+                                  'cudnnCreateFilterDescriptor',
+                                  'cudnnDestroyFilterDescriptor')
 end
 
 function RNN:createDropoutDescriptors(count)
@@ -70,12 +80,6 @@ function RNN:createDropoutDescriptors(count)
                             'cudnnDestroyDropoutDescriptor')
 end
 
-function RNN:createFilterDescriptors(count)
-   return cudnn.createDescriptors(count,
-                            'cudnnFilterDescriptor_t[?]',
-                            'cudnnCreateFilterDescriptor',
-                            'cudnnDestroyFilterDescriptor')
-end
 
 function RNN:createRNNDescriptors(count)
    return cudnn.createDescriptors(count,
@@ -100,7 +104,9 @@ function RNN:resetDropoutDescriptor()
    errcheck('cudnnDropoutGetStatesSize',
             cudnn.getHandle(),
             self.dropoutStatesSize:data())
-            self.dropoutStates = torch.CudaTensor(self.dropoutStatesSize[1])
+   self.dropoutStates = self.dropoutStates or torch.CudaTensor()
+   local nElem = ((self.dropoutStatesSize[1]-1)/self.dropoutStates:elementSize()+1)
+   self.dropoutStates:resize(nElem)
 
    errcheck('cudnnSetDropoutDescriptor',
             self.dropoutDesc[0],
@@ -126,18 +132,11 @@ function RNN:resetRNNDescriptor()
 end
 
 function RNN:resetWeightDescriptor()
-   if not self.wDesc then
-      self.wDesc = self:createFilterDescriptors(1)
-   end
-
-   local dim = torch.IntTensor({self.weight:size(1), 1, 1})
-
-   errcheck('cudnnSetFilterNdDescriptor',
-            self.wDesc[0],
-            self.datatype,
-            'CUDNN_TENSOR_NCHW',
-            3,
-            dim:data())
+   self.wDesc =  cudnn.setFilterDescriptor(
+      { dataType = self.datatype,
+        filterDimA = {self.weight:size(1), 1, 1}
+      }
+   )
 end
 
 function RNN:resetIODescriptors()
@@ -316,7 +315,6 @@ function RNN:updateOutput(input)
       assert(cx:isContiguous(), 'cellInput must be contiguous!')
    end
 
-   self.workspace = cudnn.getSharedWorkspace()
    local workspaceSize = torch.LongTensor(1)
    errcheck('cudnnGetRNNWorkspaceSize',
             cudnn.getHandle(),
@@ -324,10 +322,8 @@ function RNN:updateOutput(input)
 	    self.seqLength,
             self.xDescs,
             workspaceSize:data())
-   workspaceSize[1] = torch.floor((workspaceSize[1] + 3) / 4) -- sizeof(float)
-   if self.workspace:size(1) < workspaceSize[1] then
-      self.workspace:resize(workspaceSize[1])
-   end
+   cudnn.setSharedWorkspaceSize(workspaceSize[1], true)
+   local wsPtr, wsSize = cudnn.getSharedWorkspace()
 
    if self.train then
       local reserveSize = torch.LongTensor(1)
@@ -337,12 +333,9 @@ function RNN:updateOutput(input)
 	       self.seqLength,
                self.xDescs,
                reserveSize:data())
-      reserveSize[1] = torch.floor((reserveSize[1] + 3) / 4) -- sizeof(float)
-      if self.reserve:dim() == 0 or
-         self.reserve:size(1) < reserveSize[1] then
-         self.reserve:resize(reserveSize[1])
-      end
-
+      local elemSize = self.reserve:elementSize()
+      reserveSize[1] = torch.floor((reserveSize[1] + elemSize - 1) / elemSize)
+      self.reserve:resize(reserveSize[1])
       errcheck('cudnnRNNForwardTraining',
                cudnn.getHandle(),
                self.rnnDesc[0],
@@ -354,8 +347,9 @@ function RNN:updateOutput(input)
                self.yDescs, y:data(),
                self.hyDesc[0], hy:data(),
                self.cyDesc[0], cy:data(),
-               self.workspace:data(), self.workspace:size(1) * 4, -- sizeof(float)
-               self.reserve:data(), self.reserve:size(1) * 4) -- sizeof(float)
+               wsPtr,
+	       wsSize,
+               self.reserve:data(), self.reserve:size(1) * self.reserve:elementSize())
    else
       errcheck('cudnnRNNForwardInference',
                cudnn.getHandle(),
@@ -368,8 +362,10 @@ function RNN:updateOutput(input)
                self.yDescs, y:data(),
                self.hyDesc[0], hy:data(),
                self.cyDesc[0], cy:data(),
-               self.workspace:data(), self.workspace:size(1) * 4) -- sizeof(float)
+               wsPtr,
+	       wsSize)
    end
+   if self.sync then cutorch.synchronize() end
    if self.rememberStates then
 	self.hiddenInput = self.hiddenOutput:clone()
 	if self.cellOutput then
@@ -442,6 +438,15 @@ function RNN:updateGradInput(input, gradOutput)
       assert(dcy:size(3) == self.hiddenSize, 'gradCellOutput has incorrect size!')
       assert(dcy:isContiguous(), 'gradCellOutput must be contiguous!')
    end
+   local workspaceSize = torch.LongTensor(1)
+   errcheck('cudnnGetRNNWorkspaceSize',
+            cudnn.getHandle(),
+            self.rnnDesc[0],
+	    self.seqLength,
+            self.xDescs,
+            workspaceSize:data())
+   cudnn.setSharedWorkspaceSize(workspaceSize[1], true)
+   local wsPtr, wsSize = cudnn.getSharedWorkspace()
 
    errcheck('cudnnRNNBackwardData',
             cudnn.getHandle(),
@@ -457,8 +462,9 @@ function RNN:updateGradInput(input, gradOutput)
             self.xDescs, dx:data(),
             self.hxDesc[0], dhx:data(),
             self.cxDesc[0], dcx:data(),
-            self.workspace:data(), self.workspace:size(1) * 4, -- sizeof(float)
-            self.reserve:data(), self.reserve:size(1) * 4) -- sizeof(float)
+	    wsPtr, wsSize,
+            self.reserve:data(), self.reserve:size(1) * self.reserve:elementSize())
+    if self.sync then cutorch.synchronize() end
     if (self.batchFirst) then
         self.gradInput = self.gradInput:transpose(1, 2)
         self.output = self.output:transpose(1, 2)
@@ -508,6 +514,15 @@ function RNN:accGradParameters(input, gradOutput, scale)
                self.dw:data(),
                scaleTensor:data())
    end
+   local workspaceSize = torch.LongTensor(1)
+   errcheck('cudnnGetRNNWorkspaceSize',
+            cudnn.getHandle(),
+            self.rnnDesc[0],
+	    self.seqLength,
+            self.xDescs,
+            workspaceSize:data())
+   cudnn.setSharedWorkspaceSize(workspaceSize[1], true)
+   local wsPtr, wsSize = cudnn.getSharedWorkspace()
 
    errcheck('cudnnRNNBackwardWeights',
             cudnn.getHandle(),
@@ -516,9 +531,9 @@ function RNN:accGradParameters(input, gradOutput, scale)
             self.xDescs, x:data(),
             self.hxDesc[0], hx and hx:data() or nil,
             self.yDescs, y:data(),
-            self.workspace:data(), self.workspace:size(1) * 4, -- sizeof(float)
+	    wsPtr, wsSize,
             self.wDesc[0], dw:data(),
-            self.reserve:data(), self.reserve:size(1) * 4) -- sizeof(float)
+            self.reserve:data(), self.reserve:size(1) * self.reserve:elementSize())
 
    if scale ~= 1 then
       local scaleTensor = torch.Tensor({scale})

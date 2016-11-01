@@ -24,11 +24,21 @@ function TemporalConvolution:__init(inputFrameSize, outputFrameSize,
 end
 
 function TemporalConvolution:createIODescriptors(input)
-   return Convolution.createIODescriptors(self, input)
+    local sizeChanged = false
+    if not self.iDesc or not self.oDesc or
+        input:size(1) ~= self.iSize[1] or input:size(2) ~= self.iSize[2]
+    or input:size(3) ~= self.iSize[3] or input:size(4) ~= self.iSize[4] then
+       sizeChanged = true
+    end
+    cudnn.SpatialConvolution.createIODescriptors(self,input)
+    if sizeChanged then
+       self.oSize = self.output:size()
+    end
 end
 
 function TemporalConvolution:fastest(mode)
-    return Convolution.fastest(self, mode)
+    self = cudnn.SpatialConvolution.fastest(self,mode)
+    return self
 end
 
 function TemporalConvolution:setMode(fmode, bdmode, bwmode)
@@ -52,7 +62,6 @@ local function inputview(input)
 end
 
 function TemporalConvolution:updateOutput(input)
-   find.get():verifyWorkspaceSize(self)
    local _input = inputview(input)
    assert(_input:size(4) == self.inputFrameSize,'invalid input frame size')
    self.buffer = self.buffer or input.new()
@@ -86,7 +95,6 @@ end
 
 function TemporalConvolution:updateGradInput(input, gradOutput)
    if not self.gradInput then return end
-   find.get():verifyWorkspaceSize(self)
    local _gradOutput = transposeGradOutput(gradOutput,self.buffer)
    local _input = inputview(input)
    self.gradInput = Convolution.updateGradInput(self, _input, _gradOutput)
@@ -99,7 +107,6 @@ function TemporalConvolution:updateGradInput(input, gradOutput)
 end
 
 function TemporalConvolution:accGradParameters(input,gradOutput,scale)
-   find.get():verifyWorkspaceSize(self)
 --2d (4d) view of input
     local _input = inputview(input)
 -- transpose gradOutput (it will likely be transposed twice, hopefully, no big deal
@@ -128,5 +135,3 @@ function TemporalConvolution:clearState()
    nn.utils.clear(self, '_input', '_gradOutput')
    return parent.clearState(self)
 end
-
-return TemporalConvolution

@@ -2,14 +2,14 @@ local VolumetricConvolution, parent
    = torch.class('cudnn.VolumetricConvolution', 'nn.VolumetricConvolution')
 local ffi = require 'ffi'
 local find = require 'cudnn.find'
-local errcheck = find.errcheck
+local errcheck = cudnn.errcheck
 
 local Convolution = cudnn.SpatialConvolution
 
 -- if you change the configuration of the module manually, call this
 function VolumetricConvolution:resetWeightDescriptors()
-   local desc = torch.IntTensor({self.nOutputPlane, self.nInputPlane,
-                             self.kT, self.kH, self.kW})
+   local desc = {self.nOutputPlane, self.nInputPlane,
+                 self.kT, self.kH, self.kW}
    return Convolution.resetWeightDescriptors(self,desc)
 end
 
@@ -35,19 +35,21 @@ function VolumetricConvolution:createIODescriptors(input)
          -- create input descriptor
          self.iDesc = cudnn.toDescriptor(input)
          -- create conv descriptor
-         self.convDesc = cudnn.createDescriptors(1, 'struct cudnnConvolutionStruct*[?]',
-                                                 'cudnnCreateConvolutionDescriptor', 'cudnnDestroyConvolutionDescriptor')
-         local pad = torch.IntTensor({self.padT, self.padH, self.padW})
-         local stride = torch.IntTensor({self.dT, self.dH, self.dW})
-         local upscale = torch.IntTensor({1,1,1})
-         errcheck(self,'cudnnSetConvolutionNdDescriptor', self.convDesc[0],
-                  3, pad:data(),
-                  stride:data(), upscale:data(), 'CUDNN_CROSS_CORRELATION',
-                  cudnn.configmap(torch.type(self.weight)));
-         -- create output descriptor and resize output
+         self.pad = {self.padT, self.padH, self.padW}
+         self.stride = {self.dT, self.dH, self.dW}
+
+         local mathtype=cudnn.configmap(torch.type(self.weight))
+         -- 3D convolutions do not work in 16 bits
+         if mathtype == 'CUDNN_DATA_HALF' then
+            mathtype = 'CUDNN_DATA_FLOAT'
+         end
+         self.convDesc = cudnn.setConvolutionDescriptor(
+            { padA = self.pad, filterStrideA = self.stride,
+              dataType = mathtype
+            })
 
          local oSize = torch.IntTensor(5)
-         errcheck(self,'cudnnGetConvolutionNdForwardOutputDim',
+         errcheck('cudnnGetConvolutionNdForwardOutputDim',
                   self.convDesc[0], self.iDesc[0],
                   self.weightDesc[0], 5, oSize:data())
          self.output:resize(oSize:long():storage())

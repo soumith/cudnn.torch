@@ -16,6 +16,9 @@ cudnn.fastest = false
 -- Warning: this option is experimental and assumes at least 2 warmup iterations!
 cudnn.useFindEx = false
 
+-- if true, use 'pseudo-fp16' (half storage, float math) even if true fp16 math is available
+cudnn.useFloatMathForHalf = false
+
 -- amount of memory to use on 1st iteration for FindEx
 cudnn.initialWorkspaceBytes = 1024
 
@@ -67,11 +70,13 @@ function cudnn.sizeof(t)
    return sizeofmap[torch.type(t)]
 end
 
+
 local onemap = {
    ['torch.CudaHalfTensor']   = torch.FloatTensor({1}),
    ['torch.CudaTensor']       = torch.FloatTensor({1}),
    ['torch.CudaDoubleTensor'] = torch.DoubleTensor({1}),
 }
+
 local zeromap = {
    ['torch.CudaHalfTensor']   = torch.FloatTensor({0}),
    ['torch.CudaTensor']       = torch.FloatTensor({0}),
@@ -87,29 +92,43 @@ function cudnn.scalar(t, val)
    end
 end
 
--- TODO: determine if device supports true half and use true half on it
--- so far use float for half and float, double for double
-local function determineHalfCapability(dev)
-   local prop = cutorch.getDeviceProperties(dev)
-   if prop.major >= 6 or prop.name:find'X1' then
+
+local function fasterHalfMathTypeForCurrentDevice()
+   -- get info from cutorc
+   if cutorch.hasFastHalfInstructions() then
       return 'CUDNN_DATA_HALF'
    else
       return 'CUDNN_DATA_FLOAT'
    end
 end
 
-local configmaps = {}
-for i=1,cutorch.getDeviceCount() do
-   configmaps[i] = {
-      ['torch.CudaHalfTensor']   = determineHalfCapability(i),
-      ['torch.CudaTensor']       = 'CUDNN_DATA_FLOAT',
-      ['torch.CudaDoubleTensor'] = 'CUDNN_DATA_DOUBLE',
-   }
+local configMaths = {}
+
+local function configureMath(overrides)
+   local currentDevice = cutorch.getDevice()
+   for i=1,cutorch.getDeviceCount() do
+      cutorch.setDevice(i)
+      configMaths[i] = {
+         ['torch.CudaHalfTensor']   = fasterHalfMathTypeForCurrentDevice(),
+         ['torch.CudaTensor']       = 'CUDNN_DATA_FLOAT',
+         ['torch.CudaDoubleTensor'] = 'CUDNN_DATA_DOUBLE',
+      }
+      -- apply overrides
+      if overrides then
+         for k,v in pairs(overrides) do configMaths[i][k] = v end
+      end
+   end
+   cutorch.setDevice(currentDevice)
+end
+cudnn.configureMath = configureMath
+
+-- TODO: rename to something like "configuredMathType" on next refactor
+-- also, should move torch.type() inside
+cudnn.configmap = function(tensortype)
+   return configMaths[cutorch.getDevice()][tensortype]
 end
 
-cudnn.configmap = function(tensortype)
-   return configmaps[cutorch.getDevice()][tensortype]
-end
+configureMath()
 
 function cudnn.getHandle()
     local device = cutorch.getDevice()
@@ -187,14 +206,37 @@ function cudnn.createDescriptors(count, descs_type, create_func, destroy_func)
    return ds
 end
 
+
+
+function cudnn.setConvolutionDescriptor(data, desc)
+   local dim  = data.arrayLength or #data.padA
+   local upscale = data.upscaleA or torch.IntStorage(dim):fill(1)
+   local myDesc = desc or cudnn.createDescriptors(
+      1, 'struct cudnnConvolutionStruct*[?]',
+      'cudnnCreateConvolutionDescriptor', 'cudnnDestroyConvolutionDescriptor')
+   errcheck('cudnnSetConvolutionNdDescriptor', myDesc[0],
+            dim,
+            torch.IntTensor(data.padA):data(),
+            torch.IntTensor(data.filterStrideA):data(),
+            torch.IntTensor(upscale):data(),
+            data.mode or 'CUDNN_CROSS_CORRELATION',
+            data.dataType)
+   return myDesc
+end
+
+function cudnn.setFilterDescriptor(data, filterDesc)
+   local myDesc = filterDesc or cudnn.createDescriptors(
+      1, 'struct cudnnFilterStruct*[?]',
+      'cudnnCreateFilterDescriptor', 'cudnnDestroyFilterDescriptor')
+   local dims = data.nbDims or #data.filterDimA
+   errcheck('cudnnSetFilterNdDescriptor', myDesc[0],
+            data.dataType, data.format or 'CUDNN_TENSOR_NCHW',
+            dims, torch.IntTensor(data.filterDimA):data());
+   return myDesc
+end
+
 local sharedBuffer = {}
 local nextBufferSize = {}
-
-local function setNextSize(buf, size, ifGreater)
-   if size > buf.nextSize or not ifGreater then
-      buf.nextSize = size
-   end
-end
 
 -- may reassign currentSize
 local function allocateStorage(buf, ifGreater)
@@ -210,9 +252,6 @@ local function allocateStorage(buf, ifGreater)
    if buf.storage then
       if (newelem == buf.storage:size()) or (ifGreater and newelem < buf.storage:size()) then
       else
-         if cudnn.verbose then
-            print( "allocateStorage: new WS size is ", buf.nextSize)
-         end
          -- resize to just to make sure we return memory
          buf.storage:resize(0)
          buf.storage:resize(newelem)
@@ -228,24 +267,26 @@ local function allocateStorage(buf, ifGreater)
    buf.nextSize = -1
 end
 
-local function sharedBufForCurrentStream()
-    local device = cutorch.getDevice()
-    local stream = cutorch.getStream() -- starts from 0
-    if not sharedBuffer[device] then sharedBuffer[device] = {} end
-    local buf = sharedBuffer[device][stream]
-    if not buf then
-       buf = {
-          currentSize = cudnn.initialWorkspaceBytes,
-          nextSize = -1
-       }
-       allocateStorage(buf)
-       sharedBuffer[device][stream] = buf
-    end
-    return buf
+local function sharedBufForStream(device, stream)
+   device = device or cutorch.getDevice()
+   stream = stream or cutorch.getStream() -- starts from 0
+   if not sharedBuffer[device] then sharedBuffer[device] = {} end
+   local buf = sharedBuffer[device][stream]
+   if not buf then
+      buf = {
+         currentSize = cudnn.initialWorkspaceBytes,
+         nextSize = -1
+      }
+      allocateStorage(buf)
+      sharedBuffer[device][stream] = buf
+   end
+   return buf
 end
 
-function cudnn.getSharedWorkspace()
-   local buf = sharedBufForCurrentStream()
+function cudnn.getSharedWorkspace(device, stream)
+   device = device or cutorch.getDevice()
+   stream = stream or cutorch.getStream()
+   local buf = sharedBufForStream(device, stream)
    return buf.data, buf.currentSize
 end
 
@@ -257,25 +298,30 @@ function cudnn.externalizeString(luaStr)
     return cStr
 end
 
-function cudnn.adjustSharedWorkspaceSize(bytesDelta)
-   local buf = sharedBufForCurrentStream()
-   setNextSize(buf, buf.currentSize + bytesDelta)
+function cudnn.adjustSharedWorkspaceSize(bytesDelta, device, stream)
+   local buf = sharedBufForStream(device, stream)
+   buf.nextSize = buf.currentSize + bytesDelta
    allocateStorage(buf)
 end
 
-function cudnn.setSharedWorkspaceSize(bytes, ifGreater)
-   local buf = sharedBufForCurrentStream()
-   ifGreater = ifGreater or false
+function cudnn.setNextWorkspaceSize(bytes, device, stream)
+   local buf = sharedBufForStream(device, stream)
+   buf.nextSize = bytes
+   return buf
+end
+
+function cudnn.setSharedWorkspaceSize(bytes, ifGreater, device, stream)
    bytes = bytes or cudnn.initialWorkspaceBytes
-   setNextSize(buf, bytes, ifGreater)
+   local buf = cudnn.setNextWorkspaceSize(bytes, device, stream)
    allocateStorage(buf, ifGreater)
 end
 
-local find = require('cudnn.find')
+cudnn.find = require('cudnn.find')
 
 require('cudnn.SpatialConvolution')
 require('cudnn.VolumetricConvolution')
 require('cudnn.SpatialFullConvolution')
+require('cudnn.VolumetricFullConvolution')
 require('cudnn.Pooling')
 require('cudnn.SpatialMaxPooling')
 require('cudnn.SpatialAveragePooling')
@@ -322,7 +368,7 @@ function cudnn.reset()
    end
    collectgarbage()
    -- this resets internal algorithm finder state machine and cache
-   find.reset()
+   cudnn.find.reset()
 end
 
 return cudnn
