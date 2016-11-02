@@ -297,6 +297,6 @@ end
 
 function SpatialConvolution:clearState()
    self:clearDesc()
-   nn.utils.clear(self, '_input', '_gradOutput')
+   nn.utils.clear(self, '_input', '_gradOutput', 'input_slice', 'output_slice')
    return nn.Module.clearState(self)
 end
