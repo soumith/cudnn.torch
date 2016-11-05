@@ -14,7 +14,7 @@ function VolumetricConvolution:resetWeightDescriptors()
 end
 
 function VolumetricConvolution:fastest(mode)
-   return Convolution.fastest(self.mode)
+   return Convolution.fastest(self,mode)
 end
 
 function VolumetricConvolution:setMode(fmode, bdmode, bwmode)
@@ -63,7 +63,11 @@ function VolumetricConvolution:createIODescriptors(input)
          self.input_offset = 0
          self.output_offset = 0
          self.weight_offset = 0
-         find:prepare(self, input, self.output)
+-- next two lines are so that input does not get wiped out in clearState
+-- otherwise, tests do not pass
+         local input_slice = input:narrow(2,1,self.nInputPlane)
+         local output_slice = self.output:narrow(2,1,self.nOutputPlane)
+         find:prepare(self, input_slice, output_slice)
    end
 end
 
