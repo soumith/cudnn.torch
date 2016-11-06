@@ -2,7 +2,7 @@ local ffi = require 'ffi'
 
 find = {}
 find.__index = find
-
+--find.verbose=true
 -- constants to index array tables below
 local Fwd, BwdFilter, BwdData = 1, 2, 3
 
@@ -502,8 +502,21 @@ function find:prepare(layer, input_slice, output_slice)
    layer.output_slice = output_slice
 end
 
+local function setupWS(layer, params, algo, fn)
+     local bufSize = torch.LongTensor(1)
+     cudnn.errcheck(getWSAlgos[fn],
+                                     cudnn.getHandle(),
+                                     params[1], params[3], layer.convDesc[0], params[6],
+                                     algo, bufSize:data())
+     cudnn.setSharedWorkspaceSize(bufSize[1], true)
+end
+
+
 function find:forwardAlgorithm(layer, params)
-   if layer.fmode then return layer.fmode end
+   if layer.fmode then 
+     setupWS(layer, params, layer.fmode, Fwd) 
+     return layer.fmode 
+   end
    local algSearchMode = 'CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT'
    if layer.fastest_mode or cudnn.fastest == true then
       algSearchMode = 'CUDNN_CONVOLUTION_FWD_PREFER_FASTEST'
@@ -513,7 +526,10 @@ end
 
 function find:backwardFilterAlgorithm(layer, params)
    -- Check if we are in "sticky" mode
-   if layer.bwmode then return layer.bwmode end
+   if layer.bwmode then 
+     setupWS(layer, params, layer.bwmode, BwdFilter) 
+     return layer.bwmode 
+   end
    local algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_NO_WORKSPACE'
    if layer.fastest_mode or cudnn.fastest == true then
       algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST'
@@ -524,7 +540,10 @@ end
 
 function find:backwardDataAlgorithm(layer, params)
    -- Check if we are in "sticky" mode
-   if layer.bdmode then return layer.bdmode end
+   if layer.bdmode then 
+     setupWS(layer, params, layer.bdmode, BwdData) 
+     return layer.bdmode 
+   end
    local algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_NO_WORKSPACE'
    if layer.fastest_mode  or cudnn.fastest == true then
       algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST'
