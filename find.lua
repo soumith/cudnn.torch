@@ -74,14 +74,14 @@ local function getConvolutionDescriptor_ffi(desc)
       dim_p = ffi.new('int[1]'),
       padA = ffi.new('int[?]', CUDNN_DIM_MAX),
       filterStrideA = ffi.new('int[?]', CUDNN_DIM_MAX),
-      upscaleA = ffi.new('int[?]', CUDNN_DIM_MAX),
+      dilationA = ffi.new('int[?]', CUDNN_DIM_MAX),
       mode_p = ffi.new('cudnnConvolutionMode_t[1]'),
       math_p = ffi.new('cudnnDataType_t[1]')
    }
 
    local status = cudnn.call('cudnnGetConvolutionNdDescriptor', desc[0], CUDNN_DIM_MAX,
                              data.dim_p, data.padA, data.filterStrideA,
-                             data.upscaleA, data.mode_p, data.math_p)
+                             data.dilationA, data.mode_p, data.math_p)
    if (status ~= ffi.C.CUDNN_STATUS_SUCCESS) then
       if find.verbose or find.verboseError then
          print("cudnnGetConvolutionNdDescriptor failed: ", tonumber(status))
@@ -150,7 +150,7 @@ local function defaultFallback(layer, replay)
                   convDescData.arrayLength,
                   convDescData.padA,
                   convDescData.filterStrideA,
-                  convDescData.upscaleA,
+                  convDescData.dilationA,
                   convDescData.mode,
                   ffi.C.CUDNN_DATA_FLOAT)
       return true

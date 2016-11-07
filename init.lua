@@ -209,8 +209,9 @@ end
 
 
 function cudnn.setConvolutionDescriptor(data, desc)
+   dilationA = data.dilationA or {1,1,1}
    local dim  = data.arrayLength or #data.padA
-   local upscale = data.upscaleA or torch.IntStorage(dim):fill(1)
+
    local myDesc = desc or cudnn.createDescriptors(
       1, 'struct cudnnConvolutionStruct*[?]',
       'cudnnCreateConvolutionDescriptor', 'cudnnDestroyConvolutionDescriptor')
@@ -218,7 +219,7 @@ function cudnn.setConvolutionDescriptor(data, desc)
             dim,
             torch.IntTensor(data.padA):data(),
             torch.IntTensor(data.filterStrideA):data(),
-            torch.IntTensor(upscale):data(),
+            torch.IntTensor(dilationA):data(),
             data.mode or 'CUDNN_CROSS_CORRELATION',
             data.dataType)
    return myDesc
@@ -320,6 +321,8 @@ cudnn.find = require('cudnn.find')
 
 require('cudnn.SpatialConvolution')
 require('cudnn.VolumetricConvolution')
+require('cudnn.SpatialDilatedConvolution')
+require('cudnn.VolumetricDilatedConvolution')
 require('cudnn.SpatialFullConvolution')
 require('cudnn.VolumetricFullConvolution')
 require('cudnn.Pooling')
