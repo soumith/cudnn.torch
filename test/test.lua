@@ -884,7 +884,7 @@ function cudnntest.functional_bias2D()
    local inj = (outj-1)*sj+kj
    local scale = torch.uniform()
    local input = cast(torch.zeros(bs,from,inj,ini))
-   local mod = cast(cudnn.SpatialConvolution(from,to,ki,kj,si,sj))
+   local mod = cast(cudnn.SpatialConvolution(from,to,ki,kj,si,sj):fastest())
    mod.weight:zero()
    local groundtruth = mod:forward(input)
    local result = groundtruth:clone():zero()
