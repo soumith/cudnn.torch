@@ -378,7 +378,7 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
                     local algWorkspaceLimit = layer.workspace_limit
                        or (layer.nInputPlane * layer.kH * layer.kW * layer.weight.elementSize())
 
-                    ret = cudnn.call(API,
+                    cudnn.errcheck(API,
                                      cudnn.getHandle(),
                                      params[1], params[3], layer.convDesc[0], params[6],
                                      algSearchMode, algWorkspaceLimit, algType[findAPI_idx])
@@ -391,7 +391,7 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
                                 algSearchMode))
                     end
                     local bufSize = torch.LongTensor(1)
-                    ret = cudnn.call(getWSAlgos[findAPI_idx],
+                    cudnn.errcheck(getWSAlgos[findAPI_idx],
                                      cudnn.getHandle(),
                                      params[1], params[3], layer.convDesc[0], params[6],
                                      retAlgo, bufSize:data())
