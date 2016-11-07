@@ -3,11 +3,17 @@ local ffi = require 'ffi'
 
 ffi.cdef[[
 
+typedef enum
+{
+	MAJOR_VERSION,
+	MINOR_VERSION,
+	PATCH_LEVEL
+} libraryPropertyType;
 
 typedef enum {
         CUDNN_MAJOR  =    6,
         CUDNN_MINOR  =    0,
-        CUDNN_PATCHLEVEL  = 1,
+        CUDNN_PATCHLEVEL  = 2,
         CUDNN_VERSION  =  (CUDNN_MAJOR * 1000 + CUDNN_MINOR * 100 + CUDNN_PATCHLEVEL)
 } cudnnVerFakeEnum;
 
@@ -37,6 +43,8 @@ typedef enum
 
 /* human-readable error messages*/
 const char *              cudnnGetErrorString(cudnnStatus_t status);
+
+cudnnStatus_t             cudnnGetProperty(libraryPropertyType type, int *value);
 
 cudnnStatus_t             cudnnCreate        (cudnnHandle_t *handle);
 cudnnStatus_t             cudnnDestroy       (cudnnHandle_t handle);
@@ -70,10 +78,18 @@ typedef enum
 /*
  * CUDNN propagate Nan
  */
-typedef enum{
+typedef enum {
     CUDNN_NOT_PROPAGATE_NAN  = 0,
     CUDNN_PROPAGATE_NAN      = 1,
 } cudnnNanPropagation_t;
+
+/*
+ * CUDNN Determinism
+ */
+typedef enum {
+    CUDNN_NON_DETERMINISTIC = 0,
+    CUDNN_DETERMINISTIC     = 1,
+} cudnnDeterminism_t;
 
 /* Maximum supported number of tensor dimensions */
 typedef enum { CUDNN_DIM_MAX  = 8 }  cudnnDimMaxFakeEnum;
@@ -490,7 +506,8 @@ typedef enum
     CUDNN_CONVOLUTION_FWD_ALGO_FFT                   = 4,
     CUDNN_CONVOLUTION_FWD_ALGO_FFT_TILING            = 5,
     CUDNN_CONVOLUTION_FWD_ALGO_WINOGRAD              = 6,
-    CUDNN_CONVOLUTION_FWD_ALGO_WINOGRAD_NONFUSED     = 7
+    CUDNN_CONVOLUTION_FWD_ALGO_WINOGRAD_NONFUSED     = 7,
+    CUDNN_CONVOLUTION_FWD_ALGO_COUNT                 = 8,
 } cudnnConvolutionFwdAlgo_t;
 
 typedef struct {
@@ -498,6 +515,8 @@ typedef struct {
     cudnnStatus_t               status;
     float                       time;
     size_t                      memory;
+    cudnnDeterminism_t          determinism;
+    int                         reserved[4];
 } cudnnConvolutionFwdAlgoPerf_t;
 
 cudnnStatus_t             cudnnFindConvolutionForwardAlgorithm(
@@ -615,16 +634,19 @@ typedef enum
     CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1         = 1,
     CUDNN_CONVOLUTION_BWD_FILTER_ALGO_FFT       = 2,
     CUDNN_CONVOLUTION_BWD_FILTER_ALGO_3         = 3,  /* non-deterministic, algo0 with workspace*/
-    /* CUDNN_CONVOLUTION_BWD_FILTER_ALGO_WINOGRAD  = 4, not implemented */
-    CUDNN_CONVOLUTION_BWD_FILTER_ALGO_WINOGRAD_NONFUSED = 5
+    CUDNN_CONVOLUTION_BWD_FILTER_ALGO_WINOGRAD  = 4,
+    CUDNN_CONVOLUTION_BWD_FILTER_ALGO_WINOGRAD_NONFUSED = 5,
+    CUDNN_CONVOLUTION_BWD_FILTER_ALGO_FFT_TILING= 6,
+    CUDNN_CONVOLUTION_BWD_FILTER_ALGO_COUNT     = 7,
 } cudnnConvolutionBwdFilterAlgo_t;
-
 
 typedef struct {
     cudnnConvolutionBwdFilterAlgo_t algo;
     cudnnStatus_t status;
     float time;
     size_t memory;
+    cudnnDeterminism_t              determinism;
+    int                             reserved[4];
 } cudnnConvolutionBwdFilterAlgoPerf_t;
 
 cudnnStatus_t             cudnnFindConvolutionBackwardFilterAlgorithm(
@@ -707,7 +729,8 @@ typedef enum
     CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT        = 2,
     CUDNN_CONVOLUTION_BWD_DATA_ALGO_FFT_TILING = 3,
     CUDNN_CONVOLUTION_BWD_DATA_ALGO_WINOGRAD   = 4,
-    CUDNN_CONVOLUTION_BWD_DATA_ALGO_WINOGRAD_NONFUSED = 5
+    CUDNN_CONVOLUTION_BWD_DATA_ALGO_WINOGRAD_NONFUSED = 5,
+    CUDNN_CONVOLUTION_BWD_DATA_ALGO_COUNT             = 6,
 } cudnnConvolutionBwdDataAlgo_t;
 
 typedef struct {
@@ -715,6 +738,8 @@ typedef struct {
     cudnnStatus_t                   status;
     float                           time;
     size_t                          memory;
+    cudnnDeterminism_t              determinism;
+    int                             reserved[4];
 } cudnnConvolutionBwdDataAlgoPerf_t;
 
 
@@ -1615,8 +1640,8 @@ end
 
 -- check cuDNN version
 cudnn.version = tonumber(cudnn.C.cudnnGetVersion())
-if cudnn.version < 6000 then
-  error('These bindings are for version 6000 or above, '
+if cudnn.version < 6002 then
+  error('These bindings are for version 6002 or above, '
         .. 'while the loaded CuDNN is version: ' .. cudnn.version
            .. '  \nAre you using an older version of CuDNN?')
 end
