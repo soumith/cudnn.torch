@@ -64,37 +64,6 @@ local bwdDataAlgoNames = {
 
 local algoNames = {fwdAlgoNames, bwdFilterAlgoNames, bwdDataAlgoNames}
 
--- this function is here and not in init.lua (and has the suffix) as generic
--- getConvolutionDescriptor methood should have native lua tables instead of FFI
--- (like setConvolutionDescriptor does, to be used with it)
--- However this is counterproductive for the purposes it's used in this module
-local function getConvolutionDescriptor_ffi(desc)
-   local CUDNN_DIM_MAX=8
-   local data = {
-      dim_p = ffi.new('int[1]'),
-      padA = ffi.new('int[?]', CUDNN_DIM_MAX),
-      filterStrideA = ffi.new('int[?]', CUDNN_DIM_MAX),
-      dilationA = ffi.new('int[?]', CUDNN_DIM_MAX),
-      mode_p = ffi.new('cudnnConvolutionMode_t[1]'),
-      math_p = ffi.new('cudnnDataType_t[1]')
-   }
-
-   local status = cudnn.call('cudnnGetConvolutionNdDescriptor', desc[0], CUDNN_DIM_MAX,
-                             data.dim_p, data.padA, data.filterStrideA,
-                             data.dilationA, data.mode_p, data.math_p)
-   if (status ~= ffi.C.CUDNN_STATUS_SUCCESS) then
-      if find.verbose or find.verboseError then
-         print("cudnnGetConvolutionNdDescriptor failed: ", tonumber(status))
-         return nil
-      end
-   end
-
-   data.arrayLength = data.dim_p[0]
-   data.mode =     data.mode_p[0]
-   data.dataType = data.math_p[0]
-   return data
-end
-
 local function verboseCall(layer, f, ...)
    if find.verbose then
         print("find:verboseCall: calling " .. f .. ", hash: ",  layer.autotunerHash)
@@ -104,7 +73,7 @@ local function verboseCall(layer, f, ...)
       local prefix = "find:verboseCall:"
       print( prefix .. f .. " failed: ", tonumber(status))
       if layer.convDesc then
-         local desc = getConvolutionDescriptor_ffi(layer.convDesc)
+         local desc = layer.convDescData
          if desc then
             print (prefix .. ' conv desc mode : ', desc.mode, ' datatype : ', desc.datatype)
          end
@@ -135,9 +104,9 @@ end
 
 local function defaultFallback(layer, replay)
    -- read conv descriptor
-   local convDescData = getConvolutionDescriptor_ffi(layer.convDesc)
+   local convDescData = layer.convDescData
 
-   if convDescData and convDescData.dataType == ffi.C.CUDNN_DATA_HALF then
+   if convDescData and convDescData.dataType == "CUDNN_DATA_HALF" then
       if find.verbose then
          if replay then
             print("find.defaultFallback: replay for ", layer.autotunerHash)
@@ -145,14 +114,10 @@ local function defaultFallback(layer, replay)
             print("find.defaultFallback: no 16-bit float algo found, will try 32 bits for ", layer.autotunerHash)
          end
       end
-      -- using direct FFI call, not cudnn.setConvolutionDescriptor, for efficiency and clarity
-      checkedCall(layer, 'cudnnSetConvolutionNdDescriptor', layer.convDesc[0],
-                  convDescData.arrayLength,
-                  convDescData.padA,
-                  convDescData.filterStrideA,
-                  convDescData.dilationA,
-                  convDescData.mode,
-                  ffi.C.CUDNN_DATA_FLOAT)
+      -- update our record with fallback value
+      convDescData.dataType = ffi.C.CUDNN_DATA_FLOAT
+      -- update the descriptor in CUDNN
+      cudnn.setConvolutionDescriptor(convDescData, layer.convDesc);
       return true
    else
       return false
@@ -358,6 +323,10 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
            local function callCudnn(layer)
               local ret = 0
               validResults = 0
+              if not layer.convDesc or not layer.convDesc[0] then
+                 error("No convDesc set on layer!")
+              end
+
               if self.algoFamily == FindExFamily then
                  -- query temp workspace size
                  local tempWorkspace, tempWorkspaceSize = cudnn.getSharedWorkspace()

@@ -51,10 +51,9 @@ function VolumetricFullConvolution:createIODescriptors(input)
 
          self.pad = {self.padT, self.padH, self.padW}
          self.stride = {self.dT, self.dH, self.dW}
-         self.convDesc = cudnn.setConvolutionDescriptor(
-            { padA = self.pad, filterStrideA = self.stride,
-              dataType = mathtype
-            })
+         self.convDescData = { padA = self.pad, filterStrideA = self.stride,
+                               dataType = mathtype }
+         self.convDesc = cudnn.setConvolutionDescriptor(self.convDescData)
 
         -- get output shape, resize output
         local iwidth = input:size(5)
