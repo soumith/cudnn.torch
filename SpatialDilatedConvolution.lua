@@ -30,13 +30,13 @@ function SpatialDilatedConvolution:createIODescriptors(input)
 	local t_dataType = cudnn.configmap(torch.type(self.weight))
 	--fallback to fp32 math if half type, fp16 dilated convs not fully implmented in cuDNN 6.0.2
 	if( t_dataType == 'CUDNN_DATA_HALF') then t_dataType = 'CUDNN_DATA_FLOAT' end
-		
-        self.convDesc = cudnn.setConvolutionDescriptor(
-           { padA = self.pad,
-             filterStrideA = self.stride,
-             dilationA = {self.dilationH, self.dilationW},
-             dataType = t_dataType
-           })
+	self.convDescData = {
+           padA = self.pad,
+           filterStrideA = self.stride,
+           dilationA = {self.dilationH, self.dilationW},
+           dataType = t_dataType
+        }
+        self.convDesc = cudnn.setConvolutionDescriptor(self.convDescData)
 
         -- get output shape, resize output
         local oSize = torch.IntTensor(4)

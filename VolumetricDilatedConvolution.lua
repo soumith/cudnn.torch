@@ -33,12 +33,13 @@ function VolumetricDilatedConvolution:createIODescriptors(input)
          if mathtype == 'CUDNN_DATA_HALF' then
             mathtype = 'CUDNN_DATA_FLOAT'
          end
-         self.convDesc = cudnn.setConvolutionDescriptor(
-            { padA = self.pad,
-	      filterStrideA = self.stride,
-	      dilationA = self.dilation,
-              dataType = mathtype
-            })
+         self.convDescData = {
+            padA = self.pad,
+            filterStrideA = self.stride,
+            dilationA = self.dilation,
+            dataType = mathtype
+         }
+         self.convDesc = cudnn.setConvolutionDescriptor(self.convDescData)
 
          local oSize = torch.IntTensor(5)
          cudnn.errcheck('cudnnGetConvolutionNdForwardOutputDim',
