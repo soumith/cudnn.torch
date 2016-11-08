@@ -375,13 +375,21 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
                  else
                     -- GetFamily: emulate findXXX results layout
                     numPerfResults[0]=1
+                    perfResults[0].algo = 0
+                    perfResults[0].memory = 0
+                    perfResults[0].status = 1
+
                     local algWorkspaceLimit = layer.workspace_limit
                        or (layer.nInputPlane * layer.kH * layer.kW * layer.weight.elementSize())
 
-                    cudnn.errcheck(API,
+                    ret = cudnn.call(API,
                                      cudnn.getHandle(),
                                      params[1], params[3], layer.convDesc[0], params[6],
                                      algSearchMode, algWorkspaceLimit, algType[findAPI_idx])
+                    if ret ~= 0 then
+                       return ret
+                    end
+
                     local retAlgo = algType[findAPI_idx][0]
                     if find.verbose then
                        print(string.format(
@@ -391,10 +399,13 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
                                 algSearchMode))
                     end
                     local bufSize = torch.LongTensor(1)
-                    cudnn.errcheck(getWSAlgos[findAPI_idx],
+                    ret = cudnn.call(getWSAlgos[findAPI_idx],
                                      cudnn.getHandle(),
                                      params[1], params[3], layer.convDesc[0], params[6],
                                      retAlgo, bufSize:data())
+                    if ret ~= 0 then
+                       return ret
+                    end
                     if find.verbose then
                        print(string.format(
                                 "\n" .. getWSAlgos[findAPI_idx]  .. ": bufSize: %d, current ws: %d",
@@ -434,9 +445,7 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
                     end
                  end
               end
-              if validResults < 1  and find.verbose then
-                 print("Could not find any valid convolution algorithms for sizes: " .. layer.autotunerHash)
-                 -- todo: add case of multi-stream not fitting in size
+              if validResults < 1 then
                  return 1
               end
               return 0
@@ -449,9 +458,10 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
               if self.fallback and self.fallback(layer) then
                  useFallback = true;
                  status = callCudnn(layer)
-                 if status ~= 0  or validResults < 1 then
-                    error ("Fallback attempt failed for " .. API .. ', sizes: ' .. layer.autotunerHash)
-                 end
+              end
+              -- check again
+              if status ~= 0  or validResults < 1 then
+                 error (API .. ' failed, sizes: ' .. layer.autotunerHash)
               end
            end
            self:store(layer, findAPI_idx, cachedAlgo)
@@ -513,9 +523,9 @@ end
 
 
 function find:forwardAlgorithm(layer, params)
-   if layer.fmode then 
-     setupWS(layer, params, layer.fmode, Fwd) 
-     return layer.fmode 
+   if layer.fmode then
+     setupWS(layer, params, layer.fmode, Fwd)
+     return layer.fmode
    end
    local algSearchMode = 'CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT'
    if layer.fastest_mode or cudnn.fastest == true then
@@ -526,9 +536,9 @@ end
 
 function find:backwardFilterAlgorithm(layer, params)
    -- Check if we are in "sticky" mode
-   if layer.bwmode then 
-     setupWS(layer, params, layer.bwmode, BwdFilter) 
-     return layer.bwmode 
+   if layer.bwmode then
+     setupWS(layer, params, layer.bwmode, BwdFilter)
+     return layer.bwmode
    end
    local algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_NO_WORKSPACE'
    if layer.fastest_mode or cudnn.fastest == true then
@@ -540,9 +550,9 @@ end
 
 function find:backwardDataAlgorithm(layer, params)
    -- Check if we are in "sticky" mode
-   if layer.bdmode then 
-     setupWS(layer, params, layer.bdmode, BwdData) 
-     return layer.bdmode 
+   if layer.bdmode then
+     setupWS(layer, params, layer.bdmode, BwdData)
+     return layer.bdmode
    end
    local algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_NO_WORKSPACE'
    if layer.fastest_mode  or cudnn.fastest == true then
