@@ -37,7 +37,7 @@ function TemporalConvolution:createIODescriptors(input)
 end
 
 function TemporalConvolution:fastest(mode)
-    self = cudnn.SpatialConvolution.fastest(self,mode)
+    cudnn.SpatialConvolution.fastest(self,mode)
     return self
 end
 

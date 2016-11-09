@@ -209,17 +209,19 @@ end
 
 
 function cudnn.setConvolutionDescriptor(data, desc)
-   local dim  = data.arrayLength or #data.padA
-   local upscale = data.upscaleA or torch.IntStorage(dim):fill(1)
+   if not data.arrayLength then data.arrayLength = #data.padA end
+   if not data.upscaleA then data.upscaleA =  torch.IntStorage(data.arrayLength):fill(1) end
+   if not data.mode then data.mode = 'CUDNN_CROSS_CORRELATION' end
+
    local myDesc = desc or cudnn.createDescriptors(
       1, 'struct cudnnConvolutionStruct*[?]',
       'cudnnCreateConvolutionDescriptor', 'cudnnDestroyConvolutionDescriptor')
    errcheck('cudnnSetConvolutionNdDescriptor', myDesc[0],
-            dim,
+            data.arrayLength,
             torch.IntTensor(data.padA):data(),
             torch.IntTensor(data.filterStrideA):data(),
-            torch.IntTensor(upscale):data(),
-            data.mode or 'CUDNN_CROSS_CORRELATION',
+            torch.IntTensor(data.upscaleA):data(),
+            data.mode,
             data.dataType)
    return myDesc
 end

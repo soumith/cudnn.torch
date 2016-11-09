@@ -66,11 +66,10 @@ cudnn.functional.Convolution2D_updateOutput = function(handle, input, weight, ou
         filterDimA = {nOutputPlane, nInputPlane, kH, kW}})
 
    -- create a convolution descriptor
-   local convDesc = cudnn.setConvolutionDescriptor(
-      { padA = {padH, padW},
+   local convDescData = { padA = {padH, padW},
         filterStrideA = {strideH, strideW},
         dataType = getMathType(weight) }
-   );
+   local convDesc = cudnn.setConvolutionDescriptor(convDescData);
 
     -- create input descriptor
    local iDesc = cudnn.toDescriptor(input)
@@ -90,6 +89,7 @@ cudnn.functional.Convolution2D_updateOutput = function(handle, input, weight, ou
    local oDesc = cudnn.toDescriptor(output)
 
    local layer = {
+      convDescData = convDescData,
       convDesc = convDesc,
       weight = weight,
       nInputPlane = nInputPlane,
@@ -134,17 +134,17 @@ cudnn.functional.Convolution2D_updateGradInput = function(handle, input, weight,
         filterDimA = {nOutputPlane, nInputPlane, kH, kW} })
 
    -- create a convolution descriptor
-   local convDesc = cudnn.setConvolutionDescriptor(
-      { padA = {padH, padW},
-        filterStrideA = {strideH, strideW},
-        dataType = getMathType(weight)
-      }
-   );
+   local convDescData = { padA = {padH, padW},
+                          filterStrideA = {strideH, strideW},
+                          dataType = getMathType(weight)
+                        }
+   local convDesc = cudnn.setConvolutionDescriptor(convDescData);
     -- create input, output descriptor
    local iDesc = cudnn.toDescriptor(input)
    local oDesc = cudnn.toDescriptor(output)
 
    local layer = {
+      convDescData = convDescData,
       convDesc = convDesc,
       weight = weight,
       nInputPlane = nInputPlane,
@@ -189,11 +189,10 @@ cudnn.functional.Convolution2D_accGradParameters = function(handle, input, gradW
     local weightDesc =  cudnn.setFilterDescriptor({ dataType = cudnn.typemap[torch.type(input)],
                                                     filterDimA = {nOutputPlane, nInputPlane, kH, kW}})
     -- create a convolution descriptor
-    local convDesc = cudnn.setConvolutionDescriptor(
-       { padA = {padH, padW},
-         filterStrideA = {strideH, strideW},
-         dataType = getMathType(gradWeight) }
-    );
+    local convDescData = { padA = {padH, padW},
+                           filterStrideA = {strideH, strideW},
+                           dataType = getMathType(gradWeight) }
+    local convDesc = cudnn.setConvolutionDescriptor(convDescData);
 
     -- create input, output descriptor
     local iDesc = cudnn.toDescriptor(input)
@@ -201,6 +200,7 @@ cudnn.functional.Convolution2D_accGradParameters = function(handle, input, gradW
 
    local layer = {
       convDesc = convDesc,
+      convDescData = convDescData,
       weight = gradWeight,
       nInputPlane = nInputPlane,
       nOutputPlane = nOutputPlane,
