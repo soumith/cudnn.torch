@@ -965,14 +965,6 @@ for i = 1, 1 do -- cutorch.getDeviceCount() do
       print( 'Testing torch.CudaHalfTensor, torch.cudnn fp16 math is : ', cudnn.configmap('torch.CudaHalfTensor' ),
              ', cutorch.hasFastHalfInstructions() is ', cutorch.hasFastHalfInstructions())
 
-      if false then -- cudnn.configmap('torch.CudaHalfTensor') ~= 'CUDNN_DATA_FLOAT' then
-         print([[ Warning: 32-bit float math is forced for CudaHalfTensor test
-            even though native fast 16-bit float math is available for this device.
-            The reason is cudnn convolution algo find methods for fp16 and certain size combinations may fail.
-            This should be fixed in next release.]])
-         cudnn.configureMath({ ['torch.CudaHalfTensor']   = 'CUDNN_DATA_FLOAT'})
-      end
-
       testparams = testparams_half
       mytester:run()
 
