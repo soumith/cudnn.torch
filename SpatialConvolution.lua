@@ -127,12 +127,13 @@ function SpatialConvolution:createIODescriptors(input)
         self.pad = {self.padH, self.padW}
         self.stride = {self.dH, self.dW}
 
-        self.convDesc = cudnn.setConvolutionDescriptor(
-           { padA = self.pad,
+        self.convDescData = { padA = self.pad,
              filterStrideA = self.stride,
              upscaleA = {1,1},
              dataType = cudnn.configmap(torch.type(self.weight))
-           })
+        }
+
+        self.convDesc = cudnn.setConvolutionDescriptor(self.convDescData)
 
         -- get output shape, resize output
         local oSize = torch.IntTensor(4)
