@@ -1643,7 +1643,7 @@ cudnn.version = tonumber(cudnn.C.cudnnGetVersion())
 if cudnn.version < 6002 then
   error('These bindings are for version 6002 or above, '
         .. 'while the loaded CuDNN is version: ' .. cudnn.version
-           .. '  \nAre you using an older version of CuDNN?')
+           .. '  \nAre you using an older or newer version of CuDNN?')
 end
 
 -- check GPU driver version

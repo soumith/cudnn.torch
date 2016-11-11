@@ -11,7 +11,7 @@ local jac = nn.Jacobian
 local testparams_half = {
    test_type = 'torch.CudaHalfTensor',
    precision_forward = 2e-1,
-   precision_backward = 8,
+   precision_backward = 10,
    precision_jac = 1e-3,
    precision_io = 1e-1,
 }
@@ -131,7 +131,7 @@ function cudnntest.SpatialConvolution()
    local input = torch.randn(bs,from,inj,ini):cuda()
    local gradOutput = torch.randn(bs,to,outj,outi):cuda()
    local sconv = nn.SpatialConvolution(from,to,ki,kj,si,sj):cuda()
-   local gconv = cast(cudnn.SpatialConvolution(from,to,ki,kj,si,sj)):fastest()
+   local gconv = cast(cudnn.SpatialConvolution(from,to,ki,kj,si,sj))
    gconv.weight:copy(sconv.weight)
    gconv.bias:copy(sconv.bias)
 
@@ -240,7 +240,7 @@ function cudnntest.SpatialFullConvolution()
    local input = torch.randn(bs,from,inj,ini):cuda()
    local gradOutput = torch.randn(bs,to,outj,outi):cuda()
    local sconv = nn.SpatialFullConvolution(from,to,ki,kj,si,sj):cuda()
-   local gconv = cast(cudnn.SpatialFullConvolution(from,to,ki,kj,si,sj):cuda():fastest())
+   local gconv = cast(cudnn.SpatialFullConvolution(from,to,ki,kj,si,sj):cuda())
    gconv.weight:copy(sconv.weight)
    gconv.bias:copy(sconv.bias)
 
@@ -267,7 +267,7 @@ function cudnntest.TemporalConvolution()
    local input = torch.randn(bs,ini,inputFrameSize):cuda()
    local gradOutput = torch.randn(bs,outi,outputFrameSize):cuda()
    local sconv = nn.TemporalConvolution(inputFrameSize,outputFrameSize, ki, si):cuda()
-   local gconv = cast(cudnn.TemporalConvolution(inputFrameSize,outputFrameSize, ki, si):cuda():fastest())
+   local gconv = cast(cudnn.TemporalConvolution(inputFrameSize,outputFrameSize, ki, si):cuda())
    gconv.weight:copy(sconv.weight:view(gconv.weight:size()))
    gconv.bias:copy(sconv.bias)
 
@@ -303,7 +303,7 @@ function cudnntest.TemporalConvolution_padding_batch()
    local groundweight = sconv.gradWeight
    local groundbias = sconv.gradBias
 
-   local gconv = cast(cudnn.TemporalConvolution(inputFrameSize,outputFrameSize, ki, si,pad_h):cuda():fastest())
+   local gconv = cast(cudnn.TemporalConvolution(inputFrameSize,outputFrameSize, ki, si,pad_h):cuda())
    gconv.weight:copy(sconv.weight:view(gconv.weight:size()))
    gconv.bias:copy(sconv.bias)
    gconv:forward(cast(input))
@@ -408,10 +408,14 @@ function cudnntest.VolumetricFullConvolution()
    local outk = (ink-1)*sk+kk
    local scale = math.random()
 
+   if testparams.test_type == 'torch.CudaDoubleTensor' then
+      return
+   end
+
    local input = torch.randn(bs,from,ink,inj,ini):cuda()
    local gradOutput = torch.randn(bs,to,outk,outj,outi):cuda()
    local sconv = nn.VolumetricFullConvolution(from,to,kk,ki,kj,sk,si,sj):cuda()
-   local gconv = cast(cudnn.VolumetricFullConvolution(from,to,kk,ki,kj,sk,si,sj):cuda():fastest())
+   local gconv = cast(cudnn.VolumetricFullConvolution(from,to,kk,ki,kj,sk,si,sj):cuda())
    gconv.weight:copy(sconv.weight)
    gconv.bias:copy(sconv.bias)
 
@@ -1014,18 +1018,21 @@ mytester:add(cudnntest)
 
 cudnn.verbose=false
 cudnn.find.verbose=false
+-- this is the default, keep it for demo of 16->32 bit float fallback
+cudnn.find.verboseFallback=true
 cudnn.useFindEx=false
 
-for i = 1, cutorch.getDeviceCount() do
-   cudnn.configureMath()
+for i = 1, 1 do -- cutorch.getDeviceCount() do
 
-   for _, benchmark in ipairs({true, false}) do
+   for _, benchmark, fast in ipairs({true, false}) do
       cudnn.benchmark = benchmark
---       cudnn.reset()
+      -- use random fastest() test for non-benchmark case
+      if not benchmark then cudnn.fastest = tostring(math.random(0,1)) end
+
       local prop = cutorch.getDeviceProperties(i)
 
       print('Running test on device: #' .. i .. ' : ' .. prop.name
-               .. ' with benchmark = ' .. tostring(cudnn.benchmark))
+               .. ' with benchmark = ' .. tostring(cudnn.benchmark) .. ' and fastest = ' .. tostring(cudnn.fastest))
 
       cutorch.setDevice(i)
 

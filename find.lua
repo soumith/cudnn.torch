@@ -2,7 +2,12 @@ local ffi = require 'ffi'
 
 find = {}
 find.__index = find
---find.verbose=true
+
+-- default is to get verbose on errors
+find.verbose=false
+find.verboseError=true
+find.verboseFallback=true
+
 -- constants to index array tables below
 local Fwd, BwdFilter, BwdData = 1, 2, 3
 
@@ -64,23 +69,19 @@ local bwdDataAlgoNames = {
 
 local algoNames = {fwdAlgoNames, bwdFilterAlgoNames, bwdDataAlgoNames}
 
-local function verboseCall(layer, f, ...)
-   if find.verbose then
-        print("find:verboseCall: calling " .. f .. ", hash: ",  layer.autotunerHash)
+local function convDataString(layer)
+   local info = ''
+   if layer.convDescData then
+      local desc = layer.convDescData
+      info = ' convDesc=[mode : ' .. desc.mode .. ' datatype : ' .. desc.dataType .. ']'
    end
+   return info .. ' hash=' ..  layer.autotunerHash
+end
+
+local function verboseCall(layer, f, ...)
    local status = cudnn.call(f, ...)
    if (status ~= ffi.C.CUDNN_STATUS_SUCCESS) and (find.verbose or find.verboseError) then
-      local prefix = "find:verboseCall:"
-      print( prefix .. f .. " failed: ", tonumber(status))
-      if layer.convDesc then
-         local desc = layer.convDescData
-         if desc then
-            print (prefix .. ' conv desc mode : ', desc.mode, ' datatype : ', desc.datatype)
-         end
-      end
-   end
-   if find.verbose then
-      print("find:verboseCall: success, " .. f )
+      print("\n" .. f .. " failed: ", tonumber(status), convDataString(layer))
    end
    return status
 end
@@ -92,32 +93,39 @@ local function checkedCall(layer, f, ...)
       local str = ffi.string(cudnn.C.cudnnGetErrorString(status))
       error('Error in CuDNN: ' .. str .. ' ('..f..')')
    end
+   return status
 end
 find.checkedCall = checkedCall
 
 local function noFallback(layer)
-   if find.verbose then
-      print("find.defaultFallback: verboseCall failed for:  ", layer.autotunerHash)
+   if find.verbose or find.verboseFallback then
+      print("\nfind.defaultFallback: verboseCall failed for:  ", convDataString(layer))
    end
    return false
+end
+
+local function fallbackWarning(layer, msg)
+   if find.verbose or find.verboseFallback then
+      print("\n *** find.verboseFallback: " .. msg ..
+            "\n *** Falling back to 32-bit math for: " .. convDataString(layer))
+      print(" *** [ Set cudnn.find.verboseFallback to false to disable this message ] *** ")
+      print(" *** [ Alternatively, you may force CUDNN to always operate on CudaHalfTensors via 32-bit float conversion, in Lua: ] ***\n"
+               .." *** [ cudnn.configureMath({ ['torch.CudaHalfTensor']   = 'CUDNN_DATA_FLOAT'} ] ***")
+      print(" *** [ Note: result may be faster or slower than native FP16, depending on your GPU and CUDNN operations ] *** ")
+   end
 end
 
 local function defaultFallback(layer, replay)
    -- read conv descriptor
    local convDescData = layer.convDescData
-
    if convDescData and convDescData.dataType == "CUDNN_DATA_HALF" then
-      if find.verbose then
-         if replay then
-            print("find.defaultFallback: replay for ", layer.autotunerHash)
-         else
-            print("find.defaultFallback: no 16-bit float algo found, will try 32 bits for ", layer.autotunerHash)
-         end
-      end
+      fallbackWarning(layer, replay
+                         and "16->32 bit fallback replay "
+                         or "No native FP16 algo found, will try 32-bit math")
       -- update our record with fallback value
-      convDescData.dataType = ffi.C.CUDNN_DATA_FLOAT
+      convDescData.dataType = "CUDNN_DATA_FLOAT"
       -- update the descriptor in CUDNN
-      cudnn.setConvolutionDescriptor(convDescData, layer.convDesc);
+      cudnn.setConvolutionDescriptor(convDescData, layer.convDesc)
       return true
    else
       return false
@@ -407,10 +415,11 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
                        local fallback = ''
                        if (useFallback) then fallback = "[FALLBACK]"  end
                        print(string.format(
-                                "\n" .. API .. " algo: %s (%d, status: %d), memory: %8d, count: %d"
-                                   .. " hash: %45s " .. cacheHit .. fallback,
+                                "\n" .. API .. " algo[%d]: %s (%d, status: %d), time: %.04f, memory: %8d, count: %d"
+                                   .. " %s " .. cacheHit .. fallback,
+                                validResults,
                                 algoNames[findAPI_idx][cachedAlgo[validResults].algo+1], cachedAlgo[validResults].algo,  cachedAlgo[validResults].status,
-                                cachedAlgo[validResults].memory, r, layer.autotunerHash))
+                                cachedAlgo[validResults].time, cachedAlgo[validResults].memory, r, convDataString(layer)))
                     end
                  end
               end
@@ -420,17 +429,61 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
               return 0
            end
 
+
+           local function performanceFallback(layer)
+              -- read conv descriptor
+              local convDescData = layer.convDescData
+
+              if convDescData and convDescData.dataType == "CUDNN_DATA_HALF" then
+                 local savedResults = cachedAlgo
+                 local savedNum = validResults
+                 cachedAlgo = {}
+                 validResults = 0
+                 useFallback = true
+
+                 -- update our record with fallback value
+                 layer.convDescData.dataType = "CUDNN_DATA_FLOAT"
+                 -- update the descriptor in CUDNN
+                 cudnn.setConvolutionDescriptor(layer.convDescData, layer.convDesc)
+                 -- do the actual call
+                 local status = callCudnn(layer)
+                 -- check if we got better results with float32
+                 if status == 0 and validResults > 0 and cachedAlgo[1].time < savedResults[1].time then
+                    if find.verbose or find.verboseFallback then
+                       local msg = string.format("find.performanceFallback: found 32-bit float op is faster (%f) than FP16(%f), memory increase: %fM",
+                                                 cachedAlgo[1].time, savedResults[1].time,
+                                                 (tonumber(cachedAlgo[1].memory)-tonumber(savedResults[1].memory))/Meg)
+                       fallbackWarning(layer, msg)
+                    end
+                    return
+                 end
+                 -- restore if we didn't
+                cachedAlgo = savedResults
+                validResults = savedNum
+                -- update our record with fallback value
+                layer.convDescData.dataType = "CUDNN_DATA_HALF"
+                -- update the descriptor in CUDNN
+                cudnn.setConvolutionDescriptor(layer.convDescData, layer.convDesc)
+
+              end
+           end
+
            -- do the actual call
            local status = callCudnn(layer)
 
            if status ~= 0 or validResults < 1 then
               if self.fallback and self.fallback(layer) then
-                 useFallback = true;
+                 useFallback = true
                  status = callCudnn(layer)
               end
               -- check again
               if status ~= 0  or validResults < 1 then
-                 error (API .. ' failed, sizes: ' .. layer.autotunerHash)
+                 error (API .. ' failed, sizes: ' .. convDataString(layer))
+              end
+           else
+              -- if we are running Find or FindEx in native fp16, check if this algo is actiually faster in pseudo
+              if self.algoFamily ~= GetFamily then
+                 performanceFallback(layer)
               end
            end
            self:store(layer, findAPI_idx, cachedAlgo)
@@ -454,9 +507,9 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
            local fallback = ""
            if (useFallback) then fallback = "[FALLBACK]"  end
            print(string.format(
-                    "\n" .. API  .. ": %s(%d)[%d of %d] Workspace: %8fM (current ws size %fM, max: %dM free: %dM)  hash: %45s" .. cacheHit .. fallback,
+                    "\n" .. API  .. ": %s(%d)[%d of %d] Workspace: %8fM (current ws size %fM, max: %dM free: %dM) %s" .. cacheHit .. fallback,
                     algoNames[findAPI_idx][cachedAlgo[retAlgo].algo+1], cachedAlgo[retAlgo].algo, retAlgo, #cachedAlgo,
-                    tonumber(cachedAlgo[retAlgo].memory)/Meg, curWorkspaceSize/Meg, self.maxWorkspaceSize/Meg, freeMemory/Meg, layer.autotunerHash))
+                    tonumber(cachedAlgo[retAlgo].memory)/Meg, curWorkspaceSize/Meg, self.maxWorkspaceSize/Meg, freeMemory/Meg, convDataString(layer)))
         end
         return cachedAlgo[retAlgo].algo
 end
