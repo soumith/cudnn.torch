@@ -13,7 +13,7 @@ local testparams_half = {
    precision_forward = 2e-1,
    precision_backward = 10,
    precision_jac = 1e-3,
-   precision_io = 1e-1,
+   precision_io = 2e-1,
 }
 
 local testparams_float = {
@@ -1018,8 +1018,8 @@ mytester:add(cudnntest)
 
 cudnn.verbose=false
 cudnn.find.verbose=false
--- this is the default, keep it for demo of 16->32 bit float fallback
-cudnn.find.verboseFallback=true
+-- todo: put it back for release to demo 16->32 bit float fallback
+cudnn.find.verboseFallback=false
 cudnn.useFindEx=false
 
 for i = 1, 1 do -- cutorch.getDeviceCount() do
