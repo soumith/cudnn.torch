@@ -1,6 +1,6 @@
 local ffi = require 'ffi'
 
-find = {}
+local find = {}
 find.__index = find
 --find.verbose=true
 -- constants to index array tables below
@@ -160,7 +160,7 @@ local function defaultFallback(layer, replay)
 end
 
 -- Find State and Cache (per device)
-function initState(id)
+local function initState(id)
    local finder = {}
    setmetatable(finder,find)
    finder.id = id
