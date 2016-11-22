@@ -12,6 +12,9 @@ local cudnntest = torch.TestSuite()
 local mytester
 
 local tolerance = 1000
+local btol = tolerance * 20
+local stol = tolerance/100
+local tinytol = .1
 
 function cudnntest.testRNNRELU()
     local miniBatch = 64
@@ -26,9 +29,9 @@ function cudnntest.testRNNRELU()
     -- Checksums to check against are retrieved from cudnn RNN sample.
     mytester:assertalmosteq(checkSums.localSumi, 1.315793E+06, tolerance, 'checkSum with reference for localsumi failed')
     mytester:assertalmosteq(checkSums.localSumh, 1.315212E+05, tolerance, 'checkSum with reference for localSumh failed')
-    mytester:assertalmosteq(checkSums.localSumdi, 6.676003E+01, tolerance, 'checkSum with reference for localSumdi failed')
-    mytester:assertalmosteq(checkSums.localSumdh, 6.425067E+01, tolerance, 'checkSum with reference for localSumdh failed')
-    mytester:assertalmosteq(checkSums.localSumdw, 1.453750E+09, tolerance, 'checkSum with reference for localSumdw failed')
+    mytester:assertalmosteq(checkSums.localSumdi, 6.676003E+01, stol, 'checkSum with reference for localSumdi failed')
+    mytester:assertalmosteq(checkSums.localSumdh, 6.425067E+01, stol, 'checkSum with reference for localSumdh failed')
+    mytester:assertalmosteq(checkSums.localSumdw, 1.453750E+09, btol, 'checkSum with reference for localSumdw failed')
 end
 
 function cudnntest.testRNNBatchFirst()
@@ -45,9 +48,9 @@ function cudnntest.testRNNBatchFirst()
     -- Checksums to check against are retrieved from cudnn RNN sample.
     mytester:assertalmosteq(checkSums.localSumi, 1.315793E+06, tolerance, 'checkSum with reference for localsumi failed')
     mytester:assertalmosteq(checkSums.localSumh, 1.315212E+05, tolerance, 'checkSum with reference for localSumh failed')
-    mytester:assertalmosteq(checkSums.localSumdi, 6.676003E+01, tolerance, 'checkSum with reference for localSumdi failed')
-    mytester:assertalmosteq(checkSums.localSumdh, 6.425067E+01, tolerance, 'checkSum with reference for localSumdh failed')
-    mytester:assertalmosteq(checkSums.localSumdw, 1.453750E+09, tolerance, 'checkSum with reference for localSumdw failed')
+    mytester:assertalmosteq(checkSums.localSumdi, 6.676003E+01, stol, 'checkSum with reference for localSumdi failed')
+    mytester:assertalmosteq(checkSums.localSumdh, 6.425067E+01, stol, 'checkSum with reference for localSumdh failed')
+    mytester:assertalmosteq(checkSums.localSumdw, 1.453750E+09, btol, 'checkSum with reference for localSumdw failed')
 end
 
 function cudnntest.testRNNTANH()
@@ -63,8 +66,8 @@ function cudnntest.testRNNTANH()
     -- Checksums to check against are retrieved from cudnn RNN sample.
     mytester:assertalmosteq(checkSums.localSumi, 6.319591E+05, tolerance, 'checkSum with reference for localsumi failed')
     mytester:assertalmosteq(checkSums.localSumh, 6.319605E+04, tolerance, 'checkSum with reference for localSumh failed')
-    mytester:assertalmosteq(checkSums.localSumdi, 4.501830E+00, tolerance, 'checkSum with reference for localSumdi failed')
-    mytester:assertalmosteq(checkSums.localSumdh, 4.489546E+00, tolerance, 'checkSum with reference for localSumdh failed')
+    mytester:assertalmosteq(checkSums.localSumdi, 4.501830E+00, 1, 'checkSum with reference for localSumdi failed')
+    mytester:assertalmosteq(checkSums.localSumdh, 4.489546E+00, 1, 'checkSum with reference for localSumdh failed')
     mytester:assertalmosteq(checkSums.localSumdw, 5.012598E+07, tolerance, 'checkSum with reference for localSumdw failed')
 end
 
@@ -81,9 +84,9 @@ function cudnntest.testRNNLSTM()
     mytester:assertalmosteq(checkSums.localSumi, 5.749536E+05, tolerance, 'checkSum with reference for localsumi failed')
     mytester:assertalmosteq(checkSums.localSumc, 4.365091E+05, tolerance, 'checkSum with reference for localSumc failed')
     mytester:assertalmosteq(checkSums.localSumh, 5.774818E+04, tolerance, 'checkSum with reference for localSumh failed')
-    mytester:assertalmosteq(checkSums.localSumdi, 3.842206E+02, tolerance, 'checkSum with reference for localSumdi failed')
-    mytester:assertalmosteq(checkSums.localSumdc, 9.323785E+03, tolerance, 'checkSum with reference for localSumdc failed')
-    mytester:assertalmosteq(checkSums.localSumdh, 1.182566E+01, tolerance, 'checkSum with reference for localSumdh failed')
+    mytester:assertalmosteq(checkSums.localSumdi, 3.842206E+02, stol, 'checkSum with reference for localSumdi failed')
+    mytester:assertalmosteq(checkSums.localSumdc, 9.323785E+03, stol, 'checkSum with reference for localSumdc failed')
+    mytester:assertalmosteq(checkSums.localSumdh, 1.182566E+01, tinytol, 'checkSum with reference for localSumdh failed')
     mytester:assertalmosteq(checkSums.localSumdw, 4.313461E+08, tolerance, 'checkSum with reference for localSumdw failed')
 end
 
@@ -98,7 +101,7 @@ function cudnntest.testRNNGRU()
     -- Checksums to check against are retrieved from cudnn RNN sample.
     mytester:assertalmosteq(checkSums.localSumi, 6.358978E+05, tolerance, 'checkSum with reference for localsumi failed')
     mytester:assertalmosteq(checkSums.localSumh, 6.281680E+04, tolerance, 'checkSum with reference for localSumh failed')
-    mytester:assertalmosteq(checkSums.localSumdi, 6.296622E+00, tolerance, 'checkSum with reference for localSumdi failed')
+    mytester:assertalmosteq(checkSums.localSumdi, 6.296622E+00, tinytol, 'checkSum with reference for localSumdi failed')
     mytester:assertalmosteq(checkSums.localSumdh, 2.289960E+05, tolerance, 'checkSum with reference for localSumdh failed')
     mytester:assertalmosteq(checkSums.localSumdw, 5.397419E+07, tolerance, 'checkSum with reference for localSumdw failed')
 end
@@ -118,10 +121,10 @@ function cudnntest.testBiDirectionalRELURNN()
 
     local checkSums = getRNNCheckSums(miniBatch, seqLength, hiddenSize, numberOfLayers, numberOfLinearLayers, rnn, batchFirst, nbDirections)
     -- Checksums to check against are retrieved from cudnn RNN sample.
-    mytester:assertalmosteq(checkSums.localSumi, 1.388634E+01, tolerance, 'checkSum with reference for localsumi failed')
-    mytester:assertalmosteq(checkSums.localSumh, 1.288997E+01, tolerance, 'checkSum with reference for localSumh failed')
-    mytester:assertalmosteq(checkSums.localSumdi, 1.288729E+01, tolerance, 'checkSum with reference for localSumdi failed')
-    mytester:assertalmosteq(checkSums.localSumdh, 1.279004E+01, tolerance, 'checkSum with reference for localSumdh failed')
+    mytester:assertalmosteq(checkSums.localSumi, 1.388634E+01, tinytol, 'checkSum with reference for localsumi failed')
+    mytester:assertalmosteq(checkSums.localSumh, 1.288997E+01, tinytol, 'checkSum with reference for localSumh failed')
+    mytester:assertalmosteq(checkSums.localSumdi, 1.288729E+01, tinytol, 'checkSum with reference for localSumdi failed')
+    mytester:assertalmosteq(checkSums.localSumdh, 1.279004E+01, tinytol, 'checkSum with reference for localSumdh failed')
     mytester:assertalmosteq(checkSums.localSumdw, 7.061081E+07, tolerance, 'checkSum with reference for localSumdw failed')
 end
 
@@ -140,10 +143,10 @@ function cudnntest.testBiDirectionalTANHRNN()
 
     local checkSums = getRNNCheckSums(miniBatch, seqLength, hiddenSize, numberOfLayers, numberOfLinearLayers, rnn, batchFirst, nbDirections)
     -- Checksums to check against are retrieved from cudnn RNN sample.
-    mytester:assertalmosteq(checkSums.localSumi, 1.388634E+01, tolerance, 'checkSum with reference for localsumi failed')
-    mytester:assertalmosteq(checkSums.localSumh, 1.288997E+01, tolerance, 'checkSum with reference for localSumh failed')
-    mytester:assertalmosteq(checkSums.localSumdi, 1.288729E+01, tolerance, 'checkSum with reference for localSumdi failed')
-    mytester:assertalmosteq(checkSums.localSumdh, 1.279004E+01, tolerance, 'checkSum with reference for localSumdh failed')
+    mytester:assertalmosteq(checkSums.localSumi, 1.388634E+01, tinytol, 'checkSum with reference for localsumi failed')
+    mytester:assertalmosteq(checkSums.localSumh, 1.288997E+01, tinytol, 'checkSum with reference for localSumh failed')
+    mytester:assertalmosteq(checkSums.localSumdi, 1.288729E+01, tinytol, 'checkSum with reference for localSumdi failed')
+    mytester:assertalmosteq(checkSums.localSumdh, 1.279004E+01, tinytol, 'checkSum with reference for localSumdh failed')
     mytester:assertalmosteq(checkSums.localSumdw, 7.061081E+07, tolerance, 'checkSum with reference for localSumdw failed')
 end
 
@@ -160,11 +163,11 @@ function cudnntest.testBiDirectionalLSTMRNN()
     local checkSums = getRNNCheckSums(miniBatch, seqLength, hiddenSize, numberOfLayers, numberOfLinearLayers, rnn, batchFirst, nbDirections)
     -- Checksums to check against are retrieved from cudnn RNN sample.
     mytester:assertalmosteq(checkSums.localSumi, 3.134097E+04, tolerance, 'checkSum with reference for localsumi failed')
-    mytester:assertalmosteq(checkSums.localSumc, 3.845626E+00, tolerance, 'checkSum with reference for localSumc failed')
-    mytester:assertalmosteq(checkSums.localSumh, 1.922855E+00, tolerance, 'checkSum with reference for localSumh failed')
-    mytester:assertalmosteq(checkSums.localSumdi, 4.794993E+00, tolerance, 'checkSum with reference for localSumdi failed')
+    mytester:assertalmosteq(checkSums.localSumc, 3.845626E+00, tinytol, 'checkSum with reference for localSumc failed')
+    mytester:assertalmosteq(checkSums.localSumh, 1.922855E+00, tinytol, 'checkSum with reference for localSumh failed')
+    mytester:assertalmosteq(checkSums.localSumdi, 4.794993E+00, tinytol, 'checkSum with reference for localSumdi failed')
     mytester:assertalmosteq(checkSums.localSumdc, 2.870925E+04, tolerance, 'checkSum with reference for localSumdc failed')
-    mytester:assertalmosteq(checkSums.localSumdh, 2.468645E+00, tolerance, 'checkSum with reference for localSumdh failed')
+    mytester:assertalmosteq(checkSums.localSumdh, 2.468645E+00, tinytol, 'checkSum with reference for localSumdh failed')
     mytester:assertalmosteq(checkSums.localSumdw, 1.121568E+08, tolerance, 'checkSum with reference for localSumdw failed')
 end
 
@@ -184,8 +187,8 @@ function cudnntest.testBiDirectionalGRURNN()
     local checkSums = getRNNCheckSums(miniBatch, seqLength, hiddenSize, numberOfLayers, numberOfLinearLayers, rnn, batchFirst, nbDirections)
     -- Checksums to check against are retrieved from cudnn RNN sample.
     mytester:assertalmosteq(checkSums.localSumi, 6.555183E+04, tolerance, 'checkSum with reference for localsumi failed')
-    mytester:assertalmosteq(checkSums.localSumh, 5.830924E+00, tolerance, 'checkSum with reference for localSumh failed')
-    mytester:assertalmosteq(checkSums.localSumdi, 4.271801E+00, tolerance, 'checkSum with reference for localSumdi failed')
+    mytester:assertalmosteq(checkSums.localSumh, 5.830924E+00, tinytol, 'checkSum with reference for localSumh failed')
+    mytester:assertalmosteq(checkSums.localSumdi, 4.271801E+00, tinytol, 'checkSum with reference for localSumdi failed')
     mytester:assertalmosteq(checkSums.localSumdh, 6.555744E+04, tolerance, 'checkSum with reference for localSumdh failed')
     mytester:assertalmosteq(checkSums.localSumdw, 1.701796E+08, tolerance, 'checkSum with reference for localSumdw failed')
 end

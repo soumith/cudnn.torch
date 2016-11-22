@@ -120,7 +120,8 @@ function RNN:resetRNNDescriptor()
    if not self.rnnDesc then
       self.rnnDesc = self:createRNNDescriptors(1)
    end
-   errcheck('cudnnSetRNNDescriptor',
+   errcheck('cudnnSetRNNDescriptor_v6',
+            cudnn.getHandle(),
             self.rnnDesc[0],
             self.hiddenSize,
             self.numLayers,
@@ -128,6 +129,7 @@ function RNN:resetRNNDescriptor()
             self.inputMode,
             self.bidirectional,
             self.mode,
+            'CUDNN_RNN_ALGO_STANDARD',
             self.datatype)
 end
 
