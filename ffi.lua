@@ -1626,7 +1626,7 @@ else
     end
 
     if not ok then
-        error([['libcudnn (R5) not found in library path.
+        error([['libcudnn (R6) not found in library path.
 Please install CuDNN from https://developer.nvidia.com/cuDNN
 Then make sure files named as libcudnn.so.6 or libcudnn.6.dylib are placed in
 your library load path (for example /usr/local/lib , or manually add a path to LD_LIBRARY_PATH)
