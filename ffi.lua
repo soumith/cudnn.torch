@@ -1607,7 +1607,7 @@ your library load path (for example /usr/local/lib , or manually add a path to L
 
 Alternatively, set the path to libcudnn.so.5 or libcudnn.5.dylib
 to the environment variable CUDNN_PATH and rerun torch.
-For example: export CUDNN_PATH = "/usr/local/cuda/lib64/libcudnn.so.5"
+For example: export CUDNN_PATH="/usr/local/cuda/lib64/libcudnn.so.5"
 ]])
     end
 end
