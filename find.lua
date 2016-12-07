@@ -2,7 +2,12 @@ local ffi = require 'ffi'
 
 local find = {}
 find.__index = find
---find.verbose=true
+
+-- default is to get verbose on errors
+find.verbose=false
+find.verboseError=true
+find.verboseFallback=true
+
 -- constants to index array tables below
 local Fwd, BwdFilter, BwdData = 1, 2, 3
 
@@ -64,54 +69,19 @@ local bwdDataAlgoNames = {
 
 local algoNames = {fwdAlgoNames, bwdFilterAlgoNames, bwdDataAlgoNames}
 
--- this function is here and not in init.lua (and has the suffix) as generic
--- getConvolutionDescriptor methood should have native lua tables instead of FFI
--- (like setConvolutionDescriptor does, to be used with it)
--- However this is counterproductive for the purposes it's used in this module
-local function getConvolutionDescriptor_ffi(desc)
-   local CUDNN_DIM_MAX=8
-   local data = {
-      dim_p = ffi.new('int[1]'),
-      padA = ffi.new('int[?]', CUDNN_DIM_MAX),
-      filterStrideA = ffi.new('int[?]', CUDNN_DIM_MAX),
-      upscaleA = ffi.new('int[?]', CUDNN_DIM_MAX),
-      mode_p = ffi.new('cudnnConvolutionMode_t[1]'),
-      math_p = ffi.new('cudnnDataType_t[1]')
-   }
-
-   local status = cudnn.call('cudnnGetConvolutionNdDescriptor', desc[0], CUDNN_DIM_MAX,
-                             data.dim_p, data.padA, data.filterStrideA,
-                             data.upscaleA, data.mode_p, data.math_p)
-   if (status ~= ffi.C.CUDNN_STATUS_SUCCESS) then
-      if find.verbose or find.verboseError then
-         print("cudnnGetConvolutionNdDescriptor failed: ", tonumber(status))
-         return nil
-      end
+local function convDataString(layer)
+   local info = ''
+   if layer.convDescData then
+      local desc = layer.convDescData
+      info = ' convDesc=[mode : ' .. desc.mode .. ' datatype : ' .. desc.dataType .. ']'
    end
-
-   data.arrayLength = data.dim_p[0]
-   data.mode =     data.mode_p[0]
-   data.dataType = data.math_p[0]
-   return data
+   return info .. ' hash=' ..  layer.autotunerHash
 end
 
 local function verboseCall(layer, f, ...)
-   if find.verbose then
-        print("find:verboseCall: calling " .. f .. ", hash: ",  layer.autotunerHash)
-   end
    local status = cudnn.call(f, ...)
    if (status ~= ffi.C.CUDNN_STATUS_SUCCESS) and (find.verbose or find.verboseError) then
-      local prefix = "find:verboseCall:"
-      print( prefix .. f .. " failed: ", tonumber(status))
-      if layer.convDesc then
-         local desc = getConvolutionDescriptor_ffi(layer.convDesc)
-         if desc then
-            print (prefix .. ' conv desc mode : ', desc.mode, ' datatype : ', desc.datatype)
-         end
-      end
-   end
-   if find.verbose then
-      print("find:verboseCall: success, " .. f )
+      print("\n" .. f .. " failed: ", tonumber(status), convDataString(layer))
    end
    return status
 end
@@ -123,36 +93,33 @@ local function checkedCall(layer, f, ...)
       local str = ffi.string(cudnn.C.cudnnGetErrorString(status))
       error('Error in CuDNN: ' .. str .. ' ('..f..')')
    end
+   return status
 end
 find.checkedCall = checkedCall
 
 local function noFallback(layer)
-   if find.verbose then
-      print("find.defaultFallback: verboseCall failed for:  ", layer.autotunerHash)
+   if find.verbose or find.verboseFallback then
+      print("\nfind.defaultFallback: verboseCall failed for:  ", convDataString(layer))
    end
    return false
 end
 
 local function defaultFallback(layer, replay)
    -- read conv descriptor
-   local convDescData = getConvolutionDescriptor_ffi(layer.convDesc)
-
-   if convDescData and convDescData.dataType == ffi.C.CUDNN_DATA_HALF then
-      if find.verbose then
+   local convDescData = layer.convDescData
+   if convDescData and convDescData.dataType == "CUDNN_DATA_HALF" then
+      if find.verbose or find.verboseFallback then
          if replay then
-            print("find.defaultFallback: replay for ", layer.autotunerHash)
+            print("\nfind.defaultFallback: replay for ", convDataString(layer))
          else
-            print("find.defaultFallback: no 16-bit float algo found, will try 32 bits for ", layer.autotunerHash)
+            print("\nfind.defaultFallback: no 16-bit float algo found, will try 32 bits for ", convDataString(layer))
          end
+         print("[ *** Set find.verboseFallback to false to disable this message *** ]")
       end
-      -- using direct FFI call, not cudnn.setConvolutionDescriptor, for efficiency and clarity
-      checkedCall(layer, 'cudnnSetConvolutionNdDescriptor', layer.convDesc[0],
-                  convDescData.arrayLength,
-                  convDescData.padA,
-                  convDescData.filterStrideA,
-                  convDescData.upscaleA,
-                  convDescData.mode,
-                  ffi.C.CUDNN_DATA_FLOAT)
+      -- update our record with fallback value
+      convDescData.dataType = ffi.C.CUDNN_DATA_FLOAT
+      -- update the descriptor in CUDNN
+      cudnn.setConvolutionDescriptor(convDescData, layer.convDesc);
       return true
    else
       return false
@@ -358,6 +325,10 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
            local function callCudnn(layer)
               local ret = 0
               validResults = 0
+              if not layer.convDesc or not layer.convDesc[0] then
+                 error("No convDesc set on layer!")
+              end
+
               if self.algoFamily == FindExFamily then
                  -- query temp workspace size
                  local tempWorkspace, tempWorkspaceSize = cudnn.getSharedWorkspace()
@@ -375,6 +346,10 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
                  else
                     -- GetFamily: emulate findXXX results layout
                     numPerfResults[0]=1
+                    perfResults[0].algo = 0
+                    perfResults[0].memory = 0
+                    perfResults[0].status = 1
+
                     local algWorkspaceLimit = layer.workspace_limit
                        or (layer.nInputPlane * layer.kH * layer.kW * layer.weight.elementSize())
 
@@ -382,6 +357,10 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
                                      cudnn.getHandle(),
                                      params[1], params[3], layer.convDesc[0], params[6],
                                      algSearchMode, algWorkspaceLimit, algType[findAPI_idx])
+                    if ret ~= 0 then
+                       return ret
+                    end
+
                     local retAlgo = algType[findAPI_idx][0]
                     if find.verbose then
                        print(string.format(
@@ -395,6 +374,9 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
                                      cudnn.getHandle(),
                                      params[1], params[3], layer.convDesc[0], params[6],
                                      retAlgo, bufSize:data())
+                    if ret ~= 0 then
+                       return ret
+                    end
                     if find.verbose then
                        print(string.format(
                                 "\n" .. getWSAlgos[findAPI_idx]  .. ": bufSize: %d, current ws: %d",
@@ -428,15 +410,13 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
                        if (useFallback) then fallback = "[FALLBACK]"  end
                        print(string.format(
                                 "\n" .. API .. " algo: %s (%d, status: %d), memory: %8d, count: %d"
-                                   .. " hash: %45s " .. cacheHit .. fallback,
+                                   .. " hash: %s " .. cacheHit .. fallback,
                                 algoNames[findAPI_idx][cachedAlgo[validResults].algo+1], cachedAlgo[validResults].algo,  cachedAlgo[validResults].status,
-                                cachedAlgo[validResults].memory, r, layer.autotunerHash))
+                                cachedAlgo[validResults].memory, r, convDataString(layer)))
                     end
                  end
               end
-              if validResults < 1  and find.verbose then
-                 print("Could not find any valid convolution algorithms for sizes: " .. layer.autotunerHash)
-                 -- todo: add case of multi-stream not fitting in size
+              if validResults < 1 then
                  return 1
               end
               return 0
@@ -449,9 +429,10 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
               if self.fallback and self.fallback(layer) then
                  useFallback = true;
                  status = callCudnn(layer)
-                 if status ~= 0  or validResults < 1 then
-                    error ("Fallback attempt failed for " .. API .. ', sizes: ' .. layer.autotunerHash)
-                 end
+              end
+              -- check again
+              if status ~= 0  or validResults < 1 then
+                 error (API .. ' failed, sizes: ' .. convDataString(layer))
               end
            end
            self:store(layer, findAPI_idx, cachedAlgo)
@@ -475,9 +456,9 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
            local fallback = ""
            if (useFallback) then fallback = "[FALLBACK]"  end
            print(string.format(
-                    "\n" .. API  .. ": %s(%d)[%d of %d] Workspace: %8fM (current ws size %fM, max: %dM free: %dM)  hash: %45s" .. cacheHit .. fallback,
+                    "\n" .. API  .. ": %s(%d)[%d of %d] Workspace: %8fM (current ws size %fM, max: %dM free: %dM)  hash: %s" .. cacheHit .. fallback,
                     algoNames[findAPI_idx][cachedAlgo[retAlgo].algo+1], cachedAlgo[retAlgo].algo, retAlgo, #cachedAlgo,
-                    tonumber(cachedAlgo[retAlgo].memory)/Meg, curWorkspaceSize/Meg, self.maxWorkspaceSize/Meg, freeMemory/Meg, layer.autotunerHash))
+                    tonumber(cachedAlgo[retAlgo].memory)/Meg, curWorkspaceSize/Meg, self.maxWorkspaceSize/Meg, freeMemory/Meg, convDataString(layer)))
         end
         return cachedAlgo[retAlgo].algo
 end
@@ -513,9 +494,9 @@ end
 
 
 function find:forwardAlgorithm(layer, params)
-   if layer.fmode then 
-     setupWS(layer, params, layer.fmode, Fwd) 
-     return layer.fmode 
+   if layer.fmode then
+     setupWS(layer, params, layer.fmode, Fwd)
+     return layer.fmode
    end
    local algSearchMode = 'CUDNN_CONVOLUTION_FWD_SPECIFY_WORKSPACE_LIMIT'
    if layer.fastest_mode or cudnn.fastest == true then
@@ -526,9 +507,9 @@ end
 
 function find:backwardFilterAlgorithm(layer, params)
    -- Check if we are in "sticky" mode
-   if layer.bwmode then 
-     setupWS(layer, params, layer.bwmode, BwdFilter) 
-     return layer.bwmode 
+   if layer.bwmode then
+     setupWS(layer, params, layer.bwmode, BwdFilter)
+     return layer.bwmode
    end
    local algSearchMode = 'CUDNN_CONVOLUTION_BWD_FILTER_NO_WORKSPACE'
    if layer.fastest_mode or cudnn.fastest == true then
@@ -540,9 +521,9 @@ end
 
 function find:backwardDataAlgorithm(layer, params)
    -- Check if we are in "sticky" mode
-   if layer.bdmode then 
-     setupWS(layer, params, layer.bdmode, BwdData) 
-     return layer.bdmode 
+   if layer.bdmode then
+     setupWS(layer, params, layer.bdmode, BwdData)
+     return layer.bdmode
    end
    local algSearchMode = 'CUDNN_CONVOLUTION_BWD_DATA_NO_WORKSPACE'
    if layer.fastest_mode  or cudnn.fastest == true then

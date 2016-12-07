@@ -47,11 +47,11 @@ function SpatialFullConvolution:createIODescriptors(input)
         self.pad = {self.padH, self.padW}
         self.stride = {self.dH, self.dW}
 
-        self.convDesc = cudnn.setConvolutionDescriptor(
-           { padA = self.pad,
-             filterStrideA = self.stride,
-             dataType = cudnn.configmap(torch.type(self.weight))
-           })
+        self.convDescData = { padA = self.pad,
+                              filterStrideA = self.stride,
+                              dataType = cudnn.configmap(torch.type(self.weight))
+        }
+        self.convDesc = cudnn.setConvolutionDescriptor(self.convDescData)
 
         -- get output shape, resize output
         local iwidth = input:size(4)
