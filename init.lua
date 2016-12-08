@@ -16,9 +16,6 @@ cudnn.fastest = false
 -- Warning: this option is experimental and assumes at least 2 warmup iterations!
 cudnn.useFindEx = false
 
--- if true, use 'pseudo-fp16' (half storage, float math) even if true fp16 math is available
-cudnn.useFloatMathForHalf = false
-
 -- amount of memory to use on 1st iteration for FindEx
 cudnn.initialWorkspaceBytes = 1024
 
@@ -209,17 +206,19 @@ end
 
 
 function cudnn.setConvolutionDescriptor(data, desc)
-   local dim  = data.arrayLength or #data.padA
-   local upscale = data.upscaleA or torch.IntStorage(dim):fill(1)
+   if not data.arrayLength then data.arrayLength = #data.padA end
+   if not data.upscaleA then data.upscaleA =  torch.IntStorage(data.arrayLength):fill(1) end
+   if not data.mode then data.mode = 'CUDNN_CROSS_CORRELATION' end
+
    local myDesc = desc or cudnn.createDescriptors(
       1, 'struct cudnnConvolutionStruct*[?]',
       'cudnnCreateConvolutionDescriptor', 'cudnnDestroyConvolutionDescriptor')
    errcheck('cudnnSetConvolutionNdDescriptor', myDesc[0],
-            dim,
+            data.arrayLength,
             torch.IntTensor(data.padA):data(),
             torch.IntTensor(data.filterStrideA):data(),
-            torch.IntTensor(upscale):data(),
-            data.mode or 'CUDNN_CROSS_CORRELATION',
+            torch.IntTensor(data.upscaleA):data(),
+            data.mode,
             data.dataType)
    return myDesc
 end
