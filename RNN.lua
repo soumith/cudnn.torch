@@ -304,7 +304,7 @@ function RNN:updateOutput(input)
       assert(hx:dim() == 3, 'hiddenInput must have 3 dimensions: numLayers, miniBatch, hiddenSize')
       assert(hx:size(1) == self.numLayers * self.numDirections, 'hiddenInput has incorrect number of layers!')
       assert(hx:size(2) == self.miniBatch, 'hiddenInput has incorrect number of minibathes!')
-      assert(hx:size(3) == self.hiddenSize, 'hiddenIinput has incorrect size!')
+      assert(hx:size(3) == self.hiddenSize, 'hiddenInput has incorrect size!')
       assert(hx:isContiguous(), 'hiddenInput must be contiguous!') end
 
    if cx then
@@ -498,7 +498,7 @@ function RNN:accGradParameters(input, gradOutput, scale)
       assert(hx:dim() == 3, 'hiddenInput must have 3 dimensions: numLayers, miniBatch, hiddenSize')
       assert(hx:size(1) == self.numLayers * self.numDirections, 'hiddenInput has incorrect number of layers!')
       assert(hx:size(2) == self.miniBatch, 'hiddenInput has incorrect minibatch size!')
-      assert(hx:size(3) == self.hiddenSize, 'hiddenIinput has incorrect size!')
+      assert(hx:size(3) == self.hiddenSize, 'hiddenInput has incorrect size!')
       assert(hx:isContiguous(), 'hiddenInput must be contiguous!')
    end
 
