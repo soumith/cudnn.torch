@@ -293,12 +293,24 @@ function RNN:updateOutput(input)
    self.output:resize(oSize, oStride)
    local y = self.output
    local w = self.weight
-   local hy = self:resizeHidden(self.hiddenOutput):zero()
-   local cy = self:resizeHidden(self.cellOutput):zero()
 
    -- Optionally use hiddenInput/cellInput parameters
+   if self.rememberStates then
+        if self.hiddenOutput:nDimension() == 3 and self.hiddenOutput:size(1) == self.numLayers * self.numDirections and 
+           self.hiddenOutput:size(2) == self.miniBatch and self.hiddenOutput:size(3) == self.hiddenSize then
+	       self.hiddenInput = self.hiddenOutput:clone()
+	       if self.cellOutput and self.cellOutput:isSameSizeAs(self.hiddenOutput) then
+ 	           self.cellInput = self.cellOutput:clone()
+               end
+        else
+	   self.hiddenInput = nil
+           self.cellInput = nil
+        end     
+   end
    local hx = self.hiddenInput
    local cx = self.cellInput
+   local hy = self:resizeHidden(self.hiddenOutput):zero()
+   local cy = self:resizeHidden(self.cellOutput):zero()
 
    if hx then
       assert(hx:dim() == 3, 'hiddenInput must have 3 dimensions: numLayers, miniBatch, hiddenSize')
@@ -366,12 +378,6 @@ function RNN:updateOutput(input)
 	       wsSize)
    end
    if self.sync then cutorch.synchronize() end
-   if self.rememberStates then
-	self.hiddenInput = self.hiddenOutput:clone()
-	if self.cellOutput then
-	   self.cellInput = self.cellOutput:clone()
-        end
-   end
    if (self.batchFirst) then
       self.output = self.output:transpose(1, 2)
    end
