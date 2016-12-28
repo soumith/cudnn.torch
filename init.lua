@@ -5,6 +5,8 @@ require('cudnn.ffi')
 local C = cudnn.C
 local ffi = require 'ffi'
 
+local thc = ffi.load("THC")
+
 --------------------------------------------------------------------
 -- defaults, each should be overrideable via env var:
 --------------------------------------------------------------------
@@ -148,7 +150,7 @@ end
 
 function cudnn.call(f, ...)
     C.cudnnSetStream(cudnn.getHandle(),
-                     ffi.C.THCState_getCurrentStream(cutorch.getState()))
+                     thc.THCState_getCurrentStream(cutorch.getState()))
     return C[f](...)
 end
 
