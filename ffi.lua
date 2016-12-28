@@ -1592,7 +1592,7 @@ if CUDNN_PATH then
     cudnn.C = ffi.load(CUDNN_PATH)
 else
 
-    local libnames = {'libcudnn.so.5', 'libcudnn.5.dylib'}
+    local libnames = {'libcudnn.so.5', 'libcudnn.5.dylib', 'cudnn64_5.dll'}
     local ok = false
     for i=1,#libnames do
         ok = pcall(function () cudnn.C = ffi.load(libnames[i]) end)
