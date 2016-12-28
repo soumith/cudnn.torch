@@ -375,21 +375,23 @@ function find:setupAlgo(layer, findAPI_idx, algSearchMode, params)
                                 algWorkspaceLimit,
                                 algSearchMode))
                     end
-                    local bufSize = torch.LongTensor(1)
+                    local bufSizeptr = ffi.new("size_t[1]")
                     ret = cudnn.call(getWSAlgos[findAPI_idx],
                                      cudnn.getHandle(),
                                      params[1], params[3], layer.convDesc[0], params[6],
-                                     retAlgo, bufSize:data())
+                                     retAlgo, bufSizeptr)
+                    local bufSize = tonumber(bufSizeptr[0])                 
+  
                     if ret ~= 0 then
                        return ret
                     end
                     if find.verbose then
                        print(string.format(
                                 "\n" .. getWSAlgos[findAPI_idx]  .. ": bufSize: %d, current ws: %d",
-                                tonumber(bufSize[1]), tonumber(curWorkspaceSize)))
+                                bufSize, tonumber(curWorkspaceSize)))
                     end
                     perfResults[0].algo = retAlgo
-                    perfResults[0].memory = bufSize[1]
+                    perfResults[0].memory = bufSize
                     perfResults[0].status = ret
                  end
               end
