@@ -537,12 +537,13 @@ function find:prepare(layer, input_slice, output_slice)
 end
 
 local function setupWS(layer, params, algo, fn)
-     local bufSize = torch.LongTensor(1)
+     local bufSizeptr = ffi.new("size_t[1]")
      cudnn.errcheck(getWSAlgos[fn],
                                      cudnn.getHandle(),
                                      params[1], params[3], layer.convDesc[0], params[6],
-                                     algo, bufSize:data())
-     cudnn.setSharedWorkspaceSize(bufSize[1], true)
+                                     algo, bufSizeptr)
+     local bufSize = tonumber(bufSizeptr[0])                 
+     cudnn.setSharedWorkspaceSize(bufSize, true)
 end
 
 
