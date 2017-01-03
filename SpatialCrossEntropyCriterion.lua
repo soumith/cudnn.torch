@@ -17,21 +17,8 @@ local SpatialCrossEntropyCriterion, parent = torch.class('cudnn.SpatialCrossEntr
 function SpatialCrossEntropyCriterion:__init(weights)
     parent.__init(self)
     self.slsm = cudnn.SpatialLogSoftMax()
-    self.nll = nn.ClassNLLCriterion(weights)
+    self.nll = nn.SpatialClassNLLCriterion(weights)
     self.sizeAverage = true
-end
-
-local transpose = function(input)
-    input = input:transpose(2,4):transpose(2,3):contiguous() -- bdhw -> bwhd -> bhwd
-    input = input:view(input:size(1)*input:size(2)*input:size(3), input:size(4))
-    return input
-end
-
-local transposeBack = function(input, originalInput)
-    input = input:view(originalInput:size(1), originalInput:size(3),
-                       originalInput:size(4), originalInput:size(2))
-    input = input:transpose(2,4):transpose(3,4):contiguous()  -- bhwd -> bdwh -> bdhw
-    return input
 end
 
 function SpatialCrossEntropyCriterion:updateOutput(input, target)
@@ -47,7 +34,7 @@ function SpatialCrossEntropyCriterion:updateOutput(input, target)
     self.nll.sizeAverage = self.sizeAverage
 
     -- fold the height and width dims into the mini-batch dim.
-    self.nll:updateOutput(transpose(self.slsm.output), target:view(-1))
+    self.nll:updateOutput(self.slsm.output, target)
     self.output = self.nll.output
     return self.output
 end
@@ -59,10 +46,10 @@ function SpatialCrossEntropyCriterion:updateGradInput(input, target)
     assert(input:size(3) == target:size(2), 'input and target should be of same size')
     assert(input:size(4) == target:size(3), 'input and target should be of same size')
 
-    self.nll:updateGradInput(transpose(self.slsm.output), target:view(-1))
+    self.nll:updateGradInput(self.slsm.output, target)
 
     -- unfold the height and width dims back
-    self.slsm:updateGradInput(input, transposeBack(self.nll.gradInput, input))
+    self.slsm:updateGradInput(input, self.nll.gradInput)
     self.gradInput = self.slsm.gradInput
     return self.gradInput
 end
