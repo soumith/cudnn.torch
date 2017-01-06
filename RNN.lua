@@ -52,16 +52,17 @@ function RNN:reset(stdv)
    self:resetRNNDescriptor()
    self:resetIODescriptors()
 
-   local weightSize = torch.LongTensor(1)
+   local weightSizePtr = ffi.new("size_t[1]")
    errcheck('cudnnGetRNNParamsSize',
             cudnn.getHandle(),
             self.rnnDesc[0],
             self.xDescs[0],
-            weightSize:data(),
+            weightSizePtr,
 	    self.datatype)
+   local weightSize = tonumber(weightSizePtr[0])
    local elemSize = self.weight:elementSize()
-   weightSize[1] = torch.floor((weightSize[1] + elemSize - 1) / elemSize)
-   self.weight:resize(weightSize[1])
+   weightSize = torch.floor((weightSize + elemSize - 1) / elemSize)
+   self.weight:resize(weightSize)
    self.weight:uniform(-stdv, stdv)
    self.gradWeight:resizeAs(self.weight):zero()
 end
@@ -100,19 +101,20 @@ function RNN:resetDropoutDescriptor()
       self.dropoutDesc = self:createDropoutDescriptors(1)
    end
 
-   self.dropoutStatesSize = torch.LongTensor(1)
+   local dropoutStatesSizePtr = ffi.new("size_t[1]")
    errcheck('cudnnDropoutGetStatesSize',
             cudnn.getHandle(),
-            self.dropoutStatesSize:data())
+            dropoutStatesSizePtr)
+   self.dropoutStatesSize = tonumber(dropoutStatesSizePtr[0])
    self.dropoutStates = self.dropoutStates or torch.CudaTensor()
-   local nElem = ((self.dropoutStatesSize[1]-1)/self.dropoutStates:elementSize()+1)
+   local nElem = ((self.dropoutStatesSize -1)/self.dropoutStates:elementSize()+1)
    self.dropoutStates:resize(nElem)
 
    errcheck('cudnnSetDropoutDescriptor',
             self.dropoutDesc[0],
             cudnn.getHandle(),
             self.dropout,
-            self.dropoutStates:data(), self.dropoutStatesSize[1],
+            self.dropoutStates:data(), self.dropoutStatesSize,
             self.seed)
 end
 
@@ -327,27 +329,29 @@ function RNN:updateOutput(input)
       assert(cx:isContiguous(), 'cellInput must be contiguous!')
    end
 
-   local workspaceSize = torch.LongTensor(1)
+   local workspaceSizePtr = ffi.new("size_t[1]")
    errcheck('cudnnGetRNNWorkspaceSize',
             cudnn.getHandle(),
             self.rnnDesc[0],
 	    self.seqLength,
             self.xDescs,
-            workspaceSize:data())
-   cudnn.setSharedWorkspaceSize(workspaceSize[1], true)
+            workspaceSizePtr)
+   local workspaceSize = tonumber(workspaceSizePtr[0])
+   cudnn.setSharedWorkspaceSize(workspaceSize, true)
    local wsPtr, wsSize = cudnn.getSharedWorkspace()
 
    if self.train then
-      local reserveSize = torch.LongTensor(1)
+      local reserveSizePtr = ffi.new("size_t[1]")
       errcheck('cudnnGetRNNTrainingReserveSize',
                cudnn.getHandle(),
                self.rnnDesc[0],
 	       self.seqLength,
                self.xDescs,
-               reserveSize:data())
+               reserveSizePtr)
+      local reserveSize = tonumber(reserveSizePtr[0])
       local elemSize = self.reserve:elementSize()
-      reserveSize[1] = torch.floor((reserveSize[1] + elemSize - 1) / elemSize)
-      self.reserve:resize(reserveSize[1])
+      reserveSize = torch.floor((reserveSize + elemSize - 1) / elemSize)
+      self.reserve:resize(reserveSize)
       errcheck('cudnnRNNForwardTraining',
                cudnn.getHandle(),
                self.rnnDesc[0],
@@ -444,14 +448,15 @@ function RNN:updateGradInput(input, gradOutput)
       assert(dcy:size(3) == self.hiddenSize, 'gradCellOutput has incorrect size!')
       assert(dcy:isContiguous(), 'gradCellOutput must be contiguous!')
    end
-   local workspaceSize = torch.LongTensor(1)
+   local workspaceSizePtr = ffi.new("size_t[1]")
    errcheck('cudnnGetRNNWorkspaceSize',
             cudnn.getHandle(),
             self.rnnDesc[0],
 	    self.seqLength,
             self.xDescs,
-            workspaceSize:data())
-   cudnn.setSharedWorkspaceSize(workspaceSize[1], true)
+            workspaceSizePtr)
+   local workspaceSize = tonumber(workspaceSizePtr[0])
+   cudnn.setSharedWorkspaceSize(workspaceSize, true)
    local wsPtr, wsSize = cudnn.getSharedWorkspace()
 
    errcheck('cudnnRNNBackwardData',
@@ -520,14 +525,15 @@ function RNN:accGradParameters(input, gradOutput, scale)
                self.dw:data(),
                scaleTensor:data())
    end
-   local workspaceSize = torch.LongTensor(1)
+   local workspaceSizePtr = ffi.new("size_t[1]")
    errcheck('cudnnGetRNNWorkspaceSize',
             cudnn.getHandle(),
             self.rnnDesc[0],
 	    self.seqLength,
             self.xDescs,
-            workspaceSize:data())
-   cudnn.setSharedWorkspaceSize(workspaceSize[1], true)
+            workspaceSizePtr)
+   local workspaceSize = tonumber(workspaceSizePtr[0])
+   cudnn.setSharedWorkspaceSize(workspaceSize, true)
    local wsPtr, wsSize = cudnn.getSharedWorkspace()
 
    errcheck('cudnnRNNBackwardWeights',
