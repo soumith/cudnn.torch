@@ -210,7 +210,7 @@ end
 
 function cudnn.setConvolutionDescriptor(data, desc)
    if not data.arrayLength then data.arrayLength = #data.padA end
-   if not data.upscaleA then data.upscaleA =  torch.IntStorage(data.arrayLength):fill(1) end
+   if not data.dilationA then data.dilationA =  {1,1,1 }  end -- assume maximum length==3
    if not data.mode then data.mode = 'CUDNN_CROSS_CORRELATION' end
 
    local myDesc = desc or cudnn.createDescriptors(
@@ -220,7 +220,7 @@ function cudnn.setConvolutionDescriptor(data, desc)
             data.arrayLength,
             torch.IntTensor(data.padA):data(),
             torch.IntTensor(data.filterStrideA):data(),
-            torch.IntTensor(data.upscaleA):data(),
+            torch.IntTensor(data.dilationA):data(),
             data.mode,
             data.dataType)
    return myDesc
@@ -322,6 +322,8 @@ cudnn.find = require('cudnn.find')
 
 require('cudnn.SpatialConvolution')
 require('cudnn.VolumetricConvolution')
+require('cudnn.SpatialDilatedConvolution')
+require('cudnn.VolumetricDilatedConvolution')
 require('cudnn.SpatialFullConvolution')
 require('cudnn.VolumetricFullConvolution')
 require('cudnn.Pooling')
