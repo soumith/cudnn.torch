@@ -1617,7 +1617,7 @@ if CUDNN_PATH then
     print('Found Environment variable CUDNN_PATH = ' .. CUDNN_PATH)
     cudnn.C = ffi.load(CUDNN_PATH)
 else
-    local libnames = {'libcudnn.so.' .. tostring(CUDNN_MAJOR), 'libcudnn.' .. tostring(CUDNN_MAJOR)  .. '.dylib', 'cudnn64_5.dll'}
+    local libnames = {'libcudnn.so.6', 'libcudnn.6.dylib', 'cudnn64_6.dll'}
     local ok = false
     for i=1,#libnames do
         ok = pcall(function () cudnn.C = ffi.load(libnames[i]) end)
