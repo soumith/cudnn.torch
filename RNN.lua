@@ -37,12 +37,27 @@ function RNN:__init(inputSize, hiddenSize, numLayers, batchFirst, dropout, remem
    self.cellOutput = torch.CudaTensor()
    self.gradHiddenInput = torch.CudaTensor()
    self.gradCellInput = torch.CudaTensor()
+   self.persistent = false -- set true to use persistent RNNs
    self:training()
    self:reset()
 end
 
 function RNN:setSync(sync)
-   self.sync = sync
+   if sync==nil then
+       self.sync = true
+   else     
+       self.sync = sync
+   end
+end
+
+function RNN:setPersist(persist)
+    --sets persistent mode for any argument except persist=false
+   if persist==nil then
+       self.persistent = true
+   else
+       self.persistent = persist
+   end
+   self:resetRNNDescriptor()
 end
 
 function RNN:reset(stdv)
@@ -122,7 +137,13 @@ function RNN:resetRNNDescriptor()
    if not self.rnnDesc then
       self.rnnDesc = self:createRNNDescriptors(1)
    end
-   errcheck('cudnnSetRNNDescriptor_v6',
+   local algo
+   if self.persistent then       
+       algo = 'CUDNN_RNN_ALGO_PERSIST_STATIC'
+   else
+       algo = 'CUDNN_RNN_ALGO_STANDARD'
+   end
+   local status = cudnn.call('cudnnSetRNNDescriptor_v6',
             cudnn.getHandle(),
             self.rnnDesc[0],
             self.hiddenSize,
@@ -131,8 +152,30 @@ function RNN:resetRNNDescriptor()
             self.inputMode,
             self.bidirectional,
             self.mode,
-            'CUDNN_RNN_ALGO_STANDARD',
+            algo,
             self.datatype)
+  if status ~= ffi.C.CUDNN_STATUS_SUCCESS then
+      if algo == 'CUDNN_RNN_ALGO_PERSIST_STATIC' then 
+          --try using standard algo
+          print("Warning: persistent RNN is not supported for this configuration. Switching to standard")
+          algo = 'CUDNN_RNN_ALGO_STANDARD'
+          self.persistent = false
+          errcheck('cudnnSetRNNDescriptor_v6',
+                cudnn.getHandle(),
+                self.rnnDesc[0],
+                self.hiddenSize,
+                self.numLayers,
+                self.dropoutDesc[0],
+                self.inputMode,
+                self.bidirectional,
+                self.mode,
+                algo,
+                self.datatype)
+      else
+          local str = ffi.string(C.cudnnGetErrorString(status))
+          error('Error in CuDNN: ' .. str .. ' (cudnnSetRNNDescriptor_v6)')          
+      end
+  end
 end
 
 function RNN:resetWeightDescriptor()
