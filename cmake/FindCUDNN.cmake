@@ -1,6 +1,5 @@
 # Distributed under the OSI-approved BSD 3-Clause License.  See accompanying
 # file Copyright.txt or https://cmake.org/licensing for details.
-
 #.rst:
 # FindCUDNN
 # -------
@@ -9,6 +8,9 @@
 #
 # Valiables that affect result:
 # <VERSION>, <REQUIRED>, <QUIETLY>: as usual
+#
+# <EXACT> : as usual, plus we do find '5.1' version if you wanted '5' 
+#           (not if you wanted '5.0', as usual)   
 #
 # Result variables
 # ^^^^^^^^^^^^^^^^
@@ -24,8 +26,12 @@
 # ``CUDNN_VERSION``
 #   Version of the CUDNN library we looked for 
 #
-
-# Unlike some other packages, we'll look for exact match (major) only.
+# Exported functions
+# ^^^^^^^^^^^^^^^^
+# function(CUDNN_INSTALL version dest_dir)
+#  This function will try to download and install CUDNN.
+#
+#
 
 function(CUDNN_INSTALL version dest_dir)
 
@@ -90,24 +96,58 @@ get_filename_component(__libpath_cudart ${CUDA_CUDART_LIBRARY} PATH)
 unset(CUDNN_LIBRARY CACHE)
 
 find_path(CUDNN_INCLUDE cudnn.h
-  PATHS ${CUDNN_PATH} $ENV{CUDNN_PATH} ${CUDA_TOOLKIT_INCLUDE}
+  PATHS ${CUDNN_PATH} $ENV{CUDNN_PATH} ${CUDA_TOOLKIT_INCLUDE} ENV{CMAKE_INCLUDE_PATH}
   DOC "Path to CUDNN include directory." )
+# We use major only in library search as major/minor is not entirely consistent among platforms.
+# Also, looking for exact minor version of .so is in general not a good idea.
+# More strict enforcement of minor/patch version is done if/when the header file is examined.
+if(CUDNN_FIND_VERSION_EXACT)
+  SET(__cudnn_ver_suffix ".${CUDNN_FIND_VERSION_MAJOR}")
+  SET(__cudnn_lib_win_name cudnn64_${CUDNN_FIND_VERSION_MAJOR}.dll)
+  SET(CUDNN_MAJOR_VERSION ${CUDNN_FIND_MAJOR_VERSION})
+else()
+  SET(__cudnn_lib_win_name cudnn64.dll)
+endif()
 
-find_library(CUDNN_LIBRARY NAMES libcudnn.so.${CUDNN_FIND_VERSION_MAJOR} libcudnn.${CUDNN_FIND_VERSION_MAJOR}.dylib cudnn64_${CUDNN_FIND_VERSION_MAJOR}.dll
-  PATH_SUFFIXES so.${CUDNN_FIND_VERSION_MAJOR}
+find_library(CUDNN_LIBRARY NAMES libcudnn.so${__cudnn_ver_suffix} libcudnn${__cudnn_ver_suffix}.dylib ${__cudnn_lib_win_name}
   PATHS $ENV{CUDNN_PATH} $ENV{LD_LIBRARY_PATH} ${__libpath_cudart}
-  DOC "Path to CUDNN library directory." )
+  DOC "CUDNN library." )
 
-# if(CUDNN_LIBRARY)
-  # Note: we do not require cudnn.h - check for CUDNN_INCLUDE if needed
-#  set(CUDNN_FOUND TRUE)
-#  message(STATUS "Found CUDNN library: ${CUDNN_LIBRARY}")
-#endif()
+mark_as_advanced(CUDNN_INCLUDE CUDNN_LIBRARY )
 
-# include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
+if(CUDNN_INCLUDE)
+  file(READ ${CUDNN_INCLUDE}/cudnn.h CUDNN_VERSION_FILE_CONTENTS)
+  string(REGEX MATCH "define CUDNN_MAJOR * +([0-9]+)"
+    CUDNN_MAJOR_VERSION "${CUDNN_VERSION_FILE_CONTENTS}")
+  string(REGEX REPLACE "define CUDNN_MAJOR * +([0-9]+)" "\\1"
+    CUDNN_MAJOR_VERSION "${CUDNN_MAJOR_VERSION}")
+  string(REGEX MATCH "define CUDNN_MINOR * +([0-9]+)"
+    CUDNN_MINOR_VERSION "${CUDNN_VERSION_FILE_CONTENTS}")
+  string(REGEX REPLACE "define CUDNN_MINOR * +([0-9]+)" "\\1"
+    CUDNN_MINOR_VERSION "${CUDNN_MINOR_VERSION}")
+  string(REGEX MATCH "define CUDNN_PATCHLEVEL * +([0-9]+)"
+    CUDNN_PATCH_VERSION "${CUDNN_VERSION_FILE_CONTENTS}")
+  string(REGEX REPLACE "define CUDNN_PATCHLEVEL * +([0-9]+)" "\\1"
+    CUDNN_PATCH_VERSION "${CUDNN_PATCH_VERSION}")  
+endif()
 
+if(NOT CUDNN_MAJOR_VERSION)
+  set(CUDNN_VERSION "???")
+else()
+## Fixing the case where 5.1 does not fit 'exact' 5.
+  set(CUDNN_VERSION ${CUDNN_MAJOR_VERSION}.${CUDNN_MINOR_VERSION})
+  if(CUDNN_FIND_VERSION_EXACT AND "x${CUDNN_FIND_VERSION_MINOR}" STREQUAL "x")
+    if(CUDNN_MAJOR_VERSION EQUAL CUDNN_FIND_VERSION_MAJOR)
+      set(CUDNN_VERSION ${CUDNN_FIND_VERSION})
+    endif()
+  endif()
+    math(EXPR CUDNN_VERSION_NUM "${CUDNN_MAJOR_VERSION} * 1000 + ${CUDNN_MINOR_VERSION} * 100 + ${CUDNN_PATCH_VERSION}")
+  message(STATUS "Found Cudnn_${CUDNN_VERSION_NUM} at ${CUDNN_INCLUDE} ${CUDNN_LIBRARY}")
+endif()
+
+
+  
 find_package_handle_standard_args(CUDNN
                                   REQUIRED_VARS CUDNN_LIBRARY 
                                   VERSION_VAR   CUDNN_VERSION)
 
-mark_as_advanced(CUDNN_INCLUDE CUDNN_LIBRARY )
