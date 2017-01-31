@@ -5,6 +5,9 @@ require('cudnn.ffi')
 local C = cudnn.C
 local ffi = require 'ffi'
 
+local thc = ffi.C
+if ffi.os == "Windows" then thc = ffi.load("THC") end
+
 --------------------------------------------------------------------
 -- defaults, each should be overrideable via env var:
 --------------------------------------------------------------------
@@ -15,9 +18,6 @@ cudnn.fastest = false
 -- use new cudnn FindEx APIs
 -- Warning: this option is experimental and assumes at least 2 warmup iterations!
 cudnn.useFindEx = false
-
--- if true, use 'pseudo-fp16' (half storage, float math) even if true fp16 math is available
-cudnn.useFloatMathForHalf = false
 
 -- amount of memory to use on 1st iteration for FindEx
 cudnn.initialWorkspaceBytes = 1024
@@ -151,7 +151,7 @@ end
 
 function cudnn.call(f, ...)
     C.cudnnSetStream(cudnn.getHandle(),
-                     ffi.C.THCState_getCurrentStream(cutorch.getState()))
+                     thc.THCState_getCurrentStream(cutorch.getState()))
     return C[f](...)
 end
 
@@ -209,17 +209,19 @@ end
 
 
 function cudnn.setConvolutionDescriptor(data, desc)
-   local dim  = data.arrayLength or #data.padA
-   local upscale = data.upscaleA or torch.IntStorage(dim):fill(1)
+   if not data.arrayLength then data.arrayLength = #data.padA end
+   if not data.dilationA then data.dilationA =  {1,1,1 }  end -- assume maximum length==3
+   if not data.mode then data.mode = 'CUDNN_CROSS_CORRELATION' end
+
    local myDesc = desc or cudnn.createDescriptors(
       1, 'struct cudnnConvolutionStruct*[?]',
       'cudnnCreateConvolutionDescriptor', 'cudnnDestroyConvolutionDescriptor')
    errcheck('cudnnSetConvolutionNdDescriptor', myDesc[0],
-            dim,
+            data.arrayLength,
             torch.IntTensor(data.padA):data(),
             torch.IntTensor(data.filterStrideA):data(),
-            torch.IntTensor(upscale):data(),
-            data.mode or 'CUDNN_CROSS_CORRELATION',
+            torch.IntTensor(data.dilationA):data(),
+            data.mode,
             data.dataType)
    return myDesc
 end
@@ -320,6 +322,8 @@ cudnn.find = require('cudnn.find')
 
 require('cudnn.SpatialConvolution')
 require('cudnn.VolumetricConvolution')
+require('cudnn.SpatialDilatedConvolution')
+require('cudnn.VolumetricDilatedConvolution')
 require('cudnn.SpatialFullConvolution')
 require('cudnn.VolumetricFullConvolution')
 require('cudnn.Pooling')

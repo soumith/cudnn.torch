@@ -22,6 +22,16 @@ local function Batch2D(t)
     return t:view(1, t:size(1), t:size(2), t:size(3))
 end
 
+local function scalar(tensor, v)
+   if v ~= 1 and v ~= 0 then
+      local a = torch.type(tensor) == 'torch.CudaDoubleTensor'
+            and torch.DoubleTensor({v}) or torch.FloatTensor({v})
+      return a:data()
+   else
+      return cudnn.scalar(tensor, v)
+   end
+end
+
 -- accumulates the bias into output.
 -- output is assumed to be allocated and given.
 cudnn.functional.bias2D_updateOutput = function(handle, bias, output)
@@ -36,17 +46,14 @@ end
 
 -- accumulates the gradients into gradBias.
 -- gradBias is assumed to be allocated and given.
-cudnn.functional.bias2D_accGradParameters = function(handle, gradOutput, gradBias, scale)
+cudnn.functional.bias2D_accGradParameters = function(handle, gradOutput, gradBias, scale, alpha)
     gradOutput = gradOutput:dim() == 3 and Batch2D(gradOutput) or gradOutput
-    scale = scale or 1.0
-    local scaleT = torch.type(gradBias) == 'torch.CudaDoubleTensor'
-       and torch.DoubleTensor({scale}) or torch.FloatTensor({scale})
     local oDesc = cudnn.toDescriptor(gradOutput)
     local biasDesc = cudnn.toDescriptor(gradBias:view(1, gradBias:nElement(),1,1))
     errcheck('cudnnConvolutionBackwardBias', handle,
-             scaleT:data(),
+             scalar(gradBias, scale or 1),
              oDesc[0], gradOutput:data(),
-             cudnn.scalar(gradOutput, 1),
+             scalar(gradBias, alpha or 1),
              biasDesc[0], gradBias:data())
 end
 
@@ -66,11 +73,10 @@ cudnn.functional.Convolution2D_updateOutput = function(handle, input, weight, ou
         filterDimA = {nOutputPlane, nInputPlane, kH, kW}})
 
    -- create a convolution descriptor
-   local convDesc = cudnn.setConvolutionDescriptor(
-      { padA = {padH, padW},
+   local convDescData = { padA = {padH, padW},
         filterStrideA = {strideH, strideW},
         dataType = getMathType(weight) }
-   );
+   local convDesc = cudnn.setConvolutionDescriptor(convDescData);
 
     -- create input descriptor
    local iDesc = cudnn.toDescriptor(input)
@@ -90,6 +96,7 @@ cudnn.functional.Convolution2D_updateOutput = function(handle, input, weight, ou
    local oDesc = cudnn.toDescriptor(output)
 
    local layer = {
+      convDescData = convDescData,
       convDesc = convDesc,
       weight = weight,
       nInputPlane = nInputPlane,
@@ -134,17 +141,17 @@ cudnn.functional.Convolution2D_updateGradInput = function(handle, input, weight,
         filterDimA = {nOutputPlane, nInputPlane, kH, kW} })
 
    -- create a convolution descriptor
-   local convDesc = cudnn.setConvolutionDescriptor(
-      { padA = {padH, padW},
-        filterStrideA = {strideH, strideW},
-        dataType = getMathType(weight)
-      }
-   );
+   local convDescData = { padA = {padH, padW},
+                          filterStrideA = {strideH, strideW},
+                          dataType = getMathType(weight)
+                        }
+   local convDesc = cudnn.setConvolutionDescriptor(convDescData);
     -- create input, output descriptor
    local iDesc = cudnn.toDescriptor(input)
    local oDesc = cudnn.toDescriptor(output)
 
    local layer = {
+      convDescData = convDescData,
       convDesc = convDesc,
       weight = weight,
       nInputPlane = nInputPlane,
@@ -175,13 +182,10 @@ end
 -- accumulates the gradients into gradWeight.
 -- gradWeight is assumed to be allocated and given.
 cudnn.functional.Convolution2D_accGradParameters = function(handle, input, gradWeight, gradOutput,
-                                                   strideH, strideW, padH, padW, scale)
+                                                   strideH, strideW, padH, padW, scale, alpha)
     input = input:dim() == 3 and Batch2D(input) or input
     gradOutput = gradOutput:dim() == 3 and Batch2D(gradOutput) or gradOutput
 
-    scale = scale or 1.0
-    local scaleT = torch.type(gradWeight) == 'torch.CudaDoubleTensor'
-       and torch.DoubleTensor({scale}) or torch.FloatTensor({scale})
     -- create a weight descriptor
     local nOutputPlane, nInputPlane, kH, kW
         = gradWeight:size(1), gradWeight:size(2), gradWeight:size(3), gradWeight:size(4)
@@ -189,11 +193,10 @@ cudnn.functional.Convolution2D_accGradParameters = function(handle, input, gradW
     local weightDesc =  cudnn.setFilterDescriptor({ dataType = cudnn.typemap[torch.type(input)],
                                                     filterDimA = {nOutputPlane, nInputPlane, kH, kW}})
     -- create a convolution descriptor
-    local convDesc = cudnn.setConvolutionDescriptor(
-       { padA = {padH, padW},
-         filterStrideA = {strideH, strideW},
-         dataType = getMathType(gradWeight) }
-    );
+    local convDescData = { padA = {padH, padW},
+                           filterStrideA = {strideH, strideW},
+                           dataType = getMathType(gradWeight) }
+    local convDesc = cudnn.setConvolutionDescriptor(convDescData);
 
     -- create input, output descriptor
     local iDesc = cudnn.toDescriptor(input)
@@ -201,6 +204,7 @@ cudnn.functional.Convolution2D_accGradParameters = function(handle, input, gradW
 
    local layer = {
       convDesc = convDesc,
+      convDescData = convDescData,
       weight = gradWeight,
       nInputPlane = nInputPlane,
       nOutputPlane = nOutputPlane,
@@ -218,12 +222,12 @@ cudnn.functional.Convolution2D_accGradParameters = function(handle, input, gradW
 
     -- do convolution
     errcheck('cudnnConvolutionBackwardFilter', handle,
-             scaleT:data(),
+             scalar(gradWeight, scale or 1),
              iDesc[0], input:data(),
              oDesc[0], gradOutput:data(),
              convDesc[0], bwdFilterAlgo,
              extraBuffer, extraBufferSize,
-             cudnn.scalar(input, 1),
+             scalar(gradWeight, alpha or 1),
              weightDesc[0], gradWeight:data());
 end
 

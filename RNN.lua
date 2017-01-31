@@ -37,12 +37,27 @@ function RNN:__init(inputSize, hiddenSize, numLayers, batchFirst, dropout, remem
    self.cellOutput = torch.CudaTensor()
    self.gradHiddenInput = torch.CudaTensor()
    self.gradCellInput = torch.CudaTensor()
+   self.persistent = false -- set true to use persistent RNNs
    self:training()
    self:reset()
 end
 
 function RNN:setSync(sync)
-   self.sync = sync
+   if sync==nil then
+       self.sync = true
+   else     
+       self.sync = sync
+   end
+end
+
+function RNN:setPersist(persist)
+    --sets persistent mode for any argument except persist=false
+   if persist==nil then
+       self.persistent = true
+   else
+       self.persistent = persist
+   end
+   self:resetRNNDescriptor()
 end
 
 function RNN:reset(stdv)
@@ -52,16 +67,17 @@ function RNN:reset(stdv)
    self:resetRNNDescriptor()
    self:resetIODescriptors()
 
-   local weightSize = torch.LongTensor(1)
+   local weightSizePtr = ffi.new("size_t[1]")
    errcheck('cudnnGetRNNParamsSize',
             cudnn.getHandle(),
             self.rnnDesc[0],
             self.xDescs[0],
-            weightSize:data(),
+            weightSizePtr,
 	    self.datatype)
+   local weightSize = tonumber(weightSizePtr[0])
    local elemSize = self.weight:elementSize()
-   weightSize[1] = torch.floor((weightSize[1] + elemSize - 1) / elemSize)
-   self.weight:resize(weightSize[1])
+   weightSize = math.floor((weightSize + elemSize - 1) / elemSize)
+   self.weight:resize(weightSize)
    self.weight:uniform(-stdv, stdv)
    self.gradWeight:resizeAs(self.weight):zero()
 end
@@ -100,19 +116,20 @@ function RNN:resetDropoutDescriptor()
       self.dropoutDesc = self:createDropoutDescriptors(1)
    end
 
-   self.dropoutStatesSize = torch.LongTensor(1)
+   local dropoutStatesSizePtr = ffi.new("size_t[1]")
    errcheck('cudnnDropoutGetStatesSize',
             cudnn.getHandle(),
-            self.dropoutStatesSize:data())
+            dropoutStatesSizePtr)
+   self.dropoutStatesSize = tonumber(dropoutStatesSizePtr[0])
    self.dropoutStates = self.dropoutStates or torch.CudaTensor()
-   local nElem = ((self.dropoutStatesSize[1]-1)/self.dropoutStates:elementSize()+1)
+   local nElem = ((self.dropoutStatesSize -1)/self.dropoutStates:elementSize()+1)
    self.dropoutStates:resize(nElem)
 
    errcheck('cudnnSetDropoutDescriptor',
             self.dropoutDesc[0],
             cudnn.getHandle(),
             self.dropout,
-            self.dropoutStates:data(), self.dropoutStatesSize[1],
+            self.dropoutStates:data(), self.dropoutStatesSize,
             self.seed)
 end
 
@@ -120,7 +137,14 @@ function RNN:resetRNNDescriptor()
    if not self.rnnDesc then
       self.rnnDesc = self:createRNNDescriptors(1)
    end
-   errcheck('cudnnSetRNNDescriptor',
+   local algo
+   if self.persistent then       
+       algo = 'CUDNN_RNN_ALGO_PERSIST_STATIC'
+   else
+       algo = 'CUDNN_RNN_ALGO_STANDARD'
+   end
+   local status = cudnn.call('cudnnSetRNNDescriptor_v6',
+            cudnn.getHandle(),
             self.rnnDesc[0],
             self.hiddenSize,
             self.numLayers,
@@ -128,7 +152,30 @@ function RNN:resetRNNDescriptor()
             self.inputMode,
             self.bidirectional,
             self.mode,
+            algo,
             self.datatype)
+  if status ~= ffi.C.CUDNN_STATUS_SUCCESS then
+      if algo == 'CUDNN_RNN_ALGO_PERSIST_STATIC' then 
+          --try using standard algo
+          print("Warning: persistent RNN is not supported for this configuration. Switching to standard")
+          algo = 'CUDNN_RNN_ALGO_STANDARD'
+          self.persistent = false
+          errcheck('cudnnSetRNNDescriptor_v6',
+                cudnn.getHandle(),
+                self.rnnDesc[0],
+                self.hiddenSize,
+                self.numLayers,
+                self.dropoutDesc[0],
+                self.inputMode,
+                self.bidirectional,
+                self.mode,
+                algo,
+                self.datatype)
+      else
+          local str = ffi.string(C.cudnnGetErrorString(status))
+          error('Error in CuDNN: ' .. str .. ' (cudnnSetRNNDescriptor_v6)')          
+      end
+  end
 end
 
 function RNN:resetWeightDescriptor()
@@ -293,18 +340,30 @@ function RNN:updateOutput(input)
    self.output:resize(oSize, oStride)
    local y = self.output
    local w = self.weight
-   local hy = self:resizeHidden(self.hiddenOutput):zero()
-   local cy = self:resizeHidden(self.cellOutput):zero()
 
    -- Optionally use hiddenInput/cellInput parameters
+   if self.rememberStates then
+        if self.hiddenOutput:nDimension() == 3 and self.hiddenOutput:size(1) == self.numLayers * self.numDirections and 
+           self.hiddenOutput:size(2) == self.miniBatch and self.hiddenOutput:size(3) == self.hiddenSize then
+	       self.hiddenInput = self.hiddenOutput:clone()
+	       if self.cellOutput and self.cellOutput:isSameSizeAs(self.hiddenOutput) then
+ 	           self.cellInput = self.cellOutput:clone()
+               end
+        else
+	   self.hiddenInput = nil
+           self.cellInput = nil
+        end     
+   end
    local hx = self.hiddenInput
    local cx = self.cellInput
+   local hy = self:resizeHidden(self.hiddenOutput):zero()
+   local cy = self:resizeHidden(self.cellOutput):zero()
 
    if hx then
       assert(hx:dim() == 3, 'hiddenInput must have 3 dimensions: numLayers, miniBatch, hiddenSize')
       assert(hx:size(1) == self.numLayers * self.numDirections, 'hiddenInput has incorrect number of layers!')
       assert(hx:size(2) == self.miniBatch, 'hiddenInput has incorrect number of minibathes!')
-      assert(hx:size(3) == self.hiddenSize, 'hiddenIinput has incorrect size!')
+      assert(hx:size(3) == self.hiddenSize, 'hiddenInput has incorrect size!')
       assert(hx:isContiguous(), 'hiddenInput must be contiguous!') end
 
    if cx then
@@ -315,27 +374,29 @@ function RNN:updateOutput(input)
       assert(cx:isContiguous(), 'cellInput must be contiguous!')
    end
 
-   local workspaceSize = torch.LongTensor(1)
+   local workspaceSizePtr = ffi.new("size_t[1]")
    errcheck('cudnnGetRNNWorkspaceSize',
             cudnn.getHandle(),
             self.rnnDesc[0],
 	    self.seqLength,
             self.xDescs,
-            workspaceSize:data())
-   cudnn.setSharedWorkspaceSize(workspaceSize[1], true)
+            workspaceSizePtr)
+   local workspaceSize = tonumber(workspaceSizePtr[0])
+   cudnn.setSharedWorkspaceSize(workspaceSize, true)
    local wsPtr, wsSize = cudnn.getSharedWorkspace()
 
    if self.train then
-      local reserveSize = torch.LongTensor(1)
+      local reserveSizePtr = ffi.new("size_t[1]")
       errcheck('cudnnGetRNNTrainingReserveSize',
                cudnn.getHandle(),
                self.rnnDesc[0],
 	       self.seqLength,
                self.xDescs,
-               reserveSize:data())
+               reserveSizePtr)
+      local reserveSize = tonumber(reserveSizePtr[0])
       local elemSize = self.reserve:elementSize()
-      reserveSize[1] = torch.floor((reserveSize[1] + elemSize - 1) / elemSize)
-      self.reserve:resize(reserveSize[1])
+      reserveSize = math.floor((reserveSize + elemSize - 1) / elemSize)
+      self.reserve:resize(reserveSize)
       errcheck('cudnnRNNForwardTraining',
                cudnn.getHandle(),
                self.rnnDesc[0],
@@ -366,12 +427,6 @@ function RNN:updateOutput(input)
 	       wsSize)
    end
    if self.sync then cutorch.synchronize() end
-   if self.rememberStates then
-	self.hiddenInput = self.hiddenOutput:clone()
-	if self.cellOutput then
-	   self.cellInput = self.cellOutput:clone()
-        end
-   end
    if (self.batchFirst) then
       self.output = self.output:transpose(1, 2)
    end
@@ -438,14 +493,15 @@ function RNN:updateGradInput(input, gradOutput)
       assert(dcy:size(3) == self.hiddenSize, 'gradCellOutput has incorrect size!')
       assert(dcy:isContiguous(), 'gradCellOutput must be contiguous!')
    end
-   local workspaceSize = torch.LongTensor(1)
+   local workspaceSizePtr = ffi.new("size_t[1]")
    errcheck('cudnnGetRNNWorkspaceSize',
             cudnn.getHandle(),
             self.rnnDesc[0],
 	    self.seqLength,
             self.xDescs,
-            workspaceSize:data())
-   cudnn.setSharedWorkspaceSize(workspaceSize[1], true)
+            workspaceSizePtr)
+   local workspaceSize = tonumber(workspaceSizePtr[0])
+   cudnn.setSharedWorkspaceSize(workspaceSize, true)
    local wsPtr, wsSize = cudnn.getSharedWorkspace()
 
    errcheck('cudnnRNNBackwardData',
@@ -498,7 +554,7 @@ function RNN:accGradParameters(input, gradOutput, scale)
       assert(hx:dim() == 3, 'hiddenInput must have 3 dimensions: numLayers, miniBatch, hiddenSize')
       assert(hx:size(1) == self.numLayers * self.numDirections, 'hiddenInput has incorrect number of layers!')
       assert(hx:size(2) == self.miniBatch, 'hiddenInput has incorrect minibatch size!')
-      assert(hx:size(3) == self.hiddenSize, 'hiddenIinput has incorrect size!')
+      assert(hx:size(3) == self.hiddenSize, 'hiddenInput has incorrect size!')
       assert(hx:isContiguous(), 'hiddenInput must be contiguous!')
    end
 
@@ -514,14 +570,15 @@ function RNN:accGradParameters(input, gradOutput, scale)
                self.dw:data(),
                scaleTensor:data())
    end
-   local workspaceSize = torch.LongTensor(1)
+   local workspaceSizePtr = ffi.new("size_t[1]")
    errcheck('cudnnGetRNNWorkspaceSize',
             cudnn.getHandle(),
             self.rnnDesc[0],
 	    self.seqLength,
             self.xDescs,
-            workspaceSize:data())
-   cudnn.setSharedWorkspaceSize(workspaceSize[1], true)
+            workspaceSizePtr)
+   local workspaceSize = tonumber(workspaceSizePtr[0])
+   cudnn.setSharedWorkspaceSize(workspaceSize, true)
    local wsPtr, wsSize = cudnn.getSharedWorkspace()
 
    errcheck('cudnnRNNBackwardWeights',
@@ -602,7 +659,7 @@ local function retrieveLinearParams(self, cuDNNMethod)
                 filterDimA:data())
 
             local offset = matrixPointer[0] - self.weight:data()
-            local params = torch.CudaTensor(self.weight:storage(), offset + 1, filterDimA:prod())
+            local params = torch.CudaTensor(self.weight:storage(), offset + self.weight:storageOffset(), filterDimA:prod())
             table.insert(layerInfo, params)
         end
         table.insert(linearParams, layerInfo)

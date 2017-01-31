@@ -11,9 +11,9 @@ local jac = nn.Jacobian
 local testparams_half = {
    test_type = 'torch.CudaHalfTensor',
    precision_forward = 2e-1,
-   precision_backward = 8,
+   precision_backward = 10,
    precision_jac = 1e-3,
-   precision_io = 1e-1,
+   precision_io = 2e-1,
 }
 
 local testparams_float = {
@@ -131,7 +131,85 @@ function cudnntest.SpatialConvolution()
    local input = torch.randn(bs,from,inj,ini):cuda()
    local gradOutput = torch.randn(bs,to,outj,outi):cuda()
    local sconv = nn.SpatialConvolution(from,to,ki,kj,si,sj):cuda()
-   local gconv = cast(cudnn.SpatialConvolution(from,to,ki,kj,si,sj)):fastest()
+   local gconv = cast(cudnn.SpatialConvolution(from,to,ki,kj,si,sj))
+   gconv.weight:copy(sconv.weight)
+   gconv.bias:copy(sconv.bias)
+
+   testLayer(sconv, gconv, input, gradOutput, scale, true, true) -- batch
+   testLayer(sconv, gconv, input, gradOutput, scale, true, false) -- non-batch
+   local originalTypename = torch.typename(gconv)
+   local gconv = cast(cudnn.convert(sconv, cudnn))
+   mytester:asserteq(torch.typename(gconv),
+                     originalTypename, 'conversion type check')
+   testLayer(sconv, gconv, input, gradOutput, scale, true, true)
+   testLayer(sconv, gconv, input, gradOutput, scale, true, false)
+end
+
+function cudnntest.SpatialDilatedConvolution()
+   local bs = math.random(1,32)
+   local from = math.random(1,32)
+   local to = math.random(1,64)
+   local ki = math.random(1,7)
+   local kj = math.random(1,7)
+   local di = math.random(1,7)
+   local dj = math.random(1,7)
+   local wi = (ki-1)*di+1
+   local wj = (kj-1)*dj+1
+   local si = math.random(1, wi )
+   local sj = math.random(1, wj)
+   local outi = math.random(1,64)
+   local outj = math.random(1,64)
+   local ini = (outi-1)*si+wi
+   local inj = (outj-1)*sj+wj
+
+   local scale = math.random()
+
+   local input = torch.randn(bs,from,inj,ini)
+   local gradOutput = torch.randn(bs,to,outj,outi)
+   local sconv = nn.SpatialDilatedConvolution(from,to,ki,kj,si,sj,0,0,di,dj)
+   local gconv = cast(cudnn.SpatialDilatedConvolution(from,to,ki,kj,si,sj,0,0,di,dj)):fastest()
+   gconv.weight:copy(sconv.weight)
+   gconv.bias:copy(sconv.bias)
+
+   testLayer(sconv, gconv, input, gradOutput, scale, true, true) -- batch
+   testLayer(sconv, gconv, input, gradOutput, scale, true, false) -- non-batch
+   local originalTypename = torch.typename(gconv)
+   local gconv = cast(cudnn.convert(sconv, cudnn))
+   mytester:asserteq(torch.typename(gconv),
+                     originalTypename, 'conversion type check')
+   testLayer(sconv, gconv, input, gradOutput, scale, true, true)
+   testLayer(sconv, gconv, input, gradOutput, scale, true, false)
+end
+
+function cudnntest.VolumetricDilatedConvolution()
+   local bs = math.random(1,32)
+   local from = math.random(1,16)
+   local to = math.random(1,16)
+   local ki = math.random(3,5)
+   local kj = math.random(3,5)
+   local kk = math.random(3,5)
+   local di = math.random(1,5)
+   local dj = math.random(1,5)
+   local dk = math.random(1,5)
+   local wi = (ki-1)*di+1
+   local wj = (kj-1)*dj+1
+   local wk = (kk-1)*dk+1
+   local si = math.random(1, wi )
+   local sj = math.random(1, wj)
+   local sk = math.random(1, wk)
+   local outi = math.random(1,17)
+   local outj = math.random(1,17)
+   local outk = math.random(1,5)
+   local ini = (outi-1)*si+wi
+   local inj = (outj-1)*sj+wj
+   local ink = (outk-1)*sk+wk
+
+   local scale = math.random()
+
+   local input = torch.randn(bs,from,ini,ink,inj)
+   local gradOutput = torch.randn(bs,to,outi,outk,outj)
+   local sconv = nn.VolumetricDilatedConvolution(from,to,ki,kj,kk,si,sj,sk,0,0,0,di,dj,dk)
+   local gconv = cast(cudnn.VolumetricDilatedConvolution(from,to,ki,kj,kk,si,sj,sk,0,0,0,di,dj,dk))
    gconv.weight:copy(sconv.weight)
    gconv.bias:copy(sconv.bias)
 
@@ -162,7 +240,7 @@ function cudnntest.SpatialFullConvolution()
    local input = torch.randn(bs,from,inj,ini):cuda()
    local gradOutput = torch.randn(bs,to,outj,outi):cuda()
    local sconv = nn.SpatialFullConvolution(from,to,ki,kj,si,sj):cuda()
-   local gconv = cast(cudnn.SpatialFullConvolution(from,to,ki,kj,si,sj):cuda():fastest())
+   local gconv = cast(cudnn.SpatialFullConvolution(from,to,ki,kj,si,sj):cuda())
    gconv.weight:copy(sconv.weight)
    gconv.bias:copy(sconv.bias)
 
@@ -189,7 +267,7 @@ function cudnntest.TemporalConvolution()
    local input = torch.randn(bs,ini,inputFrameSize):cuda()
    local gradOutput = torch.randn(bs,outi,outputFrameSize):cuda()
    local sconv = nn.TemporalConvolution(inputFrameSize,outputFrameSize, ki, si):cuda()
-   local gconv = cast(cudnn.TemporalConvolution(inputFrameSize,outputFrameSize, ki, si):cuda():fastest())
+   local gconv = cast(cudnn.TemporalConvolution(inputFrameSize,outputFrameSize, ki, si):cuda())
    gconv.weight:copy(sconv.weight:view(gconv.weight:size()))
    gconv.bias:copy(sconv.bias)
 
@@ -225,7 +303,7 @@ function cudnntest.TemporalConvolution_padding_batch()
    local groundweight = sconv.gradWeight
    local groundbias = sconv.gradBias
 
-   local gconv = cast(cudnn.TemporalConvolution(inputFrameSize,outputFrameSize, ki, si,pad_h):cuda():fastest())
+   local gconv = cast(cudnn.TemporalConvolution(inputFrameSize,outputFrameSize, ki, si,pad_h):cuda())
    gconv.weight:copy(sconv.weight:view(gconv.weight:size()))
    gconv.bias:copy(sconv.bias)
    gconv:forward(cast(input))
@@ -330,10 +408,14 @@ function cudnntest.VolumetricFullConvolution()
    local outk = (ink-1)*sk+kk
    local scale = math.random()
 
+   if testparams.test_type == 'torch.CudaDoubleTensor' then
+      return
+   end
+
    local input = torch.randn(bs,from,ink,inj,ini):cuda()
    local gradOutput = torch.randn(bs,to,outk,outj,outi):cuda()
    local sconv = nn.VolumetricFullConvolution(from,to,kk,ki,kj,sk,si,sj):cuda()
-   local gconv = cast(cudnn.VolumetricFullConvolution(from,to,kk,ki,kj,sk,si,sj):cuda():fastest())
+   local gconv = cast(cudnn.VolumetricFullConvolution(from,to,kk,ki,kj,sk,si,sj):cuda())
    gconv.weight:copy(sconv.weight)
    gconv.bias:copy(sconv.bias)
 
@@ -806,7 +888,7 @@ function cudnntest.functional_bias2D()
    local inj = (outj-1)*sj+kj
    local scale = torch.uniform()
    local input = cast(torch.zeros(bs,from,inj,ini))
-   local mod = cast(cudnn.SpatialConvolution(from,to,ki,kj,si,sj))
+   local mod = cast(cudnn.SpatialConvolution(from,to,ki,kj,si,sj):fastest())
    mod.weight:zero()
    local groundtruth = mod:forward(input)
    local result = groundtruth:clone():zero()
@@ -936,18 +1018,21 @@ mytester:add(cudnntest)
 
 cudnn.verbose=false
 cudnn.find.verbose=false
+-- todo: put it back for release to demo 16->32 bit float fallback
+cudnn.find.verboseFallback=false
 cudnn.useFindEx=false
 
-for i = 1, cutorch.getDeviceCount() do
-   cudnn.configureMath()
+for i = 1, 1 do -- cutorch.getDeviceCount() do
 
-   for _, benchmark in ipairs({true, false}) do
+   for _, benchmark, fast in ipairs({true, false}) do
       cudnn.benchmark = benchmark
---       cudnn.reset()
+      -- use random fastest() test for non-benchmark case
+      if not benchmark then cudnn.fastest = tostring(math.random(0,1)) end
+
       local prop = cutorch.getDeviceProperties(i)
 
       print('Running test on device: #' .. i .. ' : ' .. prop.name
-               .. ' with benchmark = ' .. tostring(cudnn.benchmark))
+               .. ' with benchmark = ' .. tostring(cudnn.benchmark) .. ' and fastest = ' .. tostring(cudnn.fastest))
 
       cutorch.setDevice(i)
 
@@ -957,14 +1042,6 @@ for i = 1, cutorch.getDeviceCount() do
 
       print( 'Testing torch.CudaHalfTensor, torch.cudnn fp16 math is : ', cudnn.configmap('torch.CudaHalfTensor' ),
              ', cutorch.hasFastHalfInstructions() is ', cutorch.hasFastHalfInstructions())
-
-      if cudnn.configmap('torch.CudaHalfTensor') ~= 'CUDNN_DATA_FLOAT' then
-         print([[ Warning: 32-bit float math is forced for CudaHalfTensor test
-            even though native fast 16-bit float math is available for this device.
-            The reason is cudnn convolution algo find methods for fp16 and certain size combinations may fail.
-            This should be fixed in next release.]])
-         cudnn.configureMath({ ['torch.CudaHalfTensor']   = 'CUDNN_DATA_FLOAT'})
-      end
 
       testparams = testparams_half
       mytester:run()
