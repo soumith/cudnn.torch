@@ -34,6 +34,7 @@
 #
 
 function(CUDNN_INSTALL version dest_dir)
+  string(REGEX REPLACE "-rc$" "" version_base "${version}")
 
   if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     if("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "x86_64")
@@ -58,7 +59,7 @@ function(CUDNN_INSTALL version dest_dir)
     file(MAKE_DIRECTORY ${__download_dir})
     set(__cudnn_filename cudnn-${CUDA_VERSION}-${__url_arch_name}-v${version}.tgz)
     set(__base_url http://developer.download.nvidia.com/compute/redist/cudnn)
-    set(__cudnn_url ${__base_url}/v${version}/${__cudnn_filename})
+    set(__cudnn_url ${__base_url}/v${version_base}/${__cudnn_filename})
     set(__cudnn_tgz ${__download_dir}/${__cudnn_filename})
     
     if(NOT EXISTS ${__cudnn_tgz})
@@ -69,7 +70,8 @@ function(CUDNN_INSTALL version dest_dir)
       if("${CUDNN_STATUS}" MATCHES "0")
 	execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf "${__cudnn_tgz}" WORKING_DIRECTORY "${__download_dir}")
       else()
-	message("Was not able to download CUDNN. Please install CuDNN manually from https://developer.nvidia.com/cuDNN")
+	message("Was not able to download CUDNN from ${__cudnn_url}. Please install CuDNN manually from https://developer.nvidia.com/cuDNN")
+	file(REMOVE ${__cudnn_tgz})
       endif()
     endif()
     
@@ -142,7 +144,6 @@ else()
     endif()
   endif()
     math(EXPR CUDNN_VERSION_NUM "${CUDNN_MAJOR_VERSION} * 1000 + ${CUDNN_MINOR_VERSION} * 100 + ${CUDNN_PATCH_VERSION}")
-  message(STATUS "Found Cudnn_${CUDNN_VERSION_NUM} at ${CUDNN_INCLUDE} ${CUDNN_LIBRARY}")
 endif()
 
 
