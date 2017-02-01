@@ -207,6 +207,5 @@ end
 
 function VolumetricFullConvolution:clearState()
    self:clearDesc()
-   nn.utils.clear(self, 'extraBuffer', '_input', '_gradOutput')
    return nn.Module.clearState(self)
 end

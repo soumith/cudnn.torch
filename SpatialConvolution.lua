@@ -284,6 +284,7 @@ function SpatialConvolution:clearDesc()
     self.oDescForBias = nil
     self.oSize = nil
     self.scaleT = nil
+    nn.utils.clear(self, '_input', '_gradOutput', 'input_slice', 'output_slice')
     return self
 end
 
@@ -298,6 +299,5 @@ end
 
 function SpatialConvolution:clearState()
    self:clearDesc()
-   nn.utils.clear(self, '_input', '_gradOutput', 'input_slice', 'output_slice')
    return nn.Module.clearState(self)
 end
