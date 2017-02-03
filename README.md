@@ -122,6 +122,11 @@ nn.Sequential {
   (2): nn.ReLU
 }
 ```
+### New for cudnn V6
+Persistent mode for RNNs is enabled. RNNs can be run in persistent mode on Pascal family GPUs, and they are expected to be faster
+for small batch size. They can be enabled by calling :setPersist(true) on any RNN module (RNN, LSTM, or GRU). 
+Dilated convolutions have been enabled. 
+
 
 ### Older versions
 For version CuDNN R1, checkout the branch **R1**
