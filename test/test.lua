@@ -472,6 +472,7 @@ function cudnntest.ReLU()
    nonlin('ReLU', false) -- out of place
 end
 function cudnntest.Tanh()
+   nonlin('Tanh', true) -- inplace
    nonlin('Tanh', false) -- out of place
 end
 function cudnntest.Sigmoid()
