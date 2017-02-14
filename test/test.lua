@@ -476,6 +476,7 @@ function cudnntest.Tanh()
    nonlin('Tanh', false) -- out of place
 end
 function cudnntest.Sigmoid()
+   nonlin('Sigmoid', true) -- inplace
    nonlin('Sigmoid', false) -- out of place
 end
 
