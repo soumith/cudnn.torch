@@ -13,7 +13,7 @@ local testparams_half = {
    precision_forward = 2e-1,
    precision_backward = 10,
    precision_jac = 1e-3,
-   precision_io = 2e-1,
+   precision_io = 3e-1,
 }
 
 local testparams_float = {
