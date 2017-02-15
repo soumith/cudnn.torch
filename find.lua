@@ -110,7 +110,7 @@ local function fallbackWarning(layer, msg)
             "\n *** Falling back to 32-bit math for: " .. convDataString(layer))
       print(" *** [ Set cudnn.find.verboseFallback to false to disable this message ] *** ")
       print(" *** [ Alternatively, you may force CUDNN to always operate on CudaHalfTensors via 32-bit float conversion, in Lua: ] ***\n"
-               .." *** [ cudnn.configureMath({ ['torch.CudaHalfTensor']   = 'CUDNN_DATA_FLOAT'} ] ***")
+               .." ***  cudnn.configureMath({ ['torch.CudaHalfTensor']   = 'CUDNN_DATA_FLOAT'} ) ***")
       print(" *** [ Note: result may be faster or slower than native FP16, depending on your GPU and CUDNN operations ] *** ")
    end
 end
