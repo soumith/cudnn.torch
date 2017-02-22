@@ -658,7 +658,7 @@ local function retrieveLinearParams(self, cuDNNMethod)
                 nbDims:data(),
                 filterDimA:data())
 
-            local offset = (tonumber(matrixPointer[0]) - tonumber(self.weight:data()))/self.weight:elementSize()
+            local offset = matrixPointer[0] - self.weight:data()
             local params = torch.CudaTensor(self.weight:storage(), offset + self.weight:storageOffset(), filterDimA:prod())
             table.insert(layerInfo, params)
         end
