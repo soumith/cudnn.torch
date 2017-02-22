@@ -1,7 +1,6 @@
 require 'cudnn'
 require 'cunn'
 
-
 local cudnntest = torch.TestSuite()
 local times = {}
 local mytester
@@ -551,11 +550,11 @@ function cudnntest.ReLU()
    nonlin('ReLU', false) -- out of place
 end
 function cudnntest.Tanh()
-   nonlin('Tanh', true) -- inplace
+--   nonlin('Tanh', true) -- inplace
    nonlin('Tanh', false) -- out of place
 end
 function cudnntest.Sigmoid()
-   nonlin('Sigmoid', true) -- inplace
+--   nonlin('Sigmoid', true) -- inplace
    nonlin('Sigmoid', false) -- out of place
 end
 
@@ -1058,3 +1057,5 @@ for i = 1, 1 do -- cutorch.getDeviceCount() do
 end
 
 os.execute('rm -f modelTemp.t7')
+
+

@@ -222,15 +222,9 @@ function cudnn.setConvolutionDescriptor(data, desc)
    local upscaleATensor = torch.IntTensor(data.upscaleA)
    errcheck('cudnnSetConvolutionNdDescriptor', myDesc[0],
             data.arrayLength,
-<<<<<<< HEAD
-            torch.IntTensor(data.padA):data(),
-            torch.IntTensor(data.filterStrideA):data(),
-            torch.IntTensor(data.dilationA):data(),
-=======
             padATensor:data(),
             filterStrideATensor:data(),
             upscaleATensor:data(),
->>>>>>> upstream/master
             data.mode,
             data.dataType)
    return myDesc
