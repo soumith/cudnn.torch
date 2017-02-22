@@ -91,7 +91,7 @@ If you don't want to convert all modules you can pass a function as the third ar
 It will be called at each step, with a module that is currently converted.  It is meant to exclude
 modules i.e. if it returns `true`, they will be left untouched, otherwise they will be subject to conversion.
 
-`Note that you cannot do backward pass when using cuDNN and when your model has batch normaliation layers and is in evaluate mode.`
+`Note that you cannot do backward pass when using cuDNN and when your model has batch normalization layers and is in evaluate mode.`
 
 ```lua
 net = nn.Sequential()

@@ -19,6 +19,7 @@ IF(NOT CUDNN_FOUND)
   FIND_PACKAGE(CUDNN 6 EXACT REQUIRED)
 ENDIF()
 
+
 FILE(GLOB luasrc *.lua)
 SET(src "")
 ADD_TORCH_PACKAGE(cudnn "${src}" "${luasrc}" "NVIDIA CuDNN Bindings")

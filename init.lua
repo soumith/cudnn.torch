@@ -219,7 +219,7 @@ function cudnn.setConvolutionDescriptor(data, desc)
    -- make sure we have references to these tensors so gc doesn't clean them up
    local padATensor = torch.IntTensor(data.padA)
    local filterStrideATensor = torch.IntTensor(data.filterStrideA)
-   local upscaleATensor = torch.IntTensor(data.upscaleA)
+   local upscaleATensor = torch.IntTensor(data.dilationA)
    errcheck('cudnnSetConvolutionNdDescriptor', myDesc[0],
             data.arrayLength,
             padATensor:data(),
