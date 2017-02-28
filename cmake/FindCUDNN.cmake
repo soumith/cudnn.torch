@@ -62,7 +62,11 @@ function(CUDNN_INSTALL version dest_libdir dest_incdir dest_bindir)
   
   # Download and install CUDNN locally if not found on the system
   if(url_arch_name) 
+<<<<<<< HEAD
     set(download_dir ${CMAKE_CURRENT_BINARY_DIR}/downloads)
+=======
+    set(download_dir ${CMAKE_CURRENT_BINARY_DIR}/downloads/cudnn${version})
+>>>>>>> nv/master
     file(MAKE_DIRECTORY ${download_dir})
     set(cudnn_filename cudnn-${CUDA_VERSION}-${url_arch_name}-v${version}.tgz)
     set(base_url http://developer.download.nvidia.com/compute/redist/cudnn)
