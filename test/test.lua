@@ -1,7 +1,6 @@
 require 'cudnn'
 require 'cunn'
 
-
 local cudnntest = torch.TestSuite()
 local times = {}
 local mytester
@@ -13,7 +12,7 @@ local testparams_half = {
    precision_forward = 2e-1,
    precision_backward = 10,
    precision_jac = 1e-3,
-   precision_io = 2e-1,
+   precision_io = 3e-1,
 }
 
 local testparams_float = {
@@ -77,9 +76,10 @@ local function testLayer(nnlayer, cudnnlayer, input, gradOutput, scale,
    end
 
    local res = {} -- result
-   res.output = cudnnlayer:forward(cast(input))
+   inputcudnn = cast(input):clone() -- for inplace layers
+   res.output = cudnnlayer:forward(inputcudnn)
    cudnnlayer:zeroGradParameters()
-   res.gradInput = cudnnlayer:backward(cast(input), cast(gradOutput), scale)
+   res.gradInput = cudnnlayer:backward(inputcudnn, cast(gradOutput), scale)
    if parametric then
       res.gradWeight = cudnnlayer.gradWeight
       res.gradBias = cudnnlayer.gradBias
@@ -550,9 +550,11 @@ function cudnntest.ReLU()
    nonlin('ReLU', false) -- out of place
 end
 function cudnntest.Tanh()
+--   nonlin('Tanh', true) -- inplace
    nonlin('Tanh', false) -- out of place
 end
 function cudnntest.Sigmoid()
+--   nonlin('Sigmoid', true) -- inplace
    nonlin('Sigmoid', false) -- out of place
 end
 
@@ -1021,7 +1023,7 @@ cudnn.find.verbose=false
 -- todo: put it back for release to demo 16->32 bit float fallback
 cudnn.find.verboseFallback=false
 cudnn.useFindEx=false
-
+cudnn.configureMath({ ['torch.CudaHalfTensor']   = 'CUDNN_DATA_FLOAT'} )
 for i = 1, 1 do -- cutorch.getDeviceCount() do
 
    for _, benchmark, fast in ipairs({true, false}) do
@@ -1055,3 +1057,5 @@ for i = 1, 1 do -- cutorch.getDeviceCount() do
 end
 
 os.execute('rm -f modelTemp.t7')
+
+

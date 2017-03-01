@@ -343,7 +343,7 @@ function RNN:updateOutput(input)
 
    -- Optionally use hiddenInput/cellInput parameters
    if self.rememberStates then
-        if self.hiddenOutput:nDimension() == 3 and self.hiddenOutput:size(1) == self.numLayers * self.numDirections and 
+        if self.hiddenOutput:nDimension() == 3 and self.hiddenOutput:size(1) == self.numLayers * self.numDirections and
            self.hiddenOutput:size(2) == self.miniBatch and self.hiddenOutput:size(3) == self.hiddenSize then
 	       self.hiddenInput = self.hiddenOutput:clone()
 	       if self.cellOutput and self.cellOutput:isSameSizeAs(self.hiddenOutput) then
@@ -352,7 +352,7 @@ function RNN:updateOutput(input)
         else
 	   self.hiddenInput = nil
            self.cellInput = nil
-        end     
+        end
    end
    local hx = self.hiddenInput
    local cx = self.cellInput

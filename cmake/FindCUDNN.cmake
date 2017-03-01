@@ -28,97 +28,119 @@
 #
 # Exported functions
 # ^^^^^^^^^^^^^^^^
-# function(CUDNN_INSTALL version dest_dir)
+# function(CUDNN_INSTALL version __dest_libdir [__dest_incdir])
 #  This function will try to download and install CUDNN.
+#  CUDNN5 and CUDNN6 are supported.
 #
 #
 
-function(CUDNN_INSTALL version dest_dir)
+function(CUDNN_INSTALL version dest_libdir dest_incdir dest_bindir)
+  message(STATUS "CUDNN_INSTALL: Installing CUDNN ${version}, lib:${dest_libdir}, inc:${dest_incdir}, bin:${dest_bindir}")
   string(REGEX REPLACE "-rc$" "" version_base "${version}")
+  set(tar_libdir cuda/lib64)
+  set(tar_incdir cuda/include)
 
   if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     if("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "x86_64")
-      set(__url_arch_name linux-x64 )
+      set(url_arch_name linux-x64 )
     elseif("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "ppc")
-      set(__url_arch_name linux-ppc64le ) 
+      set(url_arch_name linux-ppc64le ) 
       #  TX1 has to be installed via JetPack
     endif()
   elseif  (APPLE)
-    set(__url_arch_name osx-x64)
+    set(tar_libdir cuda/lib)
+    set(url_arch_name osx-x64)
   elseif(WIN32)
+    set(tar_bindir cuda/bin)
+    set(tar_libdir cuda/lib/x64)
     if(CMAKE_SYSTEM_VERSION MATCHES "10")
-      set(__url_arch_name windows10)
+      set(url_arch_name windows10)
     else()
-      set(__url_arch_name windows7)
+      set(url_arch_name windows7)
     endif()
   endif()
   
   # Download and install CUDNN locally if not found on the system
-  if(__url_arch_name) 
-    set(__download_dir ${CMAKE_CURRENT_BINARY_DIR}/downloads)
-    file(MAKE_DIRECTORY ${__download_dir})
-    set(__cudnn_filename cudnn-${CUDA_VERSION}-${__url_arch_name}-v${version}.tgz)
-    set(__base_url http://developer.download.nvidia.com/compute/redist/cudnn)
-    set(__cudnn_url ${__base_url}/v${version_base}/${__cudnn_filename})
-    set(__cudnn_tgz ${__download_dir}/${__cudnn_filename})
+  if(url_arch_name) 
+<<<<<<< HEAD
+    set(download_dir ${CMAKE_CURRENT_BINARY_DIR}/downloads)
+=======
+    set(download_dir ${CMAKE_CURRENT_BINARY_DIR}/downloads/cudnn${version})
+>>>>>>> nv/master
+    file(MAKE_DIRECTORY ${download_dir})
+    set(cudnn_filename cudnn-${CUDA_VERSION}-${url_arch_name}-v${version}.tgz)
+    set(base_url http://developer.download.nvidia.com/compute/redist/cudnn)
+    set(cudnn_url ${base_url}/v${version_base}/${cudnn_filename})
+    set(cudnn_tgz ${download_dir}/${cudnn_filename})
     
-    if(NOT EXISTS ${__cudnn_tgz})
-      message("Downloading CUDNN library from NVIDIA...")
-      file(DOWNLOAD ${__cudnn_url} ${__cudnn_tgz}
-	SHOW_PROGRESS STATUS CUDNN_STATUS
+    if(NOT EXISTS ${cudnn_tgz})
+      message(STATUS "Downloading CUDNN library from NVIDIA...")
+      file(DOWNLOAD ${cudnn_url} ${cudnn_tgz}
+	SHOW_PROGRESS STATUS cudnn_status
 	)
-      if("${CUDNN_STATUS}" MATCHES "0")
-	execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzf "${__cudnn_tgz}" WORKING_DIRECTORY "${__download_dir}")
-      else()
-	message("Was not able to download CUDNN from ${__cudnn_url}. Please install CuDNN manually from https://developer.nvidia.com/cuDNN")
-	file(REMOVE ${__cudnn_tgz})
+      execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzvf ${cudnn_tgz} WORKING_DIRECTORY ${download_dir} RESULT_VARIABLE cudnn_status)
+
+      if(NOT "${cudnn_status}" MATCHES "0")
+	message(STATUS "Was not able to download CUDNN from ${cudnn_url}. Please install CuDNN manually from https://developer.nvidia.com/cuDNN")
       endif()
     endif()
     
-    if(WIN32)
-      file(GLOB __cudnn_binfiles ${__download_dir}/cuda/bin*/*)
-      install(FILES ${__cudnn_binfiles} 
-	DESTINATION  "${dest_dir}/bin")
+    if(dest_bindir AND tar_bindir)
+      file(COPY ${download_dir}/${tar_bindir}/ DESTINATION ${dest_bindir})
     endif()
-    
-    file(GLOB __cudnn_incfiles ${__download_dir}/cuda/include/*)
-    install(FILES ${__cudnn_incfiles} 
-      DESTINATION  "${dest_dir}/include")
 
-    file(GLOB __cudnn_libfiles ${__download_dir}/cuda/lib*/*)
-    install(FILES ${__cudnn_libfiles} 
-      DESTINATION  "${dest_dir}/lib")
+    if(dest_incdir)
+      file(COPY ${download_dir}/${tar_incdir}/ DESTINATION  ${dest_incdir})
+    endif()
 
-  endif(__url_arch_name)
+    file(COPY ${download_dir}/${tar_libdir}/ DESTINATION  ${dest_libdir} )
+
+    get_filename_component(dest_dir ${dest_libdir} PATH)
+
+    set(CUDNN_ROOT_DIR ${dest_dir} PARENT_SCOPE)
+    unset(CUDNN_LIBRARY CACHE)
+    unset(CUDNN_INCLUDE_DIR CACHE)
+
+  endif(url_arch_name)
 endfunction()
 
 #####################################################
 
-get_filename_component(__libpath_cudart ${CUDA_CUDART_LIBRARY} PATH)
-unset(CUDNN_LIBRARY CACHE)
+find_package(PkgConfig)
+pkg_check_modules(PC_CUDNN QUIET CUDNN)
 
-find_path(CUDNN_INCLUDE cudnn.h
-  PATHS ${CUDNN_PATH} $ENV{CUDNN_PATH} ${CUDA_TOOLKIT_INCLUDE} ENV{CMAKE_INCLUDE_PATH}
-  DOC "Path to CUDNN include directory." )
+get_filename_component(__libpath_cudart "${CUDA_CUDART_LIBRARY}" PATH)
+
 # We use major only in library search as major/minor is not entirely consistent among platforms.
 # Also, looking for exact minor version of .so is in general not a good idea.
 # More strict enforcement of minor/patch version is done if/when the header file is examined.
 if(CUDNN_FIND_VERSION_EXACT)
   SET(__cudnn_ver_suffix ".${CUDNN_FIND_VERSION_MAJOR}")
   SET(__cudnn_lib_win_name cudnn64_${CUDNN_FIND_VERSION_MAJOR}.dll)
-  SET(CUDNN_MAJOR_VERSION ${CUDNN_FIND_MAJOR_VERSION})
 else()
   SET(__cudnn_lib_win_name cudnn64.dll)
 endif()
 
-find_library(CUDNN_LIBRARY NAMES libcudnn.so${__cudnn_ver_suffix} libcudnn${__cudnn_ver_suffix}.dylib ${__cudnn_lib_win_name}
-  PATHS $ENV{CUDNN_PATH} $ENV{LD_LIBRARY_PATH} ${__libpath_cudart}
+find_library(CUDNN_LIBRARY 
+  NAMES libcudnn.so${__cudnn_ver_suffix} libcudnn${__cudnn_ver_suffix}.dylib ${__cudnn_lib_win_name}
+  PATHS $ENV{LD_LIBRARY_PATH} ${__libpath_cudart} ${CUDNN_ROOT_DIR} ${PC_CUDNN_LIBRARY_DIRS} ${CMAKE_INSTALL_PREFIX}
+  PATH_SUFFIXES lib lib64
   DOC "CUDNN library." )
 
-mark_as_advanced(CUDNN_INCLUDE CUDNN_LIBRARY )
 
-if(CUDNN_INCLUDE)
-  file(READ ${CUDNN_INCLUDE}/cudnn.h CUDNN_VERSION_FILE_CONTENTS)
+if(CUDNN_LIBRARY)
+  SET(CUDNN_MAJOR_VERSION ${CUDNN_FIND_VERSION_MAJOR})
+  set(CUDNN_VERSION ${CUDNN_MAJOR_VERSION})
+  get_filename_component(__found_cudnn_root ${CUDNN_LIBRARY} PATH)
+  find_path(CUDNN_INCLUDE_DIR 
+    NAMES cudnn.h
+    HINTS ${PC_CUDNN_INCLUDE_DIRS} ${CUDNN_ROOT_DIR} ${CUDA_TOOLKIT_INCLUDE} ${__found_cudnn_root}
+    PATH_SUFFIXES include 
+    DOC "Path to CUDNN include directory." )
+endif()
+
+if(CUDNN_LIBRARY AND CUDNN_INCLUDE_DIR)
+  file(READ ${CUDNN_INCLUDE_DIR}/cudnn.h CUDNN_VERSION_FILE_CONTENTS)
   string(REGEX MATCH "define CUDNN_MAJOR * +([0-9]+)"
     CUDNN_MAJOR_VERSION "${CUDNN_VERSION_FILE_CONTENTS}")
   string(REGEX REPLACE "define CUDNN_MAJOR * +([0-9]+)" "\\1"
@@ -131,24 +153,30 @@ if(CUDNN_INCLUDE)
     CUDNN_PATCH_VERSION "${CUDNN_VERSION_FILE_CONTENTS}")
   string(REGEX REPLACE "define CUDNN_PATCHLEVEL * +([0-9]+)" "\\1"
     CUDNN_PATCH_VERSION "${CUDNN_PATCH_VERSION}")  
+  set(CUDNN_VERSION ${CUDNN_MAJOR_VERSION}.${CUDNN_MINOR_VERSION})
 endif()
 
-if(NOT CUDNN_MAJOR_VERSION)
-  set(CUDNN_VERSION "???")
-else()
-## Fixing the case where 5.1 does not fit 'exact' 5.
-  set(CUDNN_VERSION ${CUDNN_MAJOR_VERSION}.${CUDNN_MINOR_VERSION})
-  if(CUDNN_FIND_VERSION_EXACT AND "x${CUDNN_FIND_VERSION_MINOR}" STREQUAL "x")
-    if(CUDNN_MAJOR_VERSION EQUAL CUDNN_FIND_VERSION_MAJOR)
+if(CUDNN_MAJOR_VERSION)
+  ## Fixing the case where 5.1 does not fit 'exact' 5.
+  if(CUDNN_FIND_VERSION_EXACT AND NOT CUDNN_FIND_VERSION_MINOR)
+    if("${CUDNN_MAJOR_VERSION}" STREQUAL "${CUDNN_FIND_VERSION_MAJOR}")
       set(CUDNN_VERSION ${CUDNN_FIND_VERSION})
     endif()
   endif()
-    math(EXPR CUDNN_VERSION_NUM "${CUDNN_MAJOR_VERSION} * 1000 + ${CUDNN_MINOR_VERSION} * 100 + ${CUDNN_PATCH_VERSION}")
+else()
+  # Try to set CUDNN version from config file
+  set(CUDNN_VERSION ${PC_CUDNN_CFLAGS_OTHER})
 endif()
 
+find_package_handle_standard_args(
+  CUDNN 
+  FOUND_VAR CUDNN_FOUND
+  REQUIRED_VARS CUDNN_LIBRARY 
+  VERSION_VAR   CUDNN_VERSION
+  )
 
-  
-find_package_handle_standard_args(CUDNN
-                                  REQUIRED_VARS CUDNN_LIBRARY 
-                                  VERSION_VAR   CUDNN_VERSION)
-
+if(CUDNN_FOUND)
+  set(CUDNN_LIBRARIES ${CUDNN_LIBRARY})
+  set(CUDNN_INCLUDE_DIRS ${CUDNN_INCLUDE_DIR})
+  set(CUDNN_DEFINITIONS ${PC_CUDNN_CFLAGS_OTHER})
+endif()  
