@@ -117,7 +117,7 @@ end
 function TemporalConvolution:clearDesc()
   self.buffer = nil
   self._output = nil
-  self.oSize = nil
+  cudnn.SpatialConvolution.clearDesc(self)
 end
 
 function TemporalConvolution:write(f)
