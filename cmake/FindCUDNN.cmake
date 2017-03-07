@@ -77,7 +77,7 @@ function(CUDNN_INSTALL version dest_libdir dest_incdir dest_bindir)
       file(DOWNLOAD ${cudnn_url} ${cudnn_file}
 	SHOW_PROGRESS STATUS cudnn_status
 	)
-    execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzvf --format=${url_extension} ${cudnn_file} WORKING_DIRECTORY ${download_dir} RESULT_VARIABLE cudnn_status)
+    execute_process(COMMAND ${CMAKE_COMMAND} -E tar xzvf ${cudnn_file} WORKING_DIRECTORY ${download_dir} RESULT_VARIABLE cudnn_status)
 
       if(NOT "${cudnn_status}" MATCHES "0")
 	message(STATUS "Was not able to download CUDNN from ${cudnn_url}. Please install CuDNN manually from https://developer.nvidia.com/cuDNN")
