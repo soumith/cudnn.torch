@@ -104,68 +104,89 @@ function(CUDNN_INSTALL version dest_libdir dest_incdir dest_bindir)
 endfunction()
 
 #####################################################
+# FIXME
+    unset(CUDNN_LIBRARY CACHE)
+    unset(CUDNN_INCLUDE_DIR CACHE)
 
-find_package(PkgConfig)
-pkg_check_modules(PC_CUDNN QUIET CUDNN)
+
+macro(__cudnn_find_library _var _names)
+  if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(_cuda_64bit_lib_dir lib/x64 lib6 libx64 bin64)
+  endif()
+  find_library(${_var}
+    NAMES ${_names}
+    PATHS ${CMAKE_INSTALL_PREFIX} ${CUDNN_ROOT_DIR} ${__libpath_cudart}
+    ENV CUDA_LIB_PATH
+    ENV LD_LIBRARY_PATH
+    PATH_SUFFIXES ${_cuda_64bit_lib_dir} lib bin
+    DOC "CUDNN Library")
+endmacro()
 
 get_filename_component(__libpath_cudart "${CUDA_CUDART_LIBRARY}" PATH)
 
-# We use major only in library search as major/minor is not entirely consistent among platforms.
-# Also, looking for exact minor version of .so is in general not a good idea.
-# More strict enforcement of minor/patch version is done if/when the header file is examined.
+# Make a separate find_libabry call with major version.
+# That will find 6.0 even if 5.x is first in the path.
 if(CUDNN_FIND_VERSION_EXACT)
-  SET(__cudnn_ver_suffix ".${CUDNN_FIND_VERSION_MAJOR}")
-  SET(__cudnn_lib_win_name cudnn64_${CUDNN_FIND_VERSION_MAJOR})
-else()
-  SET(__cudnn_lib_win_name cudnn64)
+  set(__cudnn_ver_suffix ".${CUDNN_FIND_VERSION_MAJOR}")
+  if(CUDNN_FIND_VERSION_PATCH)
+    set(__cudnn_ver_suffix
+      ".${CUDNN_FIND_VERSION_MAJOR}.${CUDNN_FIND_VERSION_MINOR}.${CUDNN_FIND_VERSION_PATCH}")
+  else()
+    if (CUDNN_FIND_VERSION_MINOR)
+      message(STATUS "Warning: Ignoring VERSION_MINOR for CUDNN version if VERSION_PATCH not set")
+    endif()
+  endif()
+  __cudnn_find_library(CUDNN_LIBRARY 
+    libcudnn.so${__cudnn_ver_suffix} libcudnn${__cudnn_ver_suffix}.dylib ${__cudnn_lib_win_name}
+    )
 endif()
 
-find_library(CUDNN_LIBRARY 
-  NAMES libcudnn.so${__cudnn_ver_suffix} libcudnn${__cudnn_ver_suffix}.dylib ${__cudnn_lib_win_name}
-  PATHS $ENV{LD_LIBRARY_PATH} ${__libpath_cudart} ${CUDNN_ROOT_DIR} ${PC_CUDNN_LIBRARY_DIRS} ${CMAKE_INSTALL_PREFIX}
-  PATH_SUFFIXES lib lib64 bin
-  DOC "CUDNN library." )
+#Now, try no version on shared object
+if(NOT CUDNN_LIBRARY)
+  __cudnn_find_library(CUDNN_LIBRARY 
+    cudnn
+    )
+endif()
 
+# verify exact version by teh header
 if(CUDNN_LIBRARY)
-  SET(CUDNN_MAJOR_VERSION ${CUDNN_FIND_VERSION_MAJOR})
-  set(CUDNN_VERSION ${CUDNN_MAJOR_VERSION})
   get_filename_component(__found_cudnn_root ${CUDNN_LIBRARY} PATH)
   find_path(CUDNN_INCLUDE_DIR 
     NAMES cudnn.h
-    HINTS ${PC_CUDNN_INCLUDE_DIRS} ${CUDNN_ROOT_DIR} ${CUDA_TOOLKIT_INCLUDE} ${__found_cudnn_root}
+    HINTS ${__found_cudnn_root} ${CUDNN_ROOT_DIR} ${CUDA_TOOLKIT_INCLUDE} 
     PATH_SUFFIXES include 
     DOC "Path to CUDNN include directory." )
-endif()
+  if(NOT CUDNN_INCLUDE_DIR)
+    # no header found: assume everything we could check, matches
+    set(CUDNN_VERSION_MAJOR ${CUDNN_FIND_VERSION_MAJOR})
+    set(CUDNN_VERSION_MINOR ${CUDNN_FIND_VERSION_MINOR})
+    set(CUDNN_VERSION_PATCH ${CUDNN_FIND_VERSION_PATCH})
+  else()
+    file(READ ${CUDNN_INCLUDE_DIR}/cudnn.h CUDNN_VERSION_FILE_CONTENTS)
+    string(REGEX MATCH "define CUDNN_MAJOR * +([0-9]+)"
+      CUDNN_MAJOR "${CUDNN_VERSION_FILE_CONTENTS}")
+    string(REGEX REPLACE "define CUDNN_MAJOR * +([0-9]+)" "\\1"
+      CUDNN_VERSION_MAJOR "${CUDNN_MAJOR}")
+    string(REGEX MATCH "define CUDNN_MINOR * +([0-9]+)"
+      CUDNN_MINOR "${CUDNN_VERSION_FILE_CONTENTS}")
+    string(REGEX REPLACE "define CUDNN_MINOR * +([0-9]+)" "\\1"
+      CUDNN_VERSION_MINOR "${CUDNN_MINOR}")
+    string(REGEX MATCH "define CUDNN_PATCHLEVEL * +([0-9]+)"
+      CUDNN_PATCH "${CUDNN_VERSION_FILE_CONTENTS}")
+    string(REGEX REPLACE "define CUDNN_PATCHLEVEL * +([0-9]+)" "\\1"
+      CUDNN_VERSION_PATCH "${CUDNN_PATCH}")  
+  endif()
 
-if(CUDNN_LIBRARY AND CUDNN_INCLUDE_DIR)
-  file(READ ${CUDNN_INCLUDE_DIR}/cudnn.h CUDNN_VERSION_FILE_CONTENTS)
-  string(REGEX MATCH "define CUDNN_MAJOR * +([0-9]+)"
-    CUDNN_MAJOR_VERSION "${CUDNN_VERSION_FILE_CONTENTS}")
-  string(REGEX REPLACE "define CUDNN_MAJOR * +([0-9]+)" "\\1"
-    CUDNN_MAJOR_VERSION "${CUDNN_MAJOR_VERSION}")
-  string(REGEX MATCH "define CUDNN_MINOR * +([0-9]+)"
-    CUDNN_MINOR_VERSION "${CUDNN_VERSION_FILE_CONTENTS}")
-  string(REGEX REPLACE "define CUDNN_MINOR * +([0-9]+)" "\\1"
-    CUDNN_MINOR_VERSION "${CUDNN_MINOR_VERSION}")
-  string(REGEX MATCH "define CUDNN_PATCHLEVEL * +([0-9]+)"
-    CUDNN_PATCH_VERSION "${CUDNN_VERSION_FILE_CONTENTS}")
-  string(REGEX REPLACE "define CUDNN_PATCHLEVEL * +([0-9]+)" "\\1"
-    CUDNN_PATCH_VERSION "${CUDNN_PATCH_VERSION}")  
-  set(CUDNN_VERSION ${CUDNN_MAJOR_VERSION}.${CUDNN_MINOR_VERSION})
-endif()
-
-if(CUDNN_MAJOR_VERSION)
-  ## Fixing the case where 5.1 does not fit 'exact' 5.
-  if(CUDNN_FIND_VERSION_EXACT AND NOT CUDNN_FIND_VERSION_MINOR)
-    if("${CUDNN_MAJOR_VERSION}" STREQUAL "${CUDNN_FIND_VERSION_MAJOR}")
-      set(CUDNN_VERSION ${CUDNN_FIND_VERSION})
+  if (CUDNN_FIND_VERSION_PATCH)
+    set(CUDNN_VERSION ${CUDNN_VERSION_MAJOR}.${CUDNN_VERSION_MINOR}.${CUDNN_VERSION_PATCH})
+  else()
+    if (CUDNN_FIND_VERSION_MINOR)
+      set(CUDNN_VERSION ${CUDNN_VERSION_MAJOR}.${CUDNN_VERSION_MINOR})
     endif()
   endif()
-else()
-  # Try to set CUDNN version from config file
-  set(CUDNN_VERSION ${PC_CUDNN_CFLAGS_OTHER})
-endif()
 
+endif()
+  
 find_package_handle_standard_args(
   CUDNN 
   FOUND_VAR CUDNN_FOUND
@@ -176,5 +197,4 @@ find_package_handle_standard_args(
 if(CUDNN_FOUND)
   set(CUDNN_LIBRARIES ${CUDNN_LIBRARY})
   set(CUDNN_INCLUDE_DIRS ${CUDNN_INCLUDE_DIR})
-  set(CUDNN_DEFINITIONS ${PC_CUDNN_CFLAGS_OTHER})
 endif()  
