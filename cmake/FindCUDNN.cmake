@@ -94,8 +94,9 @@ function(CUDNN_INSTALL version dest_libdir dest_incdir dest_bindir)
 
     file(COPY ${download_dir}/${tar_libdir}/ DESTINATION  ${dest_libdir} )
 
+    execute_process(COMMAND ldconfig)
+    
     get_filename_component(dest_dir ${dest_libdir} DIRECTORY)
-
     set(CUDNN_ROOT_DIR ${dest_dir} PARENT_SCOPE)
     unset(CUDNN_LIBRARY CACHE)
     unset(CUDNN_INCLUDE_DIR CACHE)
@@ -148,7 +149,7 @@ if(NOT CUDNN_LIBRARY)
     )
 endif()
 
-# verify exact version by teh header
+# verify exact version by the header
 if(CUDNN_LIBRARY)
   get_filename_component(__found_cudnn_root ${CUDNN_LIBRARY} PATH)
   find_path(CUDNN_INCLUDE_DIR 
