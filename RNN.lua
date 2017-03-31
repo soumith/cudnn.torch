@@ -264,7 +264,6 @@ function RNN:updateOutput(input)
 
    if input:size(1) ~= self.seqLength then
       self.seqLength = input:size(1)
-      resetRNN = true
       resetIO = true
    end
 
