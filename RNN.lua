@@ -247,8 +247,106 @@ function RNN:resetStates()
    end
 end
 
+-- input a TxBx* tensor (or BxTx* if batchFirst) where T is the length
+-- of the longest sequence, B is the batch size, and * is any number of
+-- dimensions.
+--
+-- lengths is a table of sequence lengths, which should be sorted in
+-- decreasing order.
+--
+-- returns a table containing a packed tensor of size (sum of lengths x *)
+-- and a list of batch sizes per timestep, i.e. the number of sequences
+-- with at least timestep elements.
+function RNN:packPaddedSequence(input, lengths, batchFirst)
+    if batchFirst then
+        input = input:transpose(1, 2)
+    end
 
+    local batches = {}
+    local bszpts = {}
+    local lengthsIdx = #lengths
+    local currentLength = lengths[lengthsIdx]
 
+    local steps = input:size(1)
+    local bsz = input:size(2)
+    if bsz ~= #lengths then
+        error("lengths array has incorrect size (expected: " .. bsz .. "but found: " .. #lengths ..")")
+    end
+
+    for ts = 1, steps do
+        table.insert(batches, input[ts]:narrow(1, 1, bsz))
+        table.insert(bszpts, bsz)
+
+        while ts == currentLength do
+            if lengthsIdx == 0 then
+                currentLength = nil
+                break
+            else
+                lengthsIdx = lengthsIdx - 1
+                bsz = bsz - 1
+                local nextLength = lengths[lengthsIdx]
+                if currentLength ~= nil and nextLength ~= nil and currentLength > nextLength then
+                    error("lengths array has to be sorted in decreasing order")
+                end
+                currentLength = lengths[lengthsIdx]
+            end
+        end
+
+        if currentLength == nil then
+            break
+        end
+    end
+
+    return {torch.cat(batches, 1), bszpts}
+end
+
+-- An inverse operation to packPaddedSequence(...) above. Takes a sequence (i.e.
+-- a Tensor, bszpts table  with the format as returned by packPaddedSequence and
+-- reconverts it into the TxBx* (or BxTx* if batchFirst) tensor and lengths array
+function RNN:padPackedSequence(seq, batchFirst)
+    local data, bszpts = unpack(seq)
+    local maxBatchSize = bszpts[1]
+    local outputSize = torch.LongStorage(2 + data[1]:nDimension())
+    outputSize[1] = #bszpts
+    outputSize[2] = maxBatchSize
+    for i = 1, data[1]:nDimension() do
+        outputSize[i + 2] = data[1]:size(i)
+    end
+    local output = torch.Tensor():typeAs(data):resize(outputSize):zero()
+
+    local lengths = {}
+    local offset = 1
+    local pbsz = bszpts[1]
+    local bsz = nil
+
+    local i = 1
+    while i <= #bszpts do
+        bsz = bszpts[i]
+        output[i]:narrow(1, 1, bsz):copy(data:narrow(1, offset, bsz))
+        offset = offset + bsz
+
+        local dec = pbsz - bsz
+        for j = 1, dec do
+            table.insert(lengths, i - 1)
+        end
+        pbsz = bsz
+        i = i + 1
+    end
+    for j = 1, bsz do
+        table.insert(lengths, i - 1)
+    end
+
+    -- reverse lengths list
+    local reversed = {}
+    for i = #lengths, 1, -1 do
+        table.insert(reversed, lengths[i])
+    end
+
+    if batchFirst then
+        output = output:transpose(1, 2)
+    end
+    return output, reversed
+end
 
 function RNN:updateOutput(input)
     if (self.batchFirst) then

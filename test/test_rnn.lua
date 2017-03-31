@@ -258,6 +258,62 @@ function getRNNCheckSums(miniBatch, seqLength, hiddenSize, numberOfLayers, numbe
     return checkSums
 end
 
+function cudnntest.testPackPadSequences()
+    -- T is 4, B = 5, vector size = 3
+    local input = torch.CudaIntTensor({
+        {{101, 102, 103},
+         {201, 202, 203},
+         {301, 302, 303},
+         {401, 402, 403},
+         {501, 502, 503}},
+        {{104, 105, 106},
+         {204, 205, 206},
+         {304, 305, 306},
+         {  0,   0,   0},
+         {  0,   0,   0}},
+        {{107, 108, 109},
+         {207, 208, 209},
+         {  0,   0,   0},
+         {  0,   0,   0},
+         {  0,   0,   0}},
+        {{110, 111, 112},
+         {  0,   0,   0},
+         {  0,   0,   0},
+         {  0,   0,   0},
+         {  0,   0,   0}},
+    })
+    local lengths = {4, 3, 2, 1, 1}
+
+    local expectedPacked = torch.CudaIntTensor({
+        {101, 102, 103}, {201, 202, 203}, {301, 302, 303}, {401, 402, 403}, {501, 502, 503},
+        {104, 105, 106}, {204, 205, 206}, {304, 305, 306},
+        {107, 108, 109}, {207, 208, 209},
+        {110, 111, 112}
+    })
+    local expectedBSPT = {5, 3, 2, 1}
+
+    local result = cudnn.RNN:packPaddedSequence(input, lengths)
+    local actualPacked, actualBSPT = unpack(result)
+    mytester:assertTensorEq(expectedPacked, actualPacked)
+    mytester:assertTableEq(expectedBSPT, actualBSPT)
+
+    local actualUnpacked, actualLengths = cudnn.RNN:padPackedSequence(result)
+    mytester:assertTensorEq(input, actualUnpacked)
+    mytester:assertTableEq(lengths, actualLengths)
+
+    -- test again with batchFirst
+    input = input:transpose(1, 2)
+
+    local result = cudnn.RNN:packPaddedSequence(input, lengths, true)
+    local actualPacked, actualBSPT = unpack(result)
+    mytester:assertTensorEq(expectedPacked, actualPacked)
+    mytester:assertTableEq(expectedBSPT, actualBSPT)
+
+    local actualUnpacked, actualLengths = cudnn.RNN:padPackedSequence(result, true)
+    mytester:assertTensorEq(input, actualUnpacked)
+    mytester:assertTableEq(lengths, actualLengths)
+end
+
 mytester = torch.Tester()
 mytester:add(cudnntest)
 mytester:run()
