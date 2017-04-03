@@ -314,6 +314,126 @@ function cudnntest.testPackPadSequences()
     mytester:assertTableEq(lengths, actualLengths)
 end
 
+-- clone the parameters of src into dest, assumes both RNNs were created with
+-- the same options (e.g. same input size, hidden size, layers, etc.)
+local function deepcopyRNN(dest, src)
+   dest.weight = src.weight:clone() -- encompasses W_hh, W_xh etc.
+   dest.gradWeight = src.gradWeight:clone()
+end
+
+function rnntest.testVariableLengthSequences()
+   local input = torch.CudaTensor({
+      {{1, 2, 2, 1},
+       {2, 1, 2, 2},
+       {1, 1, 1, 2},
+       {2, 2, 2, 1}},
+      {{4, 1, 3, 1},
+       {3, 1, 2, 1},
+       {1, 1, 2, 1},
+       {0, 0, 0, 0}},
+      {{1, 1, 2, 1},
+       {2, 1, 2, 2},
+       {1, 2, 2, 1},
+       {0, 0, 0, 0}},
+      {{1, 2, 1, 1},
+       {0, 0, 0, 0},
+       {0, 0, 0, 0},
+       {0, 0, 0, 0}}
+   })
+
+   -- same as above
+   local indivInputs = {
+      torch.CudaTensor({
+         {{1, 2, 2, 1}},
+         {{4, 1, 3, 1}},
+         {{1, 1, 2, 1}},
+         {{1, 2, 1, 1}},
+      }),
+      torch.CudaTensor({
+         {{2, 1, 2, 2}},
+         {{3, 1, 2, 1}},
+         {{2, 1, 2, 2}},
+      }),
+      torch.CudaTensor({
+         {{1, 1, 1, 2}},
+         {{1, 1, 2, 1}},
+         {{1, 2, 2, 1}},
+      }),
+      torch.CudaTensor({
+         {{2, 2, 2, 1}},
+      }),
+   }
+
+   local lengths = {4, 3, 3, 1}
+   local maxLength = 4
+
+   local inputSize = 4
+   local hiddenSize = 10
+   local numLayers = 1
+   local batchFirst = false
+   local dropout = false
+   local rememberStates = false
+
+   local lstm = cudnn.LSTM(
+      inputSize,
+      hiddenSize,
+      numLayers,
+      batchFirst,
+      dropout,
+      rememberStates)
+
+   local lstm2 = cudnn.LSTM(
+      inputSize,
+      hiddenSize,
+      numLayers,
+      batchFirst,
+      dropout,
+      rememberStates)
+
+   deepcopyRNN(lstm2, lstm)
+
+   -- Step 1: Pass Sequences as batch and individually, verify weights, outputs
+   -- are the same in both instances
+
+   -- batched
+   local packed = cudnn.RNN:packPaddedSequence(input, lengths)
+   local packedOutput = lstm:updateOutput(packed)
+
+   local separate = {}
+
+   for i, length in ipairs(lengths) do
+      local inp = indivInputs[i]
+      local output = lstm2:updateOutput(inp):clone()
+      table.insert(separate, output)
+   end
+   separate = torch.cat(separate, 1):squeeze()
+
+   mytester:asserteq(packedOutput:size(1), separate:size(1))
+   mytester:asserteq(packedOutput:size(2), separate:size(2))
+
+   -- packedOutput has format where all 4 from first batch, then all 3 from
+   -- second batch, etc. while separate has all 4 from first sequence,
+   -- all 3 from next sequence, etc. I manually map the matches here
+   local corresponding = {
+      {1, 1},
+      {2, 5},
+      {3, 8},
+      {4, 11},
+      {5, 2},
+      {6, 6},
+      {7, 9},
+      {8, 3},
+      {9, 7},
+      {10, 10},
+      {11, 4}
+   }
+   for _, pair in ipairs(corresponding) do
+      sep, batched = unpack(pair)
+      local diff = torch.csub(separate[sep], packedOutput[batched]):abs():sum()
+      mytester:assert(diff < 1e-7)
+   end
+end
+
 mytester = torch.Tester()
-mytester:add(cudnntest)
+mytester:add(rnntest)
 mytester:run()
