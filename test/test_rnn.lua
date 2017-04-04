@@ -321,7 +321,7 @@ local function deepcopyRNN(dest, src)
    dest.gradWeight = src.gradWeight:clone()
 end
 
-function rnntest.testVariableLengthSequences()
+function cudnntest.testVariableLengthSequences()
    local input = torch.CudaTensor({
       {{1, 2, 2, 1},
        {2, 1, 2, 2},
@@ -475,5 +475,5 @@ function rnntest.testVariableLengthSequences()
 end
 
 mytester = torch.Tester()
-mytester:add(rnntest)
+mytester:add(cudnntest)
 mytester:run()
