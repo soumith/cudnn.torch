@@ -409,6 +409,8 @@ function rnntest.testVariableLengthSequences()
    local packed = cudnn.RNN:packPaddedSequence(input, lengths)
    local packedOutput = lstm:updateOutput(packed)
    local packedHiddenOutput = lstm.hiddenOutput:clone()
+   -- could use padPackedSequence here, but for testing simplicity, we'll just
+   -- operate on the returned results
 
    local separate = {}
    local hids = {}
@@ -467,6 +469,9 @@ function rnntest.testVariableLengthSequences()
       local diff = torch.csub(igiTestable[sep], packedGradInput[batched]):abs():sum()
       mytester:assert(diff < 1e-7)
    end
+
+   -- Step 3: Basically verify that accGradParameters works for batch
+   lstm:accGradParameters(packed, gradOutput)
 end
 
 mytester = torch.Tester()
