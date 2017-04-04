@@ -587,24 +587,29 @@ function RNN:updateOutput(input)
 end
 
 function RNN:updateGradInput(input, gradOutput)
-    if (self.batchFirst) then
-        input = input:transpose(1, 2)
-        gradOutput = gradOutput:transpose(1, 2)
-        self.output = self.output:transpose(1, 2)
-    end
+   if self.batchFirst and not self.inputPacked then
+       input = input:transpose(1, 2)
+       gradOutput = gradOutput:transpose(1, 2)
+       self.output = self.output:transpose(1, 2)
+   end
    assert(self.dropout == 0 or cudnn.version >= 5103, 'dropout supported only in cudnn v 5.1 and above')
-   assert(input:dim() == 3, 'input should have 3 dimensions: seqLength, miniBatch, inputSize')
-   assert(input:size(1) == self.seqLength, 'input has incorrect sequence length!')
-   assert(input:size(2) == self.miniBatch, 'input has incorrect minibatch size!')
-   assert(input:size(3) == self.inputSize, 'input has incorrect size!')
+
+   if self.inputPacked then
+      assert(input[1]:dim() == 2, 'packed input must have two dimensions: sum(sequence lengths), inputSize')
+   else
+      assert(input:dim() == 3, 'input should have 3 dimensions: seqLength, miniBatch, inputSize')
+      assert(input:size(1) == self.seqLength, 'input has incorrect sequence length!')
+      assert(input:size(2) == self.miniBatch, 'input has incorrect minibatch size!')
+      assert(input:size(3) == self.inputSize, 'input has incorrect size!')
+   end
 
    assert(gradOutput:isSameSizeAs(self.output), 'gradOutput has incorrect size!')
    assert(self.train, 'updateGradInput can only be called when training!')
 
-   local x, dy = self:makeContiguous(input, gradOutput)
+   local x, dy = self:makeContiguous(self.inputPacked and input[1] or input, gradOutput)
    local y = self.output
    local w = self.weight
-   local dx = self.gradInput:resizeAs(input)
+   local dx = self.gradInput:resizeAs(self.inputPacked and input[1] or input)
    local hx = self.hiddenInput
    local cx = self.cellInput
    local dhy = self.gradHiddenOutput
@@ -674,7 +679,7 @@ function RNN:updateGradInput(input, gradOutput)
 	    wsPtr, wsSize,
             self.reserve:data(), self.reserve:size(1) * self.reserve:elementSize())
     if self.sync then cutorch.synchronize() end
-    if (self.batchFirst) then
+    if self.batchFirst and not self.inputPacked then
         self.gradInput = self.gradInput:transpose(1, 2)
         self.output = self.output:transpose(1, 2)
     end

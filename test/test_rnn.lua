@@ -367,6 +367,16 @@ function rnntest.testVariableLengthSequences()
    local lengths = {4, 3, 3, 1}
    local maxLength = 4
 
+   -- Generate gradOutput based on input sizes
+   local gradOutput = torch.CudaTensor(11, 1, 10):uniform()
+   local indivGradOutputs = {
+      torch.cat({gradOutput:narrow(1, 1, 1), gradOutput:narrow(1, 5, 1), gradOutput:narrow(1, 8, 1), gradOutput:narrow(1, 11, 1)}, 1):clone(),
+      torch.cat({gradOutput:narrow(1, 2, 1), gradOutput:narrow(1, 6, 1), gradOutput:narrow(1, 9, 1)}, 1):clone(),
+      torch.cat({gradOutput:narrow(1, 3, 1), gradOutput:narrow(1, 7, 1), gradOutput:narrow(1, 10, 1)}, 1):clone(),
+      gradOutput:narrow(1, 4, 1):clone()
+   }
+   gradOutput = gradOutput:squeeze()
+
    local inputSize = 4
    local hiddenSize = 10
    local numLayers = 1
@@ -402,6 +412,7 @@ function rnntest.testVariableLengthSequences()
 
    local separate = {}
    local hids = {}
+   local indivGradInputs = {}
 
    for i, length in ipairs(lengths) do
       local inp = indivInputs[i]
@@ -409,6 +420,11 @@ function rnntest.testVariableLengthSequences()
       table.insert(separate, output)
       local hid = lstm2.hiddenOutput:clone()
       table.insert(hids, hid)
+
+      -- need to do backwards pass here too
+      local gradOutput = indivGradOutputs[i]
+      local gradInp = lstm2:updateGradInput(inp, gradOutput):clone()
+      table.insert(indivGradInputs, gradInp)
    end
    separate = torch.cat(separate, 1):squeeze()
    hids = torch.cat(hids, 1):squeeze()
@@ -440,6 +456,17 @@ function rnntest.testVariableLengthSequences()
 
    local hdiff = torch.csub(packedHiddenOutput, hids):abs():sum()
    mytester:assert(hdiff < 1e7)
+
+   -- Step 2: update grad input as batch and individually
+
+   local packedGradInput = lstm:updateGradInput(packed, gradOutput)
+   local igiTestable = torch.cat(indivGradInputs, 1):squeeze(2)
+
+   for _, pair in ipairs(corresponding) do
+      sep, batched = unpack(pair)
+      local diff = torch.csub(igiTestable[sep], packedGradInput[batched]):abs():sum()
+      mytester:assert(diff < 1e-7)
+   end
 end
 
 mytester = torch.Tester()
