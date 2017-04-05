@@ -280,6 +280,10 @@ function RNN:resetStates()
    if self.cellInput then
       self.cellInput = nil
    end
+
+   self.hiddenOutput:zero()
+   self.cellOutput:zero()
+
    if self.gradHiddenOutput then
       self.gradHiddenOutput = nil
    end
@@ -305,7 +309,6 @@ function RNN:updateOutput(input)
 
    if input:size(1) ~= self.seqLength then
       self.seqLength = input:size(1)
-      resetRNN = true
       resetIO = true
    end
 
@@ -343,7 +346,7 @@ function RNN:updateOutput(input)
 
    -- Optionally use hiddenInput/cellInput parameters
    if self.rememberStates then
-        if self.hiddenOutput:nDimension() == 3 and self.hiddenOutput:size(1) == self.numLayers * self.numDirections and 
+        if self.hiddenOutput:nDimension() == 3 and self.hiddenOutput:size(1) == self.numLayers * self.numDirections and
            self.hiddenOutput:size(2) == self.miniBatch and self.hiddenOutput:size(3) == self.hiddenSize then
 	       self.hiddenInput = self.hiddenOutput:clone()
 	       if self.cellOutput and self.cellOutput:isSameSizeAs(self.hiddenOutput) then
@@ -352,7 +355,7 @@ function RNN:updateOutput(input)
         else
 	   self.hiddenInput = nil
            self.cellInput = nil
-        end     
+        end
    end
    local hx = self.hiddenInput
    local cx = self.cellInput
@@ -658,7 +661,12 @@ local function retrieveLinearParams(self, cuDNNMethod)
                 nbDims:data(),
                 filterDimA:data())
 
-            local offset = matrixPointer[0] - self.weight:data()
+            local offset
+            if jit then
+                offset = matrixPointer[0] - self.weight:data()
+            else
+                offset = (tonumber(matrixPointer[0]) - tonumber(self.weight:data()))/self.weight:elementSize()
+            end
             local params = torch.CudaTensor(self.weight:storage(), offset + self.weight:storageOffset(), filterDimA:prod())
             table.insert(layerInfo, params)
         end

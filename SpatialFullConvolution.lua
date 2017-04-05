@@ -188,8 +188,7 @@ function SpatialFullConvolution:write(f)
 end
 
 function SpatialFullConvolution:clearState()
-   self:clearDesc()
-   return nn.Module.clearState(self)
+   return Convolution.clearState(self)
 end
 
 function SpatialFullConvolution:read(file, version)
