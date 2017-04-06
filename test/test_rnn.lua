@@ -451,7 +451,7 @@ function cudnntest.testVariableLengthSequences()
       {11, 4}
    }
    for _, pair in ipairs(corresponding) do
-      sep, batched = unpack(pair)
+      local sep, batched = unpack(pair)
       local diff = torch.csub(separate[sep], packedOutput[batched]):abs():sum()
       mytester:assert(diff < 1e-7)
    end
