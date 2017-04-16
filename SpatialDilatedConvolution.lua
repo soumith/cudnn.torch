@@ -5,8 +5,6 @@ local find = require 'cudnn.find'
 
 function SpatialDilatedConvolution:__init(nInputPlane, nOutputPlane,
                             kW, kH, dW, dH, padW, padH, dilationW, dilationH, groups)
-    local delayedReset = self.reset
-    self.reset = function() end
     parent.__init(self, nInputPlane, nOutputPlane, kW, kH, dW, dH, padW, padH, groups)--, dilationW, dilationH)
     self.dilationW = dilationW
     self.dilationH = dilationH
