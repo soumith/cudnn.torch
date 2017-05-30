@@ -460,7 +460,7 @@ function cudnntest.testVariableLengthSequences()
    end
 
    local hdiff = torch.csub(packedHiddenOutput, hids):abs():sum()
-   mytester:assert(hdiff < 1e7)
+   mytester:assert(hdiff < 2e-7)
 
    -- Step 2: update grad input as batch and individually
 
