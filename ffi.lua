@@ -1588,7 +1588,7 @@ cudnnStatus_t             cudnnActivationBackward_v4(
 
 local CUDNN_PATH = os.getenv('CUDNN_PATH')
 if CUDNN_PATH then
-    print('Found Environment variable CUDNN_PATH = ' .. CUDNN_PATH)
+    io.stderr:write('Found Environment variable CUDNN_PATH = ' .. CUDNN_PATH)
     cudnn.C = ffi.load(CUDNN_PATH)
 else
 
