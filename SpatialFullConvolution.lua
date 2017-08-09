@@ -7,9 +7,28 @@ local checkedCall = find.checkedCall
 
 local Convolution = cudnn.SpatialConvolution
 
+function SpatialFullConvolution:__init(nInputPlane, nOutputPlane,
+                            kW, kH, dW, dH, padW, padH, adjW, adjH, groups)
+    local delayedReset = self.reset
+    self.reset = function() end
+    parent.__init(self, nInputPlane, nOutputPlane, 
+                         kW, kH, dW, dH, padW, padH, adjW, adjH)
+    self.reset = delayedReset
+    self.groups = groups or 1
+    assert(nInputPlane % self.groups == 0,
+           'nInputPlane should be divisible by nGroups')
+    assert(nOutputPlane % self.groups == 0,
+           'nOutputPlane should be divisible by nGroups')
+    self.weight = torch.Tensor(nInputPlane, nOutputPlane/self.groups, kH, kW)
+    self.gradWeight = torch.Tensor(nInputPlane, nOutputPlane/self.groups, kH, kW)
+    self:reset()
+    -- should nil for serialization, the reset will still work
+    self.reset = nil			 
+end
+                                                            
 function SpatialFullConvolution:resetWeightDescriptors()
    return Convolution.resetWeightDescriptors(self, {self.nInputPlane,
-                                                    self.nOutputPlane,
+                                                    self.nOutputPlane/self.groups,
                                                     self.kH, self.kW})
 end
 
@@ -47,11 +66,12 @@ function SpatialFullConvolution:createIODescriptors(input)
         self.pad = {self.padH, self.padW}
         self.stride = {self.dH, self.dW}
 
-        self.convDescData = { padA = self.pad,
+        self.convDesc = cudnn.setConvolutionDescriptor({
+	                      padA = self.pad,
                               filterStrideA = self.stride,
-                              dataType = cudnn.configmap(torch.type(self.weight))
-        }
-        self.convDesc = cudnn.setConvolutionDescriptor(self.convDescData)
+                              dataType = cudnn.configmap(torch.type(self.weight)),
+                              groupCount = self.groups
+        })
 
         -- get output shape, resize output
         local iwidth = input:size(4)

@@ -150,8 +150,12 @@ function cudnn.getHandle()
 end
 
 function cudnn.call(f, ...)
-    C.cudnnSetStream(cudnn.getHandle(),
+--context might be destroyed by the time gc calls destructors, in which case cudnnSetStream call would fail
+--and it is not necessary for cudnn destructors anyway
+    if not string.find(f, 'cudnnDestroy') then
+        C.cudnnSetStream(cudnn.getHandle(),
                      thc.THCState_getCurrentStream(cutorch.getState()))
+    end
     return C[f](...)
 end
 
@@ -210,16 +214,18 @@ end
 
 function cudnn.setConvolutionDescriptor(data, desc)
    if not data.arrayLength then data.arrayLength = #data.padA end
-   if not data.upscaleA then data.upscaleA =  torch.IntStorage(data.arrayLength):fill(1) end
+   if not data.dilationA then data.dilationA =  {1,1,1 }  end -- assume maximum length==3
    if not data.mode then data.mode = 'CUDNN_CROSS_CORRELATION' end
-
+   if not data.mathType then data.mathType = 'CUDNN_DEFAULT_MATH' end
+   if not data.groupCount then data.groupCount = 1 end
+   
    local myDesc = desc or cudnn.createDescriptors(
       1, 'struct cudnnConvolutionStruct*[?]',
       'cudnnCreateConvolutionDescriptor', 'cudnnDestroyConvolutionDescriptor')
    -- make sure we have references to these tensors so gc doesn't clean them up
    local padATensor = torch.IntTensor(data.padA)
    local filterStrideATensor = torch.IntTensor(data.filterStrideA)
-   local upscaleATensor = torch.IntTensor(data.upscaleA)
+   local upscaleATensor = torch.IntTensor(data.dilationA)
    errcheck('cudnnSetConvolutionNdDescriptor', myDesc[0],
             data.arrayLength,
             padATensor:data(),
@@ -227,6 +233,8 @@ function cudnn.setConvolutionDescriptor(data, desc)
             upscaleATensor:data(),
             data.mode,
             data.dataType)
+   errcheck('cudnnSetConvolutionMathType', myDesc[0], data.mathType)
+   errcheck('cudnnSetConvolutionGroupCount', myDesc[0], data.groupCount)
    return myDesc
 end
 
@@ -328,6 +336,8 @@ cudnn.find = require('cudnn.find')
 
 require('cudnn.SpatialConvolution')
 require('cudnn.VolumetricConvolution')
+require('cudnn.SpatialDilatedConvolution')
+require('cudnn.VolumetricDilatedConvolution')
 require('cudnn.SpatialFullConvolution')
 require('cudnn.VolumetricFullConvolution')
 require('cudnn.Pooling')

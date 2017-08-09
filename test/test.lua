@@ -13,7 +13,7 @@ local testparams_half = {
    precision_forward = 2e-1,
    precision_backward = 10,
    precision_jac = 1e-3,
-   precision_io = 1e-1,
+   precision_io = 3e-1,
 }
 
 local testparams_float = {
@@ -128,11 +128,101 @@ function cudnntest.SpatialConvolution()
    local ini = (outi-1)*si+ki
    local inj = (outj-1)*sj+kj
    local scale = math.random()
+--for half, the total filter dim has to be even
+   if testparams.test_type=='torch.CudaHalfTensor' and ki*kj*from*to % 2 == 1 then
+     to = to+1
+   end
 
    local input = torch.randn(bs,from,inj,ini):cuda()
    local gradOutput = torch.randn(bs,to,outj,outi):cuda()
    local sconv = nn.SpatialConvolution(from,to,ki,kj,si,sj):cuda()
    local gconv = cast(cudnn.SpatialConvolution(from,to,ki,kj,si,sj))
+   gconv.weight:copy(sconv.weight)
+   gconv.bias:copy(sconv.bias)
+
+   testLayer(sconv, gconv, input, gradOutput, scale, true, true) -- batch
+   testLayer(sconv, gconv, input, gradOutput, scale, true, false) -- non-batch
+   local originalTypename = torch.typename(gconv)
+   local gconv = cast(cudnn.convert(sconv, cudnn))
+   mytester:asserteq(torch.typename(gconv),
+                     originalTypename, 'conversion type check')
+   testLayer(sconv, gconv, input, gradOutput, scale, true, true)
+   testLayer(sconv, gconv, input, gradOutput, scale, true, false)
+end
+
+function cudnntest.SpatialDilatedConvolution()
+   local bs = math.random(1,32)
+   local from = math.random(1,32)
+   local to = math.random(1,64)
+   local ki = math.random(1,7)
+   local kj = math.random(1,7)
+   local di = math.random(1,7)
+   local dj = math.random(1,7)
+   local wi = (ki-1)*di+1
+   local wj = (kj-1)*dj+1
+   local si = math.random(1, wi )
+   local sj = math.random(1, wj)
+   local outi = math.random(1,64)
+   local outj = math.random(1,64)
+   local ini = (outi-1)*si+wi
+   local inj = (outj-1)*sj+wj
+
+   local scale = math.random()
+--for half, the total filter dim has to be even
+   if testparams.test_type=='torch.CudaHalfTensor' and ki*kj*from*to % 2 == 1 then
+     to = to+1
+   end
+
+   local input = torch.randn(bs,from,inj,ini)
+   local gradOutput = torch.randn(bs,to,outj,outi)
+   local sconv = nn.SpatialDilatedConvolution(from,to,ki,kj,si,sj,0,0,di,dj)
+   local gconv = cast(cudnn.SpatialDilatedConvolution(from,to,ki,kj,si,sj,0,0,di,dj)):fastest()
+   gconv.weight:copy(sconv.weight)
+   gconv.bias:copy(sconv.bias)
+
+   testLayer(sconv, gconv, input, gradOutput, scale, true, true) -- batch
+   testLayer(sconv, gconv, input, gradOutput, scale, true, false) -- non-batch
+   local originalTypename = torch.typename(gconv)
+   local gconv = cast(cudnn.convert(sconv, cudnn))
+   mytester:asserteq(torch.typename(gconv),
+                     originalTypename, 'conversion type check')
+   testLayer(sconv, gconv, input, gradOutput, scale, true, true)
+   testLayer(sconv, gconv, input, gradOutput, scale, true, false)
+end
+
+function cudnntest.VolumetricDilatedConvolution()
+   local bs = math.random(1,32)
+   local from = math.random(1,16)
+   local to = math.random(1,16)
+   local ki = math.random(3,5)
+   local kj = math.random(3,5)
+   local kk = math.random(3,5)
+   local di = math.random(1,5)
+   local dj = math.random(1,5)
+   local dk = math.random(1,5)
+   local wi = (ki-1)*di+1
+   local wj = (kj-1)*dj+1
+   local wk = (kk-1)*dk+1
+   local si = math.random(1, wi )
+   local sj = math.random(1, wj)
+   local sk = math.random(1, wk)
+   local outi = math.random(1,17)
+   local outj = math.random(1,17)
+   local outk = math.random(1,5)
+   local ini = (outi-1)*si+wi
+   local inj = (outj-1)*sj+wj
+   local ink = (outk-1)*sk+wk
+
+   local scale = math.random()
+
+--for half, the total filter dim has to be even
+   if testparams.test_type=='torch.CudaHalfTensor' and ki*kj*kk*from*to % 2 == 1 then
+     to = to+1
+   end
+   local input = torch.randn(bs,from,ini,ink,inj)
+   local gradOutput = torch.randn(bs,to,outi,outk,outj)
+   local sconv = nn.VolumetricDilatedConvolution(from,to,ki,kj,kk,si,sj,sk,0,0,0,di,dj,dk)
+   local gconv = cast(cudnn.VolumetricDilatedConvolution(from,to,ki,kj,kk,si,sj,sk,0,0,0,di,dj,dk))
    gconv.weight:copy(sconv.weight)
    gconv.bias:copy(sconv.bias)
 
@@ -159,6 +249,10 @@ function cudnntest.SpatialFullConvolution()
    local outi = (ini-1)*si+ki
    local outj = (inj-1)*sj+kj
    local scale = math.random()
+--for half, the total filter dim has to be even
+   if testparams.test_type=='torch.CudaHalfTensor' and ki*kj*from*to % 2 == 1 then
+     to = to+1
+   end
 
    local input = torch.randn(bs,from,inj,ini):cuda()
    local gradOutput = torch.randn(bs,to,outj,outi):cuda()
@@ -186,6 +280,10 @@ function cudnntest.TemporalConvolution()
    local outi = math.random(1,15)
    local ini = (outi - 1) * si + ki
    local scale = math.random()
+--for half, the total filter dim has to be even
+   if testparams.test_type=='torch.CudaHalfTensor' and inputFrameSize*outputFrameSize*ki % 2 == 1 then
+      outputFrameSize = outputFrameSize + 1     
+   end
 
    local input = torch.randn(bs,ini,inputFrameSize):cuda()
    local gradOutput = torch.randn(bs,outi,outputFrameSize):cuda()
@@ -210,6 +308,9 @@ function cudnntest.TemporalConvolution_padding_batch()
    local ini = (outi-1)*si+ki
    local scale = math.random()
 
+   if testparams.test_type=='torch.CudaHalfTensor' and inputFrameSize*outputFrameSize*ki % 2 == 1 then
+      outputFrameSize = outputFrameSize + 1     
+   end
    local inputpadded = torch.randn(bs,ini,inputFrameSize):cuda()
    for i=1,pad_h do
       inputpadded:narrow(2,i,1):fill(0)
@@ -262,6 +363,9 @@ function cudnntest.TemporalConvolution_reduceBatchSize()
    local ini = (outi-1)*si+ki
    local batchSize = 128
    local smallerBatchSize = batchSize/2
+   if testparams.test_type=='torch.CudaHalfTensor' and inputFrameSize*outputFrameSize*ki % 2 == 1 then
+      outputFrameSize = outputFrameSize + 1     
+   end
 
    local input = cast(torch.randn(batchSize,ini,inputFrameSize))
    local conv = cast(cudnn.TemporalConvolution(inputFrameSize,outputFrameSize,ki,si):cuda())
@@ -294,6 +398,9 @@ function cudnntest.VolumetricConvolution()
    local inj = outj*sj+kj-1
    local ink = outk*sk+kk-1
 
+   if testparams.test_type=='torch.CudaHalfTensor' and ki*kj*kk*from*to % 2 == 1 then
+     to = to+1
+   end
    local scale = math.random()
 
    local input = torch.randn(bs,from,ink,inj,ini):cuda()
@@ -330,6 +437,9 @@ function cudnntest.VolumetricFullConvolution()
    local outj = (inj-1)*sj+kj
    local outk = (ink-1)*sk+kk
    local scale = math.random()
+   if testparams.test_type=='torch.CudaHalfTensor' and ki*kj*kk*from*to % 2 == 1 then
+     to = to+1
+   end
 
    if testparams.test_type == 'torch.CudaDoubleTensor' then
       return
@@ -813,7 +923,7 @@ function cudnntest.functional_bias2D()
    local inj = (outj-1)*sj+kj
    local scale = torch.uniform()
    local input = cast(torch.zeros(bs,from,inj,ini))
-   local mod = cast(cudnn.SpatialConvolution(from,to,ki,kj,si,sj))
+   local mod = cast(cudnn.SpatialConvolution(from,to,ki,kj,si,sj):fastest())
    mod.weight:zero()
    local groundtruth = mod:forward(input)
    local result = groundtruth:clone():zero()
@@ -943,8 +1053,8 @@ mytester:add(cudnntest)
 
 cudnn.verbose=false
 cudnn.find.verbose=false
--- this is the default, keep it for demo of 16->32 bit float fallback
-cudnn.find.verboseFallback=true
+-- todo: put it back for release to demo 16->32 bit float fallback
+cudnn.find.verboseFallback=false
 cudnn.useFindEx=false
 cudnn.configureMath({ ['torch.CudaHalfTensor']   = 'CUDNN_DATA_FLOAT'} )
 for i = 1, 1 do -- cutorch.getDeviceCount() do
