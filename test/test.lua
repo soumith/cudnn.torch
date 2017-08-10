@@ -128,6 +128,10 @@ function cudnntest.SpatialConvolution()
    local ini = (outi-1)*si+ki
    local inj = (outj-1)*sj+kj
    local scale = math.random()
+--for half, the total filter dim has to be even
+   if testparams.test_type=='torch.CudaHalfTensor' and ki*kj*from*to % 2 == 1 then
+     to = to+1
+   end
 
    local input = torch.randn(bs,from,inj,ini):cuda()
    local gradOutput = torch.randn(bs,to,outj,outi):cuda()
@@ -164,6 +168,10 @@ function cudnntest.SpatialDilatedConvolution()
    local inj = (outj-1)*sj+wj
 
    local scale = math.random()
+--for half, the total filter dim has to be even
+   if testparams.test_type=='torch.CudaHalfTensor' and ki*kj*from*to % 2 == 1 then
+     to = to+1
+   end
 
    local input = torch.randn(bs,from,inj,ini)
    local gradOutput = torch.randn(bs,to,outj,outi)
@@ -207,6 +215,10 @@ function cudnntest.VolumetricDilatedConvolution()
 
    local scale = math.random()
 
+--for half, the total filter dim has to be even
+   if testparams.test_type=='torch.CudaHalfTensor' and ki*kj*kk*from*to % 2 == 1 then
+     to = to+1
+   end
    local input = torch.randn(bs,from,ini,ink,inj)
    local gradOutput = torch.randn(bs,to,outi,outk,outj)
    local sconv = nn.VolumetricDilatedConvolution(from,to,ki,kj,kk,si,sj,sk,0,0,0,di,dj,dk)
@@ -237,6 +249,10 @@ function cudnntest.SpatialFullConvolution()
    local outi = (ini-1)*si+ki
    local outj = (inj-1)*sj+kj
    local scale = math.random()
+--for half, the total filter dim has to be even
+   if testparams.test_type=='torch.CudaHalfTensor' and ki*kj*from*to % 2 == 1 then
+     to = to+1
+   end
 
    local input = torch.randn(bs,from,inj,ini):cuda()
    local gradOutput = torch.randn(bs,to,outj,outi):cuda()
@@ -264,6 +280,10 @@ function cudnntest.TemporalConvolution()
    local outi = math.random(1,15)
    local ini = (outi - 1) * si + ki
    local scale = math.random()
+--for half, the total filter dim has to be even
+   if testparams.test_type=='torch.CudaHalfTensor' and inputFrameSize*outputFrameSize*ki % 2 == 1 then
+      outputFrameSize = outputFrameSize + 1     
+   end
 
    local input = torch.randn(bs,ini,inputFrameSize):cuda()
    local gradOutput = torch.randn(bs,outi,outputFrameSize):cuda()
@@ -288,6 +308,9 @@ function cudnntest.TemporalConvolution_padding_batch()
    local ini = (outi-1)*si+ki
    local scale = math.random()
 
+   if testparams.test_type=='torch.CudaHalfTensor' and inputFrameSize*outputFrameSize*ki % 2 == 1 then
+      outputFrameSize = outputFrameSize + 1     
+   end
    local inputpadded = torch.randn(bs,ini,inputFrameSize):cuda()
    for i=1,pad_h do
       inputpadded:narrow(2,i,1):fill(0)
@@ -340,6 +363,9 @@ function cudnntest.TemporalConvolution_reduceBatchSize()
    local ini = (outi-1)*si+ki
    local batchSize = 128
    local smallerBatchSize = batchSize/2
+   if testparams.test_type=='torch.CudaHalfTensor' and inputFrameSize*outputFrameSize*ki % 2 == 1 then
+      outputFrameSize = outputFrameSize + 1     
+   end
 
    local input = cast(torch.randn(batchSize,ini,inputFrameSize))
    local conv = cast(cudnn.TemporalConvolution(inputFrameSize,outputFrameSize,ki,si):cuda())
@@ -372,6 +398,9 @@ function cudnntest.VolumetricConvolution()
    local inj = outj*sj+kj-1
    local ink = outk*sk+kk-1
 
+   if testparams.test_type=='torch.CudaHalfTensor' and ki*kj*kk*from*to % 2 == 1 then
+     to = to+1
+   end
    local scale = math.random()
 
    local input = torch.randn(bs,from,ink,inj,ini):cuda()
@@ -408,6 +437,9 @@ function cudnntest.VolumetricFullConvolution()
    local outj = (inj-1)*sj+kj
    local outk = (ink-1)*sk+kk
    local scale = math.random()
+   if testparams.test_type=='torch.CudaHalfTensor' and ki*kj*kk*from*to % 2 == 1 then
+     to = to+1
+   end
 
    if testparams.test_type == 'torch.CudaDoubleTensor' then
       return

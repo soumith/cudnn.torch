@@ -1,6 +1,6 @@
 require 'cudnn'
 
-m = cudnn.SpatialConvolution(512,512,13,13,1,1,1,1,512)
+m = cudnn.SpatialFullConvolution(512,512,13,13,1,1,1,1,512)
 
 
 inp = torch.zeros(1,512,512,512)
