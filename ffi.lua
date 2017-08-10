@@ -1614,7 +1614,7 @@ cudnnStatus_t              cudnnGetConvolution2dDescriptor_v5(  const cudnnConvo
 
 local CUDNN_PATH = os.getenv('CUDNN_PATH')
 if CUDNN_PATH then
-    print('Found Environment variable CUDNN_PATH = ' .. CUDNN_PATH)
+    io.stderr:write('Found Environment variable CUDNN_PATH = ' .. CUDNN_PATH)
     cudnn.C = ffi.load(CUDNN_PATH)
 else
     local libnames = {'libcudnn.so.6', 'libcudnn.6.dylib', 'cudnn64_6.dll'}
