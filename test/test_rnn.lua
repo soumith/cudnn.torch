@@ -456,11 +456,11 @@ function cudnntest.testVariableLengthSequences()
    for _, pair in ipairs(corresponding) do
       local sep, batched = unpack(pair)
       local diff = torch.csub(separate[sep], packedOutput[batched]):abs():sum()
-      mytester:assert(diff < 1e-7)
+      mytester:assertle(diff, 1.5e-7, "output difference is larger than expected")
    end
 
    local hdiff = torch.csub(packedHiddenOutput, hids):abs():sum()
-   mytester:assert(hdiff < 2e-7)
+   mytester:assertle(hdiff, 2e-7, "hidden output difference is larger than expected")
 
    -- Step 2: update grad input as batch and individually
 
@@ -470,7 +470,7 @@ function cudnntest.testVariableLengthSequences()
    for _, pair in ipairs(corresponding) do
       sep, batched = unpack(pair)
       local diff = torch.csub(igiTestable[sep], packedGradInput[batched]):abs():sum()
-      mytester:assert(diff < 1e-7)
+      mytester:assertle(diff, 1e-7, "gradInput difference is larger than expected")
    end
 
    -- Step 3: Basically verify that accGradParameters works for batch
