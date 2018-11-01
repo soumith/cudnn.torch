@@ -29,6 +29,7 @@ end
 function SpatialConvolution:resetWeightDescriptors(desc)
     assert(cudnn.typemap[torch.typename(self.weight)], 'Only Cuda supported duh!')
     assert(cudnn.typemap[torch.typename(self.bias)] or not self.bias, 'Only Cuda supported duh!')
+    self.groups = self.groups or 1
 
     -- create descriptor for bias
     if self.bias then
