@@ -27,6 +27,7 @@ function SpatialFullConvolution:__init(nInputPlane, nOutputPlane,
 end
                                                             
 function SpatialFullConvolution:resetWeightDescriptors()
+   self.groups = self.groups or 1
    return Convolution.resetWeightDescriptors(self, {self.nInputPlane,
                                                     self.nOutputPlane/self.groups,
                                                     self.kH, self.kW})
